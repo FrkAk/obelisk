@@ -1,0 +1,1 @@
+ALTER TABLE "poi_stories" ADD COLUMN "audio_url" text;

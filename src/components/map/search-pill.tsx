@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Search, X, MapPin, Clock, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMapStore } from "@/stores/map-store";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 interface SearchResult {
@@ -37,6 +38,7 @@ export function SearchPill({ className }: SearchPillProps) {
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const { setViewState, viewState } = useMapStore();
+  const { toast } = useToast();
 
   const handleExpand = useCallback(() => {
     setIsExpanded(true);
@@ -61,6 +63,11 @@ export function SearchPill({ className }: SearchPillProps) {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5`
       );
+
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.status}`);
+      }
+
       const data = await response.json();
 
       const searchResults: SearchResult[] = data.map(
@@ -78,10 +85,15 @@ export function SearchPill({ className }: SearchPillProps) {
     } catch (error) {
       console.error("Search failed:", error);
       setResults([]);
+      toast({
+        title: "Search unavailable",
+        description: "Could not connect to search service. Please try again later.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (debounceRef.current) {
@@ -143,7 +155,7 @@ export function SearchPill({ className }: SearchPillProps) {
           onClick={handleExpand}
           className={cn(
             "glass rounded-full",
-            "border border-white/20",
+            "border border-black/15 dark:border-white/30",
             "shadow-elevated",
             "px-5 py-2.5",
             "flex items-center gap-2",
@@ -153,8 +165,8 @@ export function SearchPill({ className }: SearchPillProps) {
             className
           )}
         >
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Search places...</span>
+          <Search className="h-4 w-4 text-foreground/70" />
+          <span className="text-sm text-foreground/70">Search places...</span>
         </button>
       )}
 
@@ -169,7 +181,7 @@ export function SearchPill({ className }: SearchPillProps) {
             className={cn(
               "fixed inset-x-4 top-4 z-50",
               "glass-ultra rounded-2xl",
-              "border border-white/20",
+              "border border-black/10 dark:border-white/20",
               "shadow-xl",
               "overflow-hidden",
               "animate-fade-scale-in"
@@ -187,7 +199,7 @@ export function SearchPill({ className }: SearchPillProps) {
                 className={cn(
                   "flex-1 bg-transparent",
                   "text-base outline-none",
-                  "placeholder:text-muted-foreground/60"
+                  "placeholder:text-muted-foreground/80"
                 )}
               />
               <Button

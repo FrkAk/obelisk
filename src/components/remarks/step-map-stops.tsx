@@ -18,6 +18,7 @@ import {
 import { useRemarkStore, type RemarkStop } from "@/stores/remark-store";
 import { StopMarker } from "./stop-marker";
 import { StopRouteLayer } from "./stop-route-layer";
+import { DEFAULT_MAP_CENTER } from "@/lib/constants/map";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export function StepMapStops() {
@@ -26,8 +27,8 @@ export function StepMapStops() {
   const [deleteConfirmStop, setDeleteConfirmStop] = useState<RemarkStop | null>(null);
 
   const [viewState, setViewState] = useState({
-    longitude: formData.centerLongitude ? parseFloat(formData.centerLongitude) : -0.1276,
-    latitude: formData.centerLatitude ? parseFloat(formData.centerLatitude) : 51.5074,
+    longitude: formData.centerLongitude ? parseFloat(formData.centerLongitude) : DEFAULT_MAP_CENTER.longitude,
+    latitude: formData.centerLatitude ? parseFloat(formData.centerLatitude) : DEFAULT_MAP_CENTER.latitude,
     zoom: 13,
   });
 
@@ -127,9 +128,8 @@ export function StepMapStops() {
             {stops.map((stop, index) => (
               <Card
                 key={stop.id}
-                className={`cursor-pointer transition-all ${
-                  activeStopId === stop.id ? "ring-2 ring-primary" : ""
-                }`}
+                className={`cursor-pointer transition-all ${activeStopId === stop.id ? "ring-2 ring-primary" : ""
+                  }`}
                 onClick={() => {
                   setActiveStopId(stop.id);
                   mapRef.current?.flyTo({

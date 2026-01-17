@@ -213,6 +213,14 @@ export const pois = pgTable(
     tags: jsonb("tags").$type<Record<string, string>>().default({}),
     wikipediaUrl: text("wikipedia_url"),
     descriptionRaw: text("description_raw"),
+    address: text("address"),
+    phone: text("phone"),
+    website: text("website"),
+    openingHours: text("opening_hours"),
+    wheelchair: text("wheelchair"),
+    cuisine: text("cuisine").array(),
+    operator: text("operator"),
+    osmNodeId: text("osm_node_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -223,6 +231,7 @@ export const pois = pgTable(
   (table) => [
     index("pois_external_id_idx").on(table.externalId),
     index("pois_source_idx").on(table.source),
+    uniqueIndex("pois_osm_node_id_idx").on(table.osmNodeId),
   ]
 );
 

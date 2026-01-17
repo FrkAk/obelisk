@@ -33,34 +33,53 @@ export function buildStoryPrompt(context: StoryPromptContext): string {
   const { poi, storyType } = context;
   const guidance = STORY_TYPE_GUIDANCE[storyType];
 
-  const categoryInfo = poi.categories?.length
-    ? `Categories: ${poi.categories.join(", ")}`
-    : "";
+  const infoLines: string[] = [];
 
-  const tagInfo =
-    poi.tags && Object.keys(poi.tags).length > 0
-      ? `Details: ${Object.entries(poi.tags)
-          .map(([k, v]) => `${k}: ${v}`)
-          .join(", ")}`
-      : "";
+  if (poi.categories?.length) {
+    infoLines.push(`Categories: ${poi.categories.join(", ")}`);
+  }
 
-  const wikiInfo = poi.wikipediaUrl
-    ? `Wikipedia: ${poi.wikipediaUrl}`
-    : "";
+  if (poi.address) {
+    infoLines.push(`Address: ${poi.address}`);
+  }
 
-  const rawDescription = poi.descriptionRaw
-    ? `Background: ${poi.descriptionRaw}`
-    : "";
+  if (poi.cuisine?.length) {
+    infoLines.push(`Cuisine: ${poi.cuisine.join(", ")}`);
+  }
+
+  if (poi.openingHours) {
+    infoLines.push(`Hours: ${poi.openingHours}`);
+  }
+
+  if (poi.operator) {
+    infoLines.push(`Operated by: ${poi.operator}`);
+  }
+
+  if (poi.tags && Object.keys(poi.tags).length > 0) {
+    const relevantTags = Object.entries(poi.tags)
+      .filter(([k]) => !["name", "addr:street", "addr:housenumber", "addr:postcode", "addr:city"].includes(k))
+      .slice(0, 10)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(", ");
+    if (relevantTags) {
+      infoLines.push(`Details: ${relevantTags}`);
+    }
+  }
+
+  if (poi.wikipediaUrl) {
+    infoLines.push(`Wikipedia: ${poi.wikipediaUrl}`);
+  }
+
+  if (poi.descriptionRaw) {
+    infoLines.push(`Background: ${poi.descriptionRaw}`);
+  }
 
   return `You are a storyteller creating brief, engaging narratives about places for a navigation app.
 
 PLACE INFORMATION:
 Name: ${poi.name}
 Location: ${poi.latitude}, ${poi.longitude}
-${categoryInfo}
-${tagInfo}
-${wikiInfo}
-${rawDescription}
+${infoLines.join("\n")}
 
 TASK:
 ${guidance}

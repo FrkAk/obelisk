@@ -1,4 +1,4 @@
-.PHONY: run dev start stop restart clean destroy install migrate db-push db-studio db-seed db-seed-pois logs help wait-db
+.PHONY: run dev start stop restart clean destroy install migrate db-push db-studio db-seed db-seed-pois db-seed-osm logs help wait-db
 
 # Default target
 .DEFAULT_GOAL := help
@@ -12,7 +12,7 @@ help: ## Show this help
 install: ## Install dependencies
 	pnpm install
 
-run: start wait-db migrate db-seed db-seed-pois ## Start everything (services + dev server)
+run: start wait-db migrate db-seed db-seed-pois db-seed-osm ## Start everything (services + dev server)
 	pnpm dev
 
 dev: ## Start dev server only (assumes services are running)
@@ -62,6 +62,9 @@ db-seed: ## Seed database with dev user
 
 db-seed-pois: ## Seed database with POIs
 	pnpm db:seed-pois
+
+db-seed-osm: ## Seed database with OSM POIs from Munich
+	pnpm db:seed-osm
 
 logs: ## Show Docker service logs
 	$(DOCKER_COMPOSE) logs -f

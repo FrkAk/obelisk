@@ -4,6 +4,7 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import { router, publicProcedure, protectedProcedure } from "@/lib/trpc/init";
 import { db, pois, poiInteractions, poiSaves } from "@/lib/db";
 import { getOrGenerateStory, regenerateStory } from "@/server/services/story-generation";
+import { importPoisFromOsm, type CategoryFilter } from "@/server/services/osm-import";
 
 const nearbyQuerySchema = z.object({
   longitude: z.string(),
@@ -233,5 +234,31 @@ export const poiRouter = router({
         ...row.poi,
         savedAt: row.savedAt,
       }));
+    }),
+
+  importFromOsm: protectedProcedure
+    .input(
+      z.object({
+        south: z.number().min(-90).max(90),
+        west: z.number().min(-180).max(180),
+        north: z.number().min(-90).max(90),
+        east: z.number().min(-180).max(180),
+        categories: z
+          .array(z.enum(["tourism", "historic", "amenity", "shop", "leisure"]))
+          .optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const result = await importPoisFromOsm({
+        bbox: {
+          south: input.south,
+          west: input.west,
+          north: input.north,
+          east: input.east,
+        },
+        categories: input.categories as CategoryFilter[] | undefined,
+      });
+
+      return result;
     }),
 });

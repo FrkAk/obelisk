@@ -5,7 +5,7 @@ import { Compass, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMapStore } from "@/stores/map-store";
 import { LocationButton } from "./location-button";
-import { DiscoveryToggle } from "@/components/discovery/discovery-layer";
+import { DiscoveryToggle } from "@/components/discovery/discovery-toggle";
 import { cn } from "@/lib/utils";
 
 interface MapControlStackProps {

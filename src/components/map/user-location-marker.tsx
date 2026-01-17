@@ -104,8 +104,8 @@ export function UserLocationMarker({ enableWatch = true }: UserLocationMarkerPro
           style={{
             width: ringSize,
             height: ringSize,
-            backgroundColor: `rgba(0, 122, 255, 0.15)`,
-            border: `1px solid rgba(0, 122, 255, 0.3)`,
+            backgroundColor: `rgba(0, 122, 255, 0.32)`,
+            border: `2px solid rgba(0, 122, 255, 0.45)`,
           }}
         />
 

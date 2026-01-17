@@ -33,7 +33,7 @@ export function MapControls() {
       </div>
 
       {/* Top-center: Search pill */}
-      <div className="absolute left-1/2 -translate-x-1/2 top-4 z-10">
+      <div className="absolute left-1/2 -translate-x-1/2 top-4 z-40">
         <SearchPill />
       </div>
 
@@ -77,12 +77,14 @@ export function MapControls() {
           </div>
         ) : (
           <Button
+            variant="ghost"
             className={cn(
               "glass h-10 rounded-xl",
-              "border border-white/20 px-4",
+              "border border-black/15 dark:border-white/30 px-4",
               "shadow-elevated hover:shadow-lg",
               "transition-all duration-200",
-              "active:scale-[0.98]"
+              "active:scale-[0.98]",
+              "text-foreground font-medium"
             )}
             asChild
           >

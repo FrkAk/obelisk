@@ -4,7 +4,7 @@ import { useProximityDetection } from "@/hooks/use-proximity-detection";
 import { useProximityStore } from "@/stores/proximity-store";
 import { StoryNotification } from "./story-notification";
 import { Button } from "@/components/ui/button";
-import { Compass, MapPin, Loader2 } from "lucide-react";
+import { MapPin, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DiscoveryLayerProps {
@@ -96,40 +96,5 @@ export function DiscoveryLayer({ className }: DiscoveryLayerProps) {
         />
       )}
     </div>
-  );
-}
-
-/**
- * Discovery mode toggle button.
- *
- * Returns:
- *     React component for toggling discovery mode.
- */
-export function DiscoveryToggle() {
-  const { discoveryEnabled, setDiscoveryEnabled } = useProximityStore();
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className={cn(
-        "relative h-9 w-9 rounded-lg transition-all duration-300",
-        discoveryEnabled
-          ? "bg-primary text-primary-foreground shadow-blue hover:bg-primary/90"
-          : "hover:bg-black/5 dark:hover:bg-white/10"
-      )}
-      onClick={() => setDiscoveryEnabled(!discoveryEnabled)}
-      aria-label={discoveryEnabled ? "Disable discovery" : "Enable discovery"}
-    >
-      <Compass
-        className={cn(
-          "h-4 w-4 transition-all duration-300",
-          discoveryEnabled ? "" : "opacity-60"
-        )}
-      />
-      {discoveryEnabled && (
-        <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-green-500 border border-background" />
-      )}
-    </Button>
   );
 }

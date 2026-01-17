@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from "@/lib/constants/map";
 
 interface ViewState {
   longitude: number;
@@ -8,12 +9,18 @@ interface ViewState {
   bearing: number;
 }
 
-interface SelectedPoi {
+export interface SelectedPoi {
   id: string;
   name: string;
   longitude: number;
   latitude: number;
   categories: string[] | null;
+  description?: string;
+  address?: string;
+  openingHours?: string;
+  website?: string;
+  phone?: string;
+  imageUrl?: string;
 }
 
 interface MapState {
@@ -26,9 +33,9 @@ interface MapState {
 
 export const useMapStore = create<MapState>((set) => ({
   viewState: {
-    longitude: 11.576,
-    latitude: 48.137,
-    zoom: 15,
+    longitude: DEFAULT_MAP_CENTER.longitude,
+    latitude: DEFAULT_MAP_CENTER.latitude,
+    zoom: DEFAULT_MAP_ZOOM,
     pitch: 0,
     bearing: 0,
   },

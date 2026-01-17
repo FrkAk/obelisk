@@ -26,8 +26,14 @@ interface OverpassResponse {
   elements: OverpassElement[];
 }
 
+const OVERPASS_SERVERS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+];
+
 /**
- * Fetches POIs from Overpass API around a location.
+ * Fetches POIs from Overpass API around a location with retry logic.
  *
  * Args:
  *     lat: Center latitude.
@@ -43,7 +49,7 @@ async function fetchPoisFromOverpass(
   radius: number
 ): Promise<OverpassElement[]> {
   const overpassQuery = `
-    [out:json][timeout:60];
+    [out:json][timeout:30];
     (
       node["historic"]["name"](around:${radius},${lat},${lon});
       node["tourism"="museum"]["name"](around:${radius},${lat},${lon});
@@ -53,26 +59,39 @@ async function fetchPoisFromOverpass(
       node["tourism"="viewpoint"]["name"](around:${radius},${lat},${lon});
       node["tourism"="attraction"]["name"](around:${radius},${lat},${lon});
       node["leisure"="park"]["name"](around:${radius},${lat},${lon});
-      way["historic"]["name"](around:${radius},${lat},${lon});
-      way["tourism"="museum"]["name"](around:${radius},${lat},${lon});
-      way["amenity"="place_of_worship"]["name"](around:${radius},${lat},${lon});
     );
-    out center;
+    out body;
   `;
 
-  const response = await fetch("https://overpass-api.de/api/interpreter", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `data=${encodeURIComponent(overpassQuery)}`,
-    signal: AbortSignal.timeout(90000),
-  });
+  for (let attempt = 0; attempt < OVERPASS_SERVERS.length; attempt++) {
+    const server = OVERPASS_SERVERS[attempt];
+    try {
+      console.log(`Trying Overpass server ${attempt + 1}/${OVERPASS_SERVERS.length}: ${server}`);
 
-  if (!response.ok) {
-    throw new Error(`Overpass API error: ${response.statusText}`);
+      const response = await fetch(server, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `data=${encodeURIComponent(overpassQuery)}`,
+        signal: AbortSignal.timeout(45000),
+      });
+
+      if (!response.ok) {
+        console.log(`Server ${server} returned ${response.status}: ${response.statusText}`);
+        continue;
+      }
+
+      const data: OverpassResponse = await response.json();
+      console.log(`Found ${data.elements.length} elements from ${server}`);
+      return data.elements;
+    } catch (error) {
+      console.log(`Server ${server} failed:`, error instanceof Error ? error.message : error);
+      if (attempt === OVERPASS_SERVERS.length - 1) {
+        throw new Error("All Overpass servers failed. Please try again later.");
+      }
+    }
   }
 
-  const data: OverpassResponse = await response.json();
-  return data.elements;
+  return [];
 }
 
 /**

@@ -159,6 +159,16 @@ obelisk/
 - [x] Dark mode support
 - [x] Animation polish
 
+### UI Visual Refinement (COMPLETED)
+- [x] Design tokens: iOS typography scale, enhanced shadows, multi-layer glass variants
+- [x] Spring animation system: snappy, bouncy, smooth presets (Framer Motion)
+- [x] Bottom sheet polish: proper drag handle (36×5px pill), spring physics, dynamic shadows
+- [x] Story card refinement: iOS typography hierarchy (title2: 22px), proper spacing rhythm
+- [x] Map pin upgrade: gradient fill, soft shadows, selection glow ring, bounce animation
+- [x] Discover button: gradient background, pulsing glow, larger touch target
+- [x] User location marker: three-ring design (dot, accuracy ring, pulse), heading arrow
+- [x] Glass components: border-top highlight, inner shadow depth, variant system
+
 ### Future (Phase 2)
 - Search functionality
 - Category filters

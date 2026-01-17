@@ -97,14 +97,16 @@ export function useDiscoverPois() {
         };
       } catch (error) {
         setStatus("error");
-        setProgress(error instanceof Error ? error.message : "Something went wrong");
+        const message = error instanceof Error ? error.message : "Something went wrong";
+        const friendlyMessage = message.includes("servers failed")
+          ? "Map services are busy. Try again in a moment."
+          : message;
+        setProgress(friendlyMessage);
 
         setTimeout(() => {
           setStatus("idle");
           setProgress("");
         }, 5000);
-
-        throw error;
       }
     },
     [discoverMutation, generateMutation, queryClient]

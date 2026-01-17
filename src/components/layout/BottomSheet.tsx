@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useDragControls, type PanInfo } from "framer-motion";
 import { clsx } from "clsx";
+import { springTransitions, overlayVariants } from "@/lib/ui/animations";
 
 interface BottomSheetProps {
   isOpen: boolean;
@@ -14,6 +15,16 @@ interface BottomSheetProps {
 
 const DEFAULT_SNAP_POINTS = [0.25, 0.5, 0.9];
 
+/**
+ * Apple Maps-style bottom sheet with spring physics and snap points.
+ *
+ * Args:
+ *     isOpen: Whether the sheet is visible.
+ *     onClose: Callback when sheet should close.
+ *     children: Content to render inside the sheet.
+ *     snapPoints: Array of height percentages (0-1) for snap positions.
+ *     initialSnap: Index of the initial snap point.
+ */
 export function BottomSheet({
   isOpen,
   onClose,
@@ -25,6 +36,7 @@ export function BottomSheet({
   const dragControls = useDragControls();
   const [containerHeight, setContainerHeight] = useState(0);
   const [currentSnap, setCurrentSnap] = useState(initialSnap);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     const updateHeight = () => {
@@ -41,7 +53,12 @@ export function BottomSheet({
     }
   }, [isOpen, initialSnap]);
 
+  const handleDragStart = () => {
+    setIsDragging(true);
+  };
+
   const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    setIsDragging(false);
     const velocity = info.velocity.y;
     const offset = info.offset.y;
     const currentY = containerHeight * (1 - snapPoints[currentSnap]);
@@ -66,16 +83,21 @@ export function BottomSheet({
   };
 
   const sheetHeight = containerHeight * snapPoints[currentSnap];
+  const elevationLevel = currentSnap / (snapPoints.length - 1);
 
   return (
     <AnimatePresence>
       {isOpen && (
         <>
           <motion.div
-            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40"
+            style={{
+              backgroundColor: `rgba(0, 0, 0, ${0.2 + elevationLevel * 0.15})`,
+            }}
+            variants={overlayVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
             onClick={onClose}
           />
 
@@ -83,32 +105,45 @@ export function BottomSheet({
             ref={containerRef}
             className={clsx(
               "fixed bottom-0 left-0 right-0 z-50",
-              "glass glass-heavy rounded-t-3xl overflow-hidden"
+              "bg-[var(--glass-bg-thick)] backdrop-blur-[40px]",
+              "rounded-t-[20px] overflow-hidden",
+              "border border-[var(--glass-border)]",
+              "border-t-[var(--glass-border-highlight)]"
             )}
+            style={{
+              boxShadow: isDragging
+                ? "0 -8px 32px rgba(0, 0, 0, 0.2), 0 -2px 8px rgba(0, 0, 0, 0.1), inset 0 0.5px 0 var(--glass-border-highlight)"
+                : `0 -${4 + elevationLevel * 8}px ${16 + elevationLevel * 24}px rgba(0, 0, 0, ${0.1 + elevationLevel * 0.1}), inset 0 0.5px 0 var(--glass-border-highlight)`,
+            }}
             initial={{ y: containerHeight }}
             animate={{ height: sheetHeight, y: 0 }}
             exit={{ y: containerHeight }}
-            transition={{
-              type: "spring",
-              damping: 30,
-              stiffness: 300,
-            }}
+            transition={springTransitions.smooth}
             drag="y"
             dragControls={dragControls}
             dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={0.1}
+            dragElastic={0.05}
+            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
             <div
-              className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing"
+              className="flex justify-center pt-2 pb-1.5 cursor-grab active:cursor-grabbing"
               onPointerDown={(e) => dragControls.start(e)}
             >
-              <div className="w-9 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
+              <motion.div
+                className={clsx(
+                  "w-9 h-[5px] rounded-full",
+                  "bg-[#787880]/40 dark:bg-[#787880]/60"
+                )}
+                whileHover={{ scaleX: 1.1 }}
+                whileTap={{ scaleX: 0.95 }}
+                transition={springTransitions.snappy}
+              />
             </div>
 
             <div
-              className="overflow-y-auto px-4 pb-safe"
-              style={{ height: `calc(100% - 24px)` }}
+              className="overflow-y-auto px-4 pb-safe overscroll-contain"
+              style={{ height: `calc(100% - 28px)` }}
             >
               {children}
             </div>

@@ -1,0 +1,14 @@
+services:
+  app:
+    build:
+      context: .
+      target: prod
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://obelisk:${DB_PASSWORD}@postgres:5432/obelisk
+      OLLAMA_URL: http://ollama:11434
+    depends_on:
+      - postgres
+      - ollama
+    restart: unless-stopped

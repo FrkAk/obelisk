@@ -57,7 +57,14 @@ Use **Google-style docstrings** for all functions, classes, and modules:
 - Test files for trivial code
 - NOT EXPOSE PROJECT TO INTERNET
 
+## Plan Maintenance
+
+- Keep `Plan.md` updated as implementation progresses
+- Mark completed tasks with [x] instead of [ ]
+- Update status and add notes for blockers
+- Reference Plan.md for current implementation status
+
 ## References
 
 - Plan: `Plan.md` in repo root
-- Detalied project documentation `obelisk.md`, always refer to this document for feature and design. 
+- Detailed project documentation: `Obelisk.md`, always refer to this document for feature and design

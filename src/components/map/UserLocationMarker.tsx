@@ -1,6 +1,6 @@
 "use client";
 
-import { Marker } from "react-map-gl/maplibre";
+import { Marker } from "react-map-gl";
 import { motion } from "framer-motion";
 import type { GeoLocation } from "@/types";
 import { springTransitions } from "@/lib/ui/animations";

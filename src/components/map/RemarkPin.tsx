@@ -1,6 +1,6 @@
 "use client";
 
-import { Marker } from "react-map-gl/maplibre";
+import { Marker } from "react-map-gl";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Remark, Poi, CategorySlug } from "@/types";
 import { CATEGORY_COLORS } from "@/types";
@@ -51,7 +51,7 @@ export function RemarkPin({ remark, isSelected = false, onClick }: RemarkPinProp
       longitude={remark.poi.longitude}
       anchor="bottom"
       onClick={(e) => {
-        e.originalEvent.stopPropagation();
+        e.originalEvent?.stopPropagation();
         onClick?.();
       }}
     >

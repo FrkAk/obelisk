@@ -17,8 +17,8 @@
 | Layer | Technology |
 |-------|------------|
 | Framework | Next.js 15 (App Router) + React 19 |
-| Map | MapLibre GL JS + react-maplibre |
-| Map Tiles | **OpenFreeMap** (free, no API key) |
+| Map | Mapbox GL JS + react-map-gl |
+| Map Tiles | Mapbox (50k free loads/mo) + OpenStreetMap (POI data) |
 | Styling | Tailwind CSS v4 + CSS variables |
 | Animation | Framer Motion |
 | Database | PostgreSQL 15 + PostGIS 3.4 |
@@ -169,9 +169,18 @@ obelisk/
 - [x] User location marker: three-ring design (dot, accuracy ring, pulse), heading arrow
 - [x] Glass components: border-top highlight, inner shadow depth, variant system
 
+### Integrated Map & Search Architecture (COMPLETED)
+- [x] Mapbox GL JS integration (replaced MapLibre for premium visuals)
+- [x] OpenStreetMap POI data via Nominatim and Overpass APIs
+- [x] LLM-powered intelligent search query parsing
+- [x] Unified search API (`POST /api/search`)
+- [x] External POI details API (`GET /api/poi/[osmId]`)
+- [x] Search services: types, nominatim, overpass, queryParser
+- [x] UI Components: SearchBar, SearchResults, QuickFilter, POICard
+- [x] useSearch hook for frontend integration
+- [x] Dark mode automatic switching with Mapbox styles
+
 ### Future (Phase 2)
-- Search functionality
-- Category filters
 - Audio playback (TTS)
 - Explore mode
 

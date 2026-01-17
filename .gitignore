@@ -47,3 +47,6 @@ drizzle/*.sql
 .vscode/
 *.swp
 *.swo
+
+# Env
+!.env.example.*

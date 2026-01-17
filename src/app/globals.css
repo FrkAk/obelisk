@@ -266,3 +266,20 @@ body {
   background-size: 200% 200%;
   animation: gradient-shift 3s ease infinite;
 }
+
+/* Safe Area Utilities */
+.top-safe-area {
+  top: env(safe-area-inset-top, 0px);
+}
+
+.bottom-safe-area {
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

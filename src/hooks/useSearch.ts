@@ -8,6 +8,8 @@ import type {
 } from "@/lib/search/types";
 import type { CategorySlug } from "@/types";
 
+export type SearchStage = "idle" | "parsing" | "searching" | "generating";
+
 interface UseSearchOptions {
   radius?: number;
   limit?: number;
@@ -18,6 +20,7 @@ interface UseSearchReturn {
   conversationalResponse: string | null;
   intent: ParsedIntent | null;
   isLoading: boolean;
+  searchStage: SearchStage;
   error: string | null;
   timing: SearchResponse["timing"] | null;
   search: (
@@ -44,6 +47,7 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
   const [conversationalResponse, setConversationalResponse] = useState<string | null>(null);
   const [intent, setIntent] = useState<ParsedIntent | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchStage, setSearchStage] = useState<SearchStage>("idle");
   const [error, setError] = useState<string | null>(null);
   const [timing, setTiming] = useState<SearchResponse["timing"] | null>(null);
 
@@ -55,9 +59,12 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
     ) => {
       setIsLoading(true);
       setError(null);
+      setSearchStage("parsing");
 
       try {
         const searchQuery = category && !query ? category : query;
+
+        setSearchStage("searching");
 
         const response = await fetch("/api/search", {
           method: "POST",
@@ -69,6 +76,8 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
             limit,
           }),
         });
+
+        setSearchStage("generating");
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -89,6 +98,7 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
         setIntent(null);
       } finally {
         setIsLoading(false);
+        setSearchStage("idle");
       }
     },
     [radius, limit]
@@ -100,6 +110,7 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
     setIntent(null);
     setError(null);
     setTiming(null);
+    setSearchStage("idle");
   }, []);
 
   return {
@@ -107,6 +118,7 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
     conversationalResponse,
     intent,
     isLoading,
+    searchStage,
     error,
     timing,
     search,

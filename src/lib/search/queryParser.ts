@@ -80,13 +80,13 @@ export async function parseQueryIntent(query: string): Promise<ParsedIntent> {
 function detectSimplePatterns(query: string): ParsedIntent | null {
   const lowerQuery = query.toLowerCase().trim();
 
-  const foodPatterns = /\b(coffee|cafe|café|restaurant|food|eat|lunch|dinner|breakfast|pizza|burger|sushi|bar|pub|beer|drink)\b/;
-  const historyPatterns = /\b(history|historic|museum|monument|memorial|castle|old|ancient)\b/;
-  const artPatterns = /\b(art|gallery|museum|painting|sculpture|exhibition)\b/;
-  const naturePatterns = /\b(park|garden|nature|tree|green|outdoor|walk|forest)\b/;
-  const viewsPatterns = /\b(view|viewpoint|lookout|panorama|scenic)\b/;
-  const architecturePatterns = /\b(building|architecture|church|cathedral|tower|palace)\b/;
-  const culturePatterns = /\b(theatre|theater|cinema|concert|music|show|performance)\b/;
+  const foodPatterns = /\b(coffee|cafe|café|restaurant|food|eat|eating|lunch|dinner|breakfast|pizza|burger|sushi|bar|pub|beer|drink|tea|bakery|bistro|snack|hot chocolate|espresso|latte|cappuccino)\b/g;
+  const historyPatterns = /\b(history|historic|museum|monument|memorial|castle|old|ancient)\b/g;
+  const artPatterns = /\b(art|gallery|museum|painting|sculpture|exhibition)\b/g;
+  const naturePatterns = /\b(park|garden|nature|tree|green|outdoor|walk|forest)\b/g;
+  const viewsPatterns = /\b(view|viewpoint|lookout|panorama|scenic)\b/g;
+  const architecturePatterns = /\b(building|architecture|church|cathedral|tower|palace)\b/g;
+  const culturePatterns = /\b(theatre|theater|cinema|concert|music|show|performance)\b/g;
 
   const discoveryPatterns = /\b(surprise|random|anything|discover|explore)\b/;
   const routePatterns = /\b(way|route|path|between|along|on my way)\b/;
@@ -102,28 +102,38 @@ function detectSimplePatterns(query: string): ParsedIntent | null {
     type = "route";
   }
 
-  if (foodPatterns.test(lowerQuery)) {
+  const foodMatches = [...lowerQuery.matchAll(foodPatterns)].map(m => m[0]);
+  const historyMatches = [...lowerQuery.matchAll(historyPatterns)].map(m => m[0]);
+  const artMatches = [...lowerQuery.matchAll(artPatterns)].map(m => m[0]);
+  const natureMatches = [...lowerQuery.matchAll(naturePatterns)].map(m => m[0]);
+  const viewsMatches = [...lowerQuery.matchAll(viewsPatterns)].map(m => m[0]);
+  const architectureMatches = [...lowerQuery.matchAll(architecturePatterns)].map(m => m[0]);
+  const cultureMatches = [...lowerQuery.matchAll(culturePatterns)].map(m => m[0]);
+
+  if (foodMatches.length > 0) {
     category = "food";
-    const match = lowerQuery.match(foodPatterns);
-    if (match) keywords.push(match[0]);
-  } else if (historyPatterns.test(lowerQuery)) {
+    keywords.push(...foodMatches);
+    if (foodMatches.some(m => ["coffee", "tea", "café", "cafe", "espresso", "latte", "cappuccino", "hot chocolate"].includes(m))) {
+      keywords.push("cafe");
+    }
+  } else if (historyMatches.length > 0) {
     category = "history";
-    keywords.push("history", "historic");
-  } else if (artPatterns.test(lowerQuery)) {
+    keywords.push(...historyMatches, "history", "historic");
+  } else if (artMatches.length > 0) {
     category = "art";
-    keywords.push("art", "gallery");
-  } else if (naturePatterns.test(lowerQuery)) {
+    keywords.push(...artMatches, "art", "gallery");
+  } else if (natureMatches.length > 0) {
     category = "nature";
-    keywords.push("park", "nature");
-  } else if (viewsPatterns.test(lowerQuery)) {
+    keywords.push(...natureMatches, "park", "nature");
+  } else if (viewsMatches.length > 0) {
     category = "views";
-    keywords.push("viewpoint", "scenic");
-  } else if (architecturePatterns.test(lowerQuery)) {
+    keywords.push(...viewsMatches, "viewpoint", "scenic");
+  } else if (architectureMatches.length > 0) {
     category = "architecture";
-    keywords.push("architecture", "building");
-  } else if (culturePatterns.test(lowerQuery)) {
+    keywords.push(...architectureMatches, "architecture", "building");
+  } else if (cultureMatches.length > 0) {
     category = "culture";
-    keywords.push("culture", "entertainment");
+    keywords.push(...cultureMatches, "culture", "entertainment");
   }
 
   if (/\b(wifi|wi-fi|internet)\b/.test(lowerQuery)) {
@@ -160,11 +170,13 @@ function detectSimplePatterns(query: string): ParsedIntent | null {
     return null;
   }
 
+  const uniqueKeywords = [...new Set(keywords)];
+
   return {
     type,
     category,
     filters,
-    keywords: keywords.length > 0 ? keywords : [lowerQuery],
+    keywords: uniqueKeywords.length > 0 ? uniqueKeywords : [lowerQuery],
   };
 }
 

@@ -11,27 +11,46 @@ import { useGeofence } from "@/hooks/useGeofence";
 import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
 import { useDiscoverPois } from "@/hooks/useDiscoverPois";
 import { useSearch } from "@/hooks/useSearch";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { Remark, Poi, CategorySlug } from "@/types";
 import type { ObeliskResult, SearchResult } from "@/lib/search/types";
 
 type SheetMode = "story" | "search" | null;
 
+interface ViewportCenter {
+  latitude: number;
+  longitude: number;
+}
+
 export default function Home() {
   const [selectedRemark, setSelectedRemark] = useState<(Remark & { poi: Poi }) | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
+  const [viewportCenter, setViewportCenter] = useState<ViewportCenter | null>(null);
 
-  const { remarks, isLoading, location, hasRealLocation } = useNearbyRemarks();
+  const viewportDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { remarks, isLoading, location, hasRealLocation } = useNearbyRemarks({
+    externalLocation: viewportCenter,
+  });
   const { triggeredRemark, dismissNotification } = useGeofence(remarks);
   const { discover, status, progress, isDiscovering } = useDiscoverPois();
   const {
     results: searchResults,
     conversationalResponse,
     isLoading: isSearching,
+    searchStage,
     search,
     clear: clearSearch,
   } = useSearch({ radius: 2000 });
+
+  useEffect(() => {
+    return () => {
+      if (viewportDebounceRef.current) {
+        clearTimeout(viewportDebounceRef.current);
+      }
+    };
+  }, []);
 
   const handlePinClick = useCallback((remark: Remark & { poi: Poi }) => {
     setSelectedRemark(remark);
@@ -54,25 +73,51 @@ export default function Home() {
     setSelectedRemark(null);
   }, []);
 
+  const handleViewportChange = useCallback(
+    (center: { latitude: number; longitude: number }) => {
+      if (viewportDebounceRef.current) {
+        clearTimeout(viewportDebounceRef.current);
+      }
+      viewportDebounceRef.current = setTimeout(() => {
+        setViewportCenter(center);
+      }, 300);
+    },
+    []
+  );
+
+  const handlePoiClick = useCallback(
+    (poi: { name: string; latitude: number; longitude: number; category?: string }) => {
+      const searchLocation = viewportCenter ?? (location ? { latitude: location.latitude, longitude: location.longitude } : null);
+      if (!searchLocation) return;
+
+      search(poi.name, searchLocation);
+      setSheetMode("search");
+      setSheetOpen(true);
+    },
+    [viewportCenter, location, search]
+  );
+
   const handleDiscover = useCallback(() => {
-    if (location && hasRealLocation) {
+    const discoverLocation = viewportCenter ?? (hasRealLocation && location ? { latitude: location.latitude, longitude: location.longitude } : null);
+    if (discoverLocation) {
       discover({
-        lat: location.latitude,
-        lon: location.longitude,
+        lat: discoverLocation.latitude,
+        lon: discoverLocation.longitude,
         radius: 2000,
         limit: 5,
       });
     }
-  }, [discover, location, hasRealLocation]);
+  }, [discover, viewportCenter, location, hasRealLocation]);
 
   const handleSearch = useCallback(
     (query: string, category?: CategorySlug) => {
-      if (!location) return;
-      search(query, { latitude: location.latitude, longitude: location.longitude }, category);
+      const searchLocation = viewportCenter ?? (location ? { latitude: location.latitude, longitude: location.longitude } : null);
+      if (!searchLocation) return;
+      search(query, searchLocation, category);
       setSheetMode("search");
       setSheetOpen(true);
     },
-    [location, search]
+    [viewportCenter, location, search]
   );
 
   const handleSearchClear = useCallback(() => {
@@ -103,6 +148,8 @@ export default function Home() {
       <MapContainer
         remarks={remarks}
         onPinClick={handlePinClick}
+        onViewportChange={handleViewportChange}
+        onPoiClick={handlePoiClick}
         selectedRemarkId={selectedRemark?.id}
         isLoading={isLoading}
         userLocation={hasRealLocation ? location : null}
@@ -113,7 +160,8 @@ export default function Home() {
           onSearch={handleSearch}
           onClear={handleSearchClear}
           isLoading={isSearching}
-          placeholder={hasRealLocation ? "Ask Obelisk anything..." : "Getting location..."}
+          searchStage={searchStage}
+          placeholder={hasRealLocation || viewportCenter ? "Ask Obelisk anything..." : "Getting location..."}
         />
       </div>
 
@@ -121,7 +169,7 @@ export default function Home() {
         onDiscover={handleDiscover}
         status={status}
         progress={progress}
-        disabled={!hasRealLocation || isDiscovering}
+        disabled={(!hasRealLocation && !viewportCenter) || isDiscovering}
       />
 
       {triggeredRemark && !sheetOpen && (

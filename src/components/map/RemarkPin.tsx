@@ -1,10 +1,9 @@
 "use client";
 
+import { memo } from "react";
 import { Marker } from "react-map-gl";
-import { motion, AnimatePresence } from "framer-motion";
 import type { Remark, Poi, CategorySlug } from "@/types";
 import { CATEGORY_COLORS } from "@/types";
-import { springTransitions, pinVariants } from "@/lib/ui/animations";
 
 interface RemarkPinProps {
   remark: Remark & { poi: Poi };
@@ -23,26 +22,17 @@ const CATEGORY_ICONS: Record<CategorySlug, string> = {
   culture: "M11 2v4H9V2H7v4H5V2H3v6h8V2h-2zm0 11l-1 1 1 1 1-1-1-1zm0-3l-1 1 1 1 1-1-1-1z",
 };
 
-function darkenColor(hex: string, amount: number): string {
-  const num = parseInt(hex.replace("#", ""), 16);
-  const r = Math.max(0, (num >> 16) - amount);
-  const g = Math.max(0, ((num >> 8) & 0x00ff) - amount);
-  const b = Math.max(0, (num & 0x0000ff) - amount);
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
-}
-
 /**
- * Premium map pin with gradient fill, shadows, and micro-interactions.
+ * Glassmorphic map pin with category color accent.
  *
  * Args:
  *     remark: The story remark with associated POI data.
  *     isSelected: Whether this pin is currently selected.
  *     onClick: Callback when pin is tapped.
  */
-export function RemarkPin({ remark, isSelected = false, onClick }: RemarkPinProps) {
+export const RemarkPin = memo(function RemarkPin({ remark, isSelected = false, onClick }: RemarkPinProps) {
   const categorySlug = (remark.poi.category?.slug ?? "history") as CategorySlug;
   const color = CATEGORY_COLORS[categorySlug];
-  const darkColor = darkenColor(color, 30);
   const iconPath = CATEGORY_ICONS[categorySlug];
 
   return (
@@ -55,81 +45,70 @@ export function RemarkPin({ remark, isSelected = false, onClick }: RemarkPinProp
         onClick?.();
       }}
     >
-      <motion.button
-        className="relative flex flex-col items-center"
-        variants={pinVariants}
-        initial="initial"
-        animate={isSelected ? "selected" : "animate"}
-        whileHover="hover"
+      <button
+        className="relative flex flex-col items-center transition-transform duration-150"
+        style={{ transform: isSelected ? "scale(1.15)" : "scale(1)" }}
         aria-label={`View story: ${remark.title}`}
       >
-        <AnimatePresence>
-          {isSelected && (
-            <motion.div
-              className="absolute -inset-3 rounded-full"
-              style={{
-                background: `radial-gradient(circle, ${color}30 0%, transparent 70%)`,
-              }}
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1.5, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              transition={springTransitions.bouncy}
-            />
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence>
-          {isSelected && (
-            <motion.div
-              className="absolute -inset-1 rounded-full"
-              style={{
-                border: `2px solid ${color}`,
-                boxShadow: `0 0 12px ${color}60`,
-              }}
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1.2, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={springTransitions.bouncy}
-            />
-          )}
-        </AnimatePresence>
-
-        <motion.div
-          className="relative w-11 h-11 rounded-full flex items-center justify-center"
-          style={{
-            background: `linear-gradient(145deg, ${color} 0%, ${darkColor} 100%)`,
-            boxShadow: isSelected
-              ? `0 4px 16px ${color}50, 0 2px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2)`
-              : `0 2px 8px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2)`,
-          }}
-          whileTap={{ scale: 0.95 }}
-          transition={springTransitions.quick}
-        >
-          <svg
-            width="22"
-            height="22"
-            viewBox="0 0 24 24"
-            fill="white"
+        {isSelected && (
+          <div
+            className="absolute -inset-4 rounded-full"
             style={{
-              filter: "drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2))",
+              background: `radial-gradient(circle, ${color}25 0%, transparent 70%)`,
+              transform: "scale(1.5)",
+            }}
+          />
+        )}
+
+        <div
+          className="relative w-10 h-10 glass rounded-full flex items-center justify-center transition-shadow duration-150"
+          style={{
+            boxShadow: isSelected
+              ? `0 4px 16px ${color}40, 0 2px 8px rgba(0, 0, 0, 0.12), 0 0 0 2px ${color}`
+              : `0 2px 8px rgba(0, 0, 0, 0.1), 0 0 0 2px ${color}60`,
+          }}
+        >
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              background: `radial-gradient(circle at 30% 30%, ${color}15 0%, transparent 60%)`,
+            }}
+          />
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill={color}
+            style={{
+              filter: "drop-shadow(0 1px 1px rgba(0, 0, 0, 0.1))",
             }}
           >
             <path d={iconPath} />
           </svg>
-        </motion.div>
+        </div>
 
-        <motion.div
-          className="absolute -bottom-[6px]"
+        <div
+          className="absolute -bottom-1"
           style={{
             width: 0,
             height: 0,
-            borderLeft: "7px solid transparent",
-            borderRight: "7px solid transparent",
-            borderTop: `10px solid ${darkColor}`,
-            filter: "drop-shadow(0 2px 2px rgba(0, 0, 0, 0.15))",
+            borderLeft: "6px solid transparent",
+            borderRight: "6px solid transparent",
+            borderTop: `8px solid var(--glass-border)`,
+            filter: "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1))",
           }}
         />
-      </motion.button>
+        <div
+          className="absolute -bottom-[3px]"
+          style={{
+            width: 4,
+            height: 4,
+            borderRadius: "50%",
+            backgroundColor: color,
+            boxShadow: `0 0 4px ${color}80`,
+          }}
+        />
+      </button>
     </Marker>
   );
-}
+});

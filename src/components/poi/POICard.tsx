@@ -210,29 +210,33 @@ export function POICard({
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
             >
-              <button
+              <GlassButton
+                variant="secondary"
+                size="md"
+                fullWidth
                 onClick={onDiscoverStory}
-                className="flex items-center gap-3 w-full p-3 rounded-xl glass-thin hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
               >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-coral to-coral/70 flex items-center justify-center">
-                  <span className="text-white text-lg">✨</span>
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-[13px] text-coral font-medium">
-                    Obelisk has a story nearby!
-                  </p>
-                  <p className="text-[15px] text-[var(--foreground)] font-medium truncate">
-                    {nearbyRemark.title}
-                  </p>
-                </div>
-                <svg
-                  className="w-5 h-5 text-[var(--foreground-secondary)]"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
-                </svg>
-              </button>
+                <span className="flex items-center gap-3 w-full">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-coral to-coral/70 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-sm">✨</span>
+                  </div>
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="text-[12px] text-coral font-medium">
+                      Obelisk has a story nearby!
+                    </p>
+                    <p className="text-[14px] text-[var(--foreground)] font-medium truncate">
+                      {nearbyRemark.title}
+                    </p>
+                  </div>
+                  <svg
+                    className="w-5 h-5 text-[var(--foreground-secondary)] flex-shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                  </svg>
+                </span>
+              </GlassButton>
             </motion.div>
           )}
         </div>

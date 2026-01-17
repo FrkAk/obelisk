@@ -9,6 +9,11 @@ interface NearbyRemarksResponse {
   total: number;
 }
 
+interface UseNearbyRemarksOptions {
+  radius?: number;
+  externalLocation?: { latitude: number; longitude: number } | null;
+}
+
 async function fetchNearbyRemarks(
   latitude: number,
   longitude: number,
@@ -29,16 +34,28 @@ async function fetchNearbyRemarks(
   return response.json();
 }
 
-export function useNearbyRemarks(radius: number = 5000) {
-  const { location, hasRealLocation, isLoading: isLocationLoading } = useGeolocation();
+/**
+ * Hook for fetching nearby remarks based on location.
+ *
+ * Args:
+ *     options: Configuration including radius and optional external location.
+ *
+ * Returns:
+ *     Remarks, loading state, and location information.
+ */
+export function useNearbyRemarks(options: UseNearbyRemarksOptions = {}) {
+  const { radius = 5000, externalLocation } = options;
+  const { location: gpsLocation, hasRealLocation, isLoading: isLocationLoading } = useGeolocation();
+
+  const effectiveLocation = externalLocation ?? gpsLocation;
 
   const query = useQuery({
-    queryKey: ["nearbyRemarks", location?.latitude, location?.longitude, radius],
+    queryKey: ["nearbyRemarks", effectiveLocation?.latitude, effectiveLocation?.longitude, radius],
     queryFn: () =>
-      fetchNearbyRemarks(location!.latitude, location!.longitude, radius),
-    enabled: !!location,
+      fetchNearbyRemarks(effectiveLocation!.latitude, effectiveLocation!.longitude, radius),
+    enabled: !!effectiveLocation,
     staleTime: 30000,
-    refetchInterval: hasRealLocation ? 30000 : false,
+    refetchInterval: hasRealLocation && !externalLocation ? 30000 : false,
   });
 
   return {
@@ -48,6 +65,6 @@ export function useNearbyRemarks(radius: number = 5000) {
     error: query.error,
     refetch: query.refetch,
     hasRealLocation,
-    location,
+    location: gpsLocation,
   };
 }

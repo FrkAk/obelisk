@@ -1,13 +1,25 @@
 "use client";
 
 import { useRef, useCallback, useEffect, useState } from "react";
-import Map, { NavigationControl, type MapRef, type ViewStateChangeEvent } from "react-map-gl";
+import Map, { type MapRef, type ViewStateChangeEvent, type MapLayerMouseEvent } from "react-map-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MUNICH_CENTER } from "@/types";
+import { MapControls } from "./MapControls";
+
+interface PoiClickData {
+  name: string;
+  latitude: number;
+  longitude: number;
+  category?: string;
+}
+
+export type MapBounds = [number, number, number, number];
 
 interface MapViewProps {
   children?: React.ReactNode;
   onMoveEnd?: (center: { latitude: number; longitude: number }) => void;
+  onViewStateChange?: (state: { zoom: number; bounds: MapBounds }) => void;
+  onPoiClick?: (poi: PoiClickData) => void;
   initialCenter?: { latitude: number; longitude: number };
   initialZoom?: number;
   userLocation?: { latitude: number; longitude: number } | null;
@@ -32,6 +44,8 @@ const MAPBOX_DARK = process.env.NEXT_PUBLIC_MAPBOX_STYLE_DARK || DEFAULT_DARK;
 export function MapView({
   children,
   onMoveEnd,
+  onViewStateChange,
+  onPoiClick,
   initialCenter = MUNICH_CENTER,
   initialZoom = 14,
   userLocation,
@@ -39,6 +53,7 @@ export function MapView({
   const mapRef = useRef<MapRef>(null);
   const hasFlownToUser = useRef(false);
   const [isDark, setIsDark] = useState(false);
+  const [cursorStyle, setCursorStyle] = useState<string>("grab");
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -57,13 +72,28 @@ export function MapView({
           longitude: event.viewState.longitude,
         });
       }
+      if (onViewStateChange) {
+        const map = mapRef.current?.getMap();
+        const mapBounds = map?.getBounds();
+        if (mapBounds) {
+          const bounds: MapBounds = [
+            mapBounds.getWest(),
+            mapBounds.getSouth(),
+            mapBounds.getEast(),
+            mapBounds.getNorth(),
+          ];
+          onViewStateChange({ zoom: event.viewState.zoom, bounds });
+        }
+      }
     },
-    [onMoveEnd]
+    [onMoveEnd, onViewStateChange]
   );
 
+
   useEffect(() => {
-    if (userLocation && mapRef.current && !hasFlownToUser.current) {
-      mapRef.current.flyTo({
+    const map = mapRef.current?.getMap();
+    if (userLocation && map && !hasFlownToUser.current) {
+      map.flyTo({
         center: [userLocation.longitude, userLocation.latitude],
         zoom: 14,
         duration: 1500,
@@ -73,8 +103,9 @@ export function MapView({
   }, [userLocation]);
 
   const handleLocateClick = useCallback(() => {
-    if (userLocation && mapRef.current) {
-      mapRef.current.flyTo({
+    const map = mapRef.current?.getMap();
+    if (userLocation && map) {
+      map.flyTo({
         center: [userLocation.longitude, userLocation.latitude],
         zoom: 15,
         duration: 1000,
@@ -82,38 +113,111 @@ export function MapView({
     }
   }, [userLocation]);
 
+  const handleZoomIn = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (map) {
+      map.zoomIn({ duration: 300 });
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (map) {
+      map.zoomOut({ duration: 300 });
+    }
+  }, []);
+
+  const handleMapClick = useCallback(
+    (event: MapLayerMouseEvent) => {
+      const map = mapRef.current?.getMap();
+      if (!onPoiClick || !map) return;
+
+      const features = map.queryRenderedFeatures(event.point);
+
+      const poiFeature = features.find((f) => {
+        const layerId = f.layer?.id || "";
+        const sourceLayer = f.sourceLayer || "";
+        return (
+          layerId.includes("poi") ||
+          layerId.includes("label") ||
+          sourceLayer.includes("poi") ||
+          (f.properties?.name && f.geometry.type === "Point")
+        );
+      });
+
+      if (poiFeature) {
+        const props = poiFeature.properties;
+        const geometry = poiFeature.geometry;
+
+        if (geometry.type === "Point" && props?.name) {
+          onPoiClick({
+            name: props.name || props.name_en || "Unknown",
+            latitude: geometry.coordinates[1],
+            longitude: geometry.coordinates[0],
+            category: props.class || props.type || props.maki,
+          });
+        }
+      }
+    },
+    [onPoiClick]
+  );
+
+  const handleMouseEnter = useCallback(() => {
+    setCursorStyle("pointer");
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setCursorStyle("grab");
+  }, []);
+
+  const handleLoad = useCallback(() => {
+    if (onViewStateChange) {
+      const map = mapRef.current?.getMap();
+      const mapBounds = map?.getBounds();
+      const zoom = map?.getZoom() ?? initialZoom;
+      if (mapBounds) {
+        const bounds: MapBounds = [
+          mapBounds.getWest(),
+          mapBounds.getSouth(),
+          mapBounds.getEast(),
+          mapBounds.getNorth(),
+        ];
+        onViewStateChange({ zoom, bounds });
+      }
+    }
+  }, [onViewStateChange, initialZoom]);
+
   return (
-    <Map
-      ref={mapRef}
-      mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
-      initialViewState={{
-        latitude: initialCenter.latitude,
-        longitude: initialCenter.longitude,
-        zoom: initialZoom,
-      }}
-      style={{ width: "100%", height: "100%" }}
-      mapStyle={isDark ? MAPBOX_DARK : MAPBOX_LIGHT}
-      onMoveEnd={handleMoveEnd}
-      attributionControl={false}
-      maxZoom={18}
-      minZoom={10}
-    >
-      <NavigationControl position="top-right" showCompass={false} />
-      <button
-        onClick={handleLocateClick}
-        className="absolute top-[96px] right-[10px] z-10 w-[29px] h-[29px] bg-white rounded flex items-center justify-center shadow-md border border-gray-200 hover:bg-gray-100 active:bg-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700"
-        aria-label="Center on my location"
-        title="Go to my location"
+    <div className="relative w-full h-full">
+      <Map
+        ref={mapRef}
+        id="mainMap"
+        mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
+        initialViewState={{
+          latitude: initialCenter.latitude,
+          longitude: initialCenter.longitude,
+          zoom: initialZoom,
+        }}
+        style={{ width: "100%", height: "100%" }}
+        mapStyle={isDark ? MAPBOX_DARK : MAPBOX_LIGHT}
+        onLoad={handleLoad}
+        onMoveEnd={handleMoveEnd}
+        onClick={handleMapClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        cursor={cursorStyle}
+        attributionControl={false}
+        maxZoom={18}
+        minZoom={10}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-gray-700 dark:text-gray-200">
-          <circle cx="12" cy="12" r="4" />
-          <line x1="12" y1="2" x2="12" y2="6" />
-          <line x1="12" y1="18" x2="12" y2="22" />
-          <line x1="2" y1="12" x2="6" y2="12" />
-          <line x1="18" y1="12" x2="22" y2="12" />
-        </svg>
-      </button>
-      {children}
-    </Map>
+        {children}
+      </Map>
+      <MapControls
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onLocate={handleLocateClick}
+        hasUserLocation={!!userLocation}
+      />
+    </div>
   );
 }

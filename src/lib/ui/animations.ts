@@ -46,16 +46,9 @@ export const buttonVariants: Variants = {
 };
 
 export const pinVariants: Variants = {
-  initial: {
-    scale: 0.6,
-    opacity: 0,
-    y: -30,
-  },
   animate: {
     scale: 1,
     opacity: 1,
-    y: 0,
-    transition: springTransitions.bouncy,
   },
   selected: {
     scale: 1.15,

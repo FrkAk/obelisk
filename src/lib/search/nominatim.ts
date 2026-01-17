@@ -42,20 +42,33 @@ function mapOsmToCategory(osmClass: string, osmType: string): string {
 }
 
 function buildSearchQuery(intent: ParsedIntent): string {
-  const parts: string[] = [];
-
-  if (intent.keywords.length > 0) {
-    parts.push(intent.keywords.join(" "));
-  }
+  const keywords: string[] = [...intent.keywords];
 
   if (intent.category && CATEGORY_TO_OSM_TYPE[intent.category]) {
     const types = CATEGORY_TO_OSM_TYPE[intent.category];
-    if (types.length > 0 && !parts.some((p) => types.includes(p.toLowerCase()))) {
-      parts.push(types[0]);
+    const hasOsmType = keywords.some((kw) =>
+      types.some((t) => kw.toLowerCase().includes(t) || t.includes(kw.toLowerCase()))
+    );
+
+    if (!hasOsmType && types.length > 0) {
+      keywords.push(types[0]);
     }
   }
 
-  return parts.join(" ") || "cafe";
+  const osmFriendlyTerms = ["cafe", "restaurant", "bar", "pub", "museum", "park", "gallery", "church", "theatre", "cinema"];
+  const priorityKeyword = keywords.find((kw) =>
+    osmFriendlyTerms.includes(kw.toLowerCase())
+  );
+
+  if (priorityKeyword) {
+    return priorityKeyword;
+  }
+
+  if (intent.category && CATEGORY_TO_OSM_TYPE[intent.category]) {
+    return CATEGORY_TO_OSM_TYPE[intent.category][0];
+  }
+
+  return keywords[0] || "cafe";
 }
 
 function calculateDistance(

@@ -93,7 +93,7 @@ export function DiscoverButton({
             <motion.div
               className="absolute inset-0 rounded-full"
               style={{
-                background: "linear-gradient(135deg, #FF6B4A 0%, #E5593B 100%)",
+                background: "linear-gradient(135deg, rgba(255, 107, 74, 0.9) 0%, rgba(229, 89, 59, 0.9) 100%)",
               }}
               animate={!disabled ? {
                 boxShadow: [
@@ -111,8 +111,11 @@ export function DiscoverButton({
             <motion.div
               className="relative flex items-center gap-2.5 px-6 py-4 rounded-full text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
-                background: "linear-gradient(135deg, #FF6B4A 0%, #E5593B 100%)",
-                boxShadow: "0 4px 16px rgba(255, 107, 74, 0.35), 0 2px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2)",
+                background: "linear-gradient(135deg, rgba(255, 107, 74, 0.9) 0%, rgba(229, 89, 59, 0.9) 100%)",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                boxShadow: "0 4px 16px rgba(255, 107, 74, 0.35), 0 2px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.25)",
+                border: "1px solid rgba(255, 255, 255, 0.15)",
               }}
             >
               <svg

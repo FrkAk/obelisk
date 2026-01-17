@@ -40,16 +40,19 @@ export function QuickFilter({
         "inline-flex items-center gap-2 px-3.5 py-2 rounded-full font-medium text-[14px]",
         "transition-all duration-200",
         active
-          ? "text-white shadow-lg"
+          ? "text-white"
           : "glass-thin hover:bg-black/5 dark:hover:bg-white/5"
       )}
       style={
         active
           ? {
               background: `linear-gradient(135deg, ${color}, ${adjustColor(color, -30)})`,
-              boxShadow: `0 4px 12px ${color}40`,
+              boxShadow: `0 4px 12px ${color}40, inset 0 1px 0 rgba(255, 255, 255, 0.2)`,
             }
-          : { color }
+          : {
+              color,
+              boxShadow: "inset 0 0.5px 0 var(--glass-border-highlight)",
+            }
       }
       onClick={onClick}
       whileTap={{ scale: 0.95 }}

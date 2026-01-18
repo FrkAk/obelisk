@@ -12,6 +12,8 @@ interface SearchResultsProps {
   isLoading?: boolean;
   onNavigate?: (result: SearchResult) => void;
   onSelectStory?: (result: ObeliskResult) => void;
+  onGenerateStory?: (result: ExternalResult) => void;
+  generatingPoiId?: string | null;
 }
 
 /**
@@ -23,6 +25,8 @@ interface SearchResultsProps {
  *     isLoading: Whether results are loading.
  *     onNavigate: Callback when navigation is requested for a result.
  *     onSelectStory: Callback when an Obelisk story is selected.
+ *     onGenerateStory: Callback when story generation is requested for a POI.
+ *     generatingPoiId: ID of POI currently being generated, for loading state.
  */
 export function SearchResults({
   results,
@@ -30,6 +34,8 @@ export function SearchResults({
   isLoading = false,
   onNavigate,
   onSelectStory,
+  onGenerateStory,
+  generatingPoiId,
 }: SearchResultsProps) {
   if (isLoading) {
     return (
@@ -207,6 +213,12 @@ export function SearchResults({
                             })
                         : undefined
                     }
+                    onGenerateStory={
+                      !result.nearbyRemark && onGenerateStory
+                        ? () => onGenerateStory(result)
+                        : undefined
+                    }
+                    isGenerating={generatingPoiId === result.poi.id}
                   />
                 </motion.div>
               ))}

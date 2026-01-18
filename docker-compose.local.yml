@@ -1,0 +1,5 @@
+# Override for local network access (same WiFi)
+# Use with: docker compose -f docker-compose.yml -f docker-compose.local.yml up
+services:
+  app:
+    command: pnpm dev --hostname 0.0.0.0

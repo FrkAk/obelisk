@@ -9,6 +9,9 @@ import { springTransitions } from "@/lib/ui/animations";
 interface StoryCardProps {
   remark: Remark & { poi: Poi };
   onNavigate?: () => void;
+  onRegenerate?: () => void;
+  isRegenerating?: boolean;
+  cooldownRemaining?: number;
 }
 
 /**
@@ -17,8 +20,17 @@ interface StoryCardProps {
  * Args:
  *     remark: The story remark with associated POI data.
  *     onNavigate: Callback when navigation is requested.
+ *     onRegenerate: Callback when user wants to regenerate the story.
+ *     isRegenerating: Whether regeneration is in progress.
+ *     cooldownRemaining: Seconds remaining before regeneration is allowed.
  */
-export function StoryCard({ remark, onNavigate }: StoryCardProps) {
+export function StoryCard({
+  remark,
+  onNavigate,
+  onRegenerate,
+  isRegenerating = false,
+  cooldownRemaining = 0,
+}: StoryCardProps) {
   const categorySlug = (remark.poi.category?.slug ?? "history") as CategorySlug;
   const categoryColor = CATEGORY_COLORS[categorySlug];
   const categoryName = remark.poi.category?.name ?? "History";
@@ -141,6 +153,58 @@ export function StoryCard({ remark, onNavigate }: StoryCardProps) {
             </motion.div>
           )}
         </div>
+
+        {onRegenerate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            <GlassButton
+              variant="secondary"
+              fullWidth
+              size="md"
+              onClick={onRegenerate}
+              disabled={isRegenerating || cooldownRemaining > 0}
+            >
+              <span className="flex items-center justify-center gap-2">
+                {isRegenerating ? (
+                  <>
+                    <svg
+                      className="w-4 h-4 animate-spin"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    <span>Regenerating...</span>
+                  </>
+                ) : cooldownRemaining > 0 ? (
+                  <span>Regenerate ({cooldownRemaining}s)</span>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+                    </svg>
+                    <span>Regenerate Story</span>
+                  </>
+                )}
+              </span>
+            </GlassButton>
+          </motion.div>
+        )}
       </div>
     </motion.article>
   );

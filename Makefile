@@ -39,6 +39,23 @@ run: ## Start Obelisk (docker compose)
 	@echo "  make down     - Stop services"
 	@echo "  make destroy  - Stop and remove all data"
 
+run-local: ## Start Obelisk exposed to local network (same WiFi)
+	@echo "$(GREEN)Starting Obelisk for local network access...$(RESET)"
+	docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+	@echo "Waiting for services to be ready..."
+	@sleep 5
+	@echo "Checking if database needs migration..."
+	-docker compose -f docker-compose.yml -f docker-compose.local.yml exec -T app pnpm drizzle-kit push 2>/dev/null || true
+	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
+	echo ""; \
+	echo "$(GREEN)===================================$(RESET)"; \
+	echo "  Obelisk is running!"; \
+	echo "  Local:   http://localhost:3000"; \
+	echo "  Network: http://$$LOCAL_IP:3000"; \
+	echo "$(GREEN)===================================$(RESET)"; \
+	echo ""; \
+	echo "Open the Network URL on your phone"
+
 setup: ## First-time setup (build, migrate, seed)
 	docker compose build
 	docker compose up -d

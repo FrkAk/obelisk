@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { generateEnhancedStory } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { scrapeWebsite } from "@/lib/web/scraper";
+import { enrichPOIWithWebSearch } from "@/lib/web/webSearch";
 import { z } from "zod";
 import type { CategorySlug, Remark, Poi } from "@/types";
 
@@ -298,15 +299,27 @@ async function generateAndSaveRemark(
     console.log(`[generate-for-poi] No website URL provided for: "${poi.name}"`);
   }
 
-  console.log(`[generate-for-poi] Generating story for: "${poi.name}" with category: "${poi.categoryName}"`);
+  const categoryName = poi.categoryName || "Hidden Gems";
+
+  const webSearchContext = await enrichPOIWithWebSearch({
+    name: poi.name,
+    category: categoryName,
+    address: poi.address,
+  });
+
+  console.log(`[generate-for-poi] Web search query: "${webSearchContext.query}"`);
+  console.log(`[generate-for-poi] Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`);
+
+  console.log(`[generate-for-poi] Generating story for: "${poi.name}" with category: "${categoryName}"`);
 
   const story = await generateEnhancedStory({
     name: poi.name,
-    categoryName: poi.categoryName || "Hidden Gems",
+    categoryName,
     address: poi.address,
     wikipediaUrl: poi.wikipediaUrl,
     osmTags: poi.osmTags,
     websiteContent,
+    webSearchContext,
   });
 
   console.log(`[generate-for-poi] Generated story - Title: "${story.title}", Content preview: "${story.content.slice(0, 100)}..."`);

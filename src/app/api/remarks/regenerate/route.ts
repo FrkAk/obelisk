@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { generateEnhancedStory } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { scrapeWebsite } from "@/lib/web/scraper";
+import { enrichPOIWithWebSearch } from "@/lib/web/webSearch";
 import { z } from "zod";
 import type { CategorySlug, Remark, Poi } from "@/types";
 
@@ -74,6 +75,15 @@ export async function POST(request: NextRequest) {
 
     const categoryName = existingRemark.poi.category?.name || "Hidden Gems";
 
+    const webSearchContext = await enrichPOIWithWebSearch({
+      name: existingRemark.poi.name,
+      category: categoryName,
+      address: existingRemark.poi.address,
+    });
+
+    console.log(`[regenerate] Web search query: "${webSearchContext.query}"`);
+    console.log(`[regenerate] Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`);
+
     console.log(`[regenerate] Generating new story for: "${existingRemark.poi.name}"`);
 
     const story = await generateEnhancedStory({
@@ -83,6 +93,7 @@ export async function POST(request: NextRequest) {
       wikipediaUrl: existingRemark.poi.wikipediaUrl,
       osmTags: existingRemark.poi.osmTags,
       websiteContent,
+      webSearchContext,
     });
 
     console.log(`[regenerate] Generated new story - Title: "${story.title}"`);

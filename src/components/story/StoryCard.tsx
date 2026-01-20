@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import ReactMarkdown from "react-markdown";
 import { GlassButton, GlassPill } from "@/components/ui";
 import type { Remark, Poi, CategorySlug } from "@/types";
 import { CATEGORY_COLORS } from "@/types";
@@ -91,12 +92,20 @@ export function StoryCard({
           {remark.title}
         </h2>
 
-        <p
-          className="text-[var(--foreground)]/90 font-serif leading-[1.6]"
+        <div
+          className="text-[var(--foreground)]/90 font-serif leading-[1.6] prose prose-sm dark:prose-invert max-w-none"
           style={{ fontSize: "17px" }}
         >
-          {remark.content}
-        </p>
+          <ReactMarkdown
+            components={{
+              p: ({ children }) => <p className="mb-0">{children}</p>,
+              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+              em: ({ children }) => <em className="italic">{children}</em>,
+            }}
+          >
+            {remark.content}
+          </ReactMarkdown>
+        </div>
 
         {remark.localTip && (
           <motion.div
@@ -113,9 +122,17 @@ export function StoryCard({
                 </svg>
                 <span className="text-[13px] font-semibold text-coral">Local Tip</span>
               </div>
-              <p className="text-[15px] text-[var(--foreground-secondary)] leading-relaxed">
-                {remark.localTip}
-              </p>
+              <div className="text-[15px] text-[var(--foreground-secondary)] leading-relaxed">
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => <p className="mb-0">{children}</p>,
+                    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                    em: ({ children }) => <em className="italic">{children}</em>,
+                  }}
+                >
+                  {remark.localTip}
+                </ReactMarkdown>
+              </div>
             </div>
           </motion.div>
         )}

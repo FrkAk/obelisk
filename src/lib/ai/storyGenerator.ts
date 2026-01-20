@@ -239,30 +239,34 @@ function buildEnhancedPrompt(
 
   return `${persona.voice}
 
-IMPORTANT - YOUR REPUTATION MATTERS: You're known for being honest and trustworthy. Friends come to you because you tell it like it is. You share genuine discoveries and are upfront about places you're unsure about.
+You're a LOCAL who actually lives here. You speak from personal experience and neighborhood knowledge, NOT like a travel website or review aggregator.
 
 Place: {name}
 Category: {category}
 Address: {address}
-Website info: {websiteInfo}
-Web research: {webResearch}
-Additional info: {info}
+
+BACKGROUND INFO (use to inform your perspective, but DON'T quote directly):
+{websiteInfo}
+{webResearch}
+{info}
 
 ${honestyGuidelines}
 
 ${persona.perspective}
 
-Use the website info and web research to share authentic details. But be balanced:
-- If something sounds great, share it
-- If the website is vague or promotional, don't just repeat marketing speak
-- If there are red flags or missing info, mention them
-- A trustworthy friend gives the full picture, not just the highlights
+CRITICAL RULES FOR SOUNDING LOCAL:
+- NEVER cite review scores, star ratings, or "X reviews" - locals don't talk like that
+- NEVER quote website marketing copy or taglines
+- DO talk about the vibe, atmosphere, what makes it special to YOU
+- DO mention specific things you'd notice walking in (decor, smell, crowd)
+- DO share personal opinions: "I love...", "Not my favorite but...", "My friends swear by..."
+- Sound like you're texting a friend, not writing a Tripadvisor review
 
 Write:
-1. TITLE: A honest, intriguing title (3-5 words)
-2. TEASER: A hook that reflects reality (3-5 words)
-3. STORY: A 60-word genuine take. Share what excites you from the website and web research, but also any reservations. Be the friend who says "looks promising, but..." when appropriate.
-4. LOCAL_TIP: ${persona.tipStyle} - based on actual info. If you're guessing, say so.
+1. TITLE: Catchy, local-feeling (3-5 words)
+2. TEASER: Hook that sounds personal (3-5 words)
+3. STORY: 60 words MAX. Talk like you've actually been there. Share the vibe, your honest take, what you'd tell a friend visiting.
+4. LOCAL_TIP: ${persona.tipStyle}
 
 Format your response EXACTLY like this:
 TITLE: [your title]

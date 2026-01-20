@@ -12,7 +12,7 @@ help: ## Show this help
 	@echo ""
 	@echo "$(GREEN)Quick Start:$(RESET)"
 	@echo "  make run        Start everything (docker)"
-	@echo "  make dev        Local development (pnpm)"
+	@echo "  make dev        Local development (bun)"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-15s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
@@ -27,7 +27,7 @@ run: ## Start Obelisk (docker compose)
 	@echo "Waiting for services to be ready..."
 	@sleep 5
 	@echo "Checking if database needs migration..."
-	-docker compose exec -T app pnpm drizzle-kit push 2>/dev/null || true
+	-docker compose exec -T app bun run drizzle-kit push 2>/dev/null || true
 	@echo ""
 	@echo "$(GREEN)===================================$(RESET)"
 	@echo "  Obelisk is running!"
@@ -45,7 +45,7 @@ run-local: ## Start Obelisk exposed to local network (same WiFi)
 	@echo "Waiting for services to be ready..."
 	@sleep 5
 	@echo "Checking if database needs migration..."
-	-docker compose -f docker-compose.yml -f docker-compose.local.yml exec -T app pnpm drizzle-kit push 2>/dev/null || true
+	-docker compose -f docker-compose.yml -f docker-compose.local.yml exec -T app bun run drizzle-kit push 2>/dev/null || true
 	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
 	echo ""; \
 	echo "$(GREEN)===================================$(RESET)"; \
@@ -110,47 +110,47 @@ rebuild: ## Rebuild and restart app container
 # LOCAL DEVELOPMENT
 # =============================================================================
 
-dev: ## Start local dev server (pnpm)
-	pnpm dev
+dev: ## Start local dev server (bun)
+	bun run dev
 
 start: ## Start production server locally
-	pnpm start
+	bun run start
 
 build: ## Build for production
-	pnpm build
+	bun run build
 
 lint: ## Run linter (docker)
-	docker compose exec app pnpm lint
+	docker compose exec app bun run lint
 
 lint-local: ## Run linter (local)
-	pnpm lint
+	bun run lint
 
 typecheck: ## Run typecheck (docker)
-	docker compose exec app pnpm typecheck
+	docker compose exec app bun run typecheck
 
 typecheck-local: ## Run typecheck (local)
-	pnpm typecheck
+	bun run typecheck
 
 test: ## Run tests (docker)
-	docker compose exec app pnpm test
+	docker compose exec app bun run test
 
 # =============================================================================
 # DATABASE
 # =============================================================================
 
 db-migrate: ## Run database migrations (docker)
-	docker compose exec app pnpm drizzle-kit push
+	docker compose exec app bun run drizzle-kit push
 
 db-migrate-local: ## Run database migrations (local)
-	pnpm drizzle-kit push
+	bun run drizzle-kit push
 
 db-seed: ## Seed POIs and generate stories (docker)
-	docker compose exec app pnpm tsx scripts/seed-pois.ts
-	-docker compose exec app pnpm tsx scripts/generate-stories.ts || echo "Story generation completed (some may have failed)"
+	docker compose exec app bun scripts/seed-pois.ts
+	-docker compose exec app bun scripts/generate-stories.ts || echo "Story generation completed (some may have failed)"
 
 db-seed-local: ## Seed POIs and generate stories (local)
-	pnpm tsx scripts/seed-pois.ts
-	pnpm tsx scripts/generate-stories.ts
+	bun scripts/seed-pois.ts
+	bun scripts/generate-stories.ts
 
 db-reset: ## Reset database and reseed
 	docker compose down -v postgres
@@ -163,10 +163,10 @@ db-reset: ## Reset database and reseed
 	make db-seed
 
 db-studio: ## Open Drizzle Studio
-	docker compose exec app pnpm drizzle-kit studio
+	docker compose exec app bun run drizzle-kit studio
 
 db-studio-local: ## Open Drizzle Studio (local)
-	pnpm drizzle-kit studio
+	bun run drizzle-kit studio
 
 # =============================================================================
 # OLLAMA / AI

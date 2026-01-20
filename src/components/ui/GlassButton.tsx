@@ -7,7 +7,7 @@ import { springTransitions } from "@/lib/ui/animations";
 
 interface GlassButtonProps {
   children: ReactNode;
-  variant?: "primary" | "secondary" | "ghost";
+  variant?: "primary" | "secondary" | "ghost" | "minimal";
   size?: "sm" | "md" | "lg";
   fullWidth?: boolean;
   className?: string;
@@ -35,11 +35,11 @@ const sizeStyles = {
 };
 
 /**
- * Premium glassmorphic button with gradient styling and micro-interactions.
+ * Premium glassmorphic button with soft gradient styling and micro-interactions.
  *
  * Args:
  *     children: Button content.
- *     variant: Visual style (primary, secondary, ghost).
+ *     variant: Visual style (primary, secondary, ghost, minimal).
  *     size: Size variant (sm, md, lg).
  *     fullWidth: Expand to fill container width.
  *     disabled: Whether button is disabled.
@@ -57,13 +57,13 @@ export function GlassButton({
 }: GlassButtonProps) {
   const sizeConfig = sizeStyles[size];
 
-  const variantStyles = {
+  const variantStyles: Record<string, React.CSSProperties> = {
     primary: {
-      background: "linear-gradient(135deg, #FF6B4A 0%, #E5593B 100%)",
+      background: "linear-gradient(135deg, #FF7A5C 0%, #E5593B 100%)",
       color: "white",
       boxShadow: disabled
         ? "none"
-        : "0 4px 12px rgba(255, 107, 74, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2)",
+        : "0 4px 12px rgba(255, 107, 74, 0.25), 0 1px 3px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.15)",
     },
     secondary: {
       background: "var(--glass-bg-thin)",
@@ -71,23 +71,22 @@ export function GlassButton({
       color: "#FF6B4A",
       boxShadow: disabled
         ? "none"
-        : "0 2px 8px rgba(0, 0, 0, 0.06), inset 0 0.5px 0 var(--glass-border-highlight)",
+        : "0 2px 6px rgba(0, 0, 0, 0.05), inset 0 0.5px 0 var(--glass-border-highlight)",
       border: "1px solid var(--glass-border)",
     },
     ghost: {
       background: "transparent",
       color: "var(--foreground)",
     },
-  };
-
-  const pressedStyles = {
-    primary: {
-      boxShadow: "0 1px 4px rgba(255, 107, 74, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.1)",
+    minimal: {
+      background: "var(--glass-bg-thin)",
+      backdropFilter: "blur(8px)",
+      color: "var(--foreground)",
+      boxShadow: disabled
+        ? "none"
+        : "0 1px 4px rgba(0, 0, 0, 0.04)",
+      border: "1px solid var(--glass-border)",
     },
-    secondary: {
-      boxShadow: "inset 0 2px 4px rgba(0, 0, 0, 0.06)",
-    },
-    ghost: {},
   };
 
   return (
@@ -104,10 +103,7 @@ export function GlassButton({
       )}
       style={variantStyles[variant]}
       whileHover={!disabled ? { scale: 1.02 } : undefined}
-      whileTap={!disabled ? {
-        scale: 0.97,
-        ...pressedStyles[variant],
-      } : undefined}
+      whileTap={!disabled ? { scale: 0.97 } : undefined}
       transition={springTransitions.quick}
       disabled={disabled}
       onClick={onClick}

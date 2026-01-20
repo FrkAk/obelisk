@@ -12,7 +12,7 @@ interface ClusterPinProps {
 }
 
 /**
- * Glassmorphic cluster pin that shows count and expands on click.
+ * Subtle glassmorphic cluster indicator that expands on click.
  *
  * Args:
  *     latitude: Cluster center latitude.
@@ -40,7 +40,7 @@ export const ClusterPin = memo(function ClusterPin({
     }
   };
 
-  const size = Math.min(52, 32 + Math.log2(pointCount) * 5);
+  const size = Math.min(44, 28 + Math.log2(pointCount) * 4);
 
   return (
     <Marker
@@ -53,22 +53,22 @@ export const ClusterPin = memo(function ClusterPin({
       }}
     >
       <button
-        className="glass rounded-full flex items-center justify-center relative transition-transform duration-150 hover:scale-110 active:scale-95"
+        className="glass-floating rounded-full flex items-center justify-center relative transition-transform duration-200 hover:scale-110 active:scale-95"
         style={{
           width: size,
           height: size,
-          boxShadow: `0 4px 12px rgba(0, 0, 0, 0.12), 0 0 0 2px ${color}30`,
+          boxShadow: `0 2px 8px rgba(0, 0, 0, 0.1), 0 0 0 1.5px ${color}40`,
         }}
         aria-label={`Cluster of ${pointCount} stories, click to expand`}
       >
         <div
           className="absolute inset-0 rounded-full"
           style={{
-            background: `radial-gradient(circle at center, ${color}20 0%, transparent 70%)`,
+            background: `radial-gradient(circle at center, ${color}15 0%, transparent 60%)`,
           }}
         />
         <span
-          className="relative text-sm font-semibold"
+          className="relative text-[13px] font-semibold"
           style={{ color }}
         >
           {pointCount}

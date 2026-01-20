@@ -35,6 +35,14 @@
   --color-glass-border-dark: rgba(255, 255, 255, 0.12);
   --color-glass-border-highlight-dark: rgba(255, 255, 255, 0.2);
 
+  /* Liquid Glass Variants - Enhanced saturation and depth */
+  --color-glass-liquid-light: rgba(255, 255, 255, 0.68);
+  --color-glass-liquid-dark: rgba(38, 38, 40, 0.68);
+
+  /* Floating Controls - More opaque for readability */
+  --color-glass-floating-light: rgba(255, 255, 255, 0.82);
+  --color-glass-floating-dark: rgba(44, 44, 46, 0.82);
+
   /* Backgrounds */
   --color-background-light: #FFFFFF;
   --color-background-dark: #000000;
@@ -84,12 +92,20 @@
   --blur-regular: 20px;
   --blur-glass: 20px;
   --blur-heavy: 40px;
+  --blur-liquid: 28px;
+  --blur-floating: 20px;
+
+  /* Apple-style Floating Shadows */
+  --shadow-floating: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-floating-dark: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 :root {
   --glass-bg: var(--color-glass-regular-light);
   --glass-bg-thin: var(--color-glass-thin-light);
   --glass-bg-thick: var(--color-glass-thick-light);
+  --glass-bg-liquid: var(--color-glass-liquid-light);
+  --glass-bg-floating: var(--color-glass-floating-light);
   --glass-border: var(--color-glass-border-light);
   --glass-border-highlight: var(--color-glass-border-highlight-light);
   --background: var(--color-background-light);
@@ -97,6 +113,7 @@
   --foreground-secondary: var(--color-label-secondary-light);
   --foreground-tertiary: var(--color-label-tertiary-light);
   --shadow: var(--shadow-glass);
+  --shadow-float: var(--shadow-floating);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -104,6 +121,8 @@
     --glass-bg: var(--color-glass-regular-dark);
     --glass-bg-thin: var(--color-glass-thin-dark);
     --glass-bg-thick: var(--color-glass-thick-dark);
+    --glass-bg-liquid: var(--color-glass-liquid-dark);
+    --glass-bg-floating: var(--color-glass-floating-dark);
     --glass-border: var(--color-glass-border-dark);
     --glass-border-highlight: var(--color-glass-border-highlight-dark);
     --background: var(--color-background-dark);
@@ -111,6 +130,7 @@
     --foreground-secondary: var(--color-label-secondary-dark);
     --foreground-tertiary: var(--color-label-tertiary-dark);
     --shadow: var(--shadow-glass-dark);
+    --shadow-float: var(--shadow-floating-dark);
   }
 }
 
@@ -282,4 +302,56 @@ body {
 
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Liquid Glass - Enhanced saturation and depth for bottom sheets */
+.glass-liquid {
+  background: var(--glass-bg-liquid);
+  backdrop-filter: blur(var(--blur-liquid)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-liquid)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-top: 1px solid var(--glass-border-highlight);
+  box-shadow: var(--shadow-float), inset 0 0.5px 0 var(--glass-border-highlight);
+}
+
+/* Floating Glass - For controls over map */
+.glass-floating {
+  background: var(--glass-bg-floating);
+  backdrop-filter: blur(var(--blur-floating));
+  -webkit-backdrop-filter: blur(var(--blur-floating));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-float);
+}
+
+/* Shimmer Animation for Loading States */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--glass-bg-thin) 25%,
+    var(--glass-bg) 50%,
+    var(--glass-bg-thin) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--foreground-tertiary) 25%,
+    var(--foreground-secondary) 50%,
+    var(--foreground-tertiary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
 }

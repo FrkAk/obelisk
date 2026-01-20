@@ -113,9 +113,14 @@ export async function POST(request: NextRequest) {
     const newPoi = await createPoiFromExternal(externalPoi);
     return await generateAndSaveRemark(newPoi, externalPoi.website);
   } catch (error) {
-    console.error("Error generating story for POI:", error);
+    console.error("[generate-for-poi] Error:", error);
+    const errorMessage = error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : JSON.stringify(error) || "Unknown error";
     return NextResponse.json(
-      { error: "Failed to generate story", details: error instanceof Error ? error.message : "Unknown error" },
+      { error: "Failed to generate story", details: errorMessage },
       { status: 500 }
     );
   }
@@ -235,7 +240,7 @@ async function createPoiFromExternal(externalPoi: z.infer<typeof externalPoiSche
   if (externalPoi.hasWifi) osmTags.internet_access = "wlan";
   if (externalPoi.hasOutdoorSeating) osmTags.outdoor_seating = "yes";
 
-  const [insertedPoi] = await db
+  const insertResult = await db
     .insert(pois)
     .values({
       osmId: externalPoi.osmId,
@@ -247,8 +252,19 @@ async function createPoiFromExternal(externalPoi: z.infer<typeof externalPoiSche
       imageUrl: externalPoi.imageUrl ?? null,
       osmTags: Object.keys(osmTags).length > 0 ? osmTags : null,
     })
+    .onConflictDoNothing({ target: pois.osmId })
     .returning();
 
+  if (insertResult.length === 0) {
+    const existingPoi = await findPoiByOsmId(externalPoi.osmId);
+    if (existingPoi) {
+      console.log(`[generate-for-poi] Race condition handled - POI already exists: "${existingPoi.name}"`);
+      return existingPoi;
+    }
+    throw new Error(`Failed to create or retrieve POI with osmId: ${externalPoi.osmId}`);
+  }
+
+  const insertedPoi = insertResult[0];
   return {
     ...insertedPoi,
     categoryName: category?.name ?? null,

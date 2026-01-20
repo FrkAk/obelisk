@@ -198,7 +198,7 @@ export async function scrapeTopResults(
           content: content.mainContent,
         });
       }
-    } catch (error) {
+    } catch {
       console.log(`[webSearch] Failed to scrape ${result.url}`);
     }
   }

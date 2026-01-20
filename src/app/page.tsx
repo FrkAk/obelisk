@@ -2,21 +2,31 @@
 
 import { MapContainer } from "@/components/map/MapContainer";
 import { BottomSheet } from "@/components/layout/BottomSheet";
-import { StoryCard } from "@/components/story/StoryCard";
 import { StoryNotification } from "@/components/story/StoryNotification";
-import { DiscoverButton } from "@/components/map/DiscoverButton";
 import { SearchBar } from "@/components/search/SearchBar";
 import { SearchResults } from "@/components/search/SearchResults";
 import { POICard } from "@/components/poi/POICard";
 import { useGeofence } from "@/hooks/useGeofence";
 import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
-import { useDiscoverPois } from "@/hooks/useDiscoverPois";
 import { useSearch } from "@/hooks/useSearch";
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { Remark, Poi, CategorySlug } from "@/types";
+import type { Remark, Poi } from "@/types";
 import type { ObeliskResult, SearchResult, ExternalResult, ExternalPOI } from "@/lib/search/types";
 
 type SheetMode = "story" | "search" | "poi" | null;
+
+function remarkPoiToExternalPOI(poi: Poi): ExternalPOI {
+  return {
+    id: poi.id,
+    osmId: poi.osmId ?? 0,
+    osmType: "node",
+    name: poi.name,
+    category: poi.category?.slug ?? "history",
+    latitude: poi.latitude,
+    longitude: poi.longitude,
+    source: "overpass",
+  };
+}
 
 interface ViewportCenter {
   latitude: number;
@@ -45,7 +55,6 @@ export default function Home() {
     externalLocation: viewportCenter,
   });
   const { triggeredRemark, dismissNotification } = useGeofence(remarks);
-  const { discover, status, progress, isDiscovering } = useDiscoverPois();
   const {
     results: searchResults,
     conversationalResponse,
@@ -187,23 +196,11 @@ export default function Home() {
     []
   );
 
-  const handleDiscover = useCallback(() => {
-    const discoverLocation = viewportCenter ?? (hasRealLocation && location ? { latitude: location.latitude, longitude: location.longitude } : null);
-    if (discoverLocation) {
-      discover({
-        lat: discoverLocation.latitude,
-        lon: discoverLocation.longitude,
-        radius: 2000,
-        limit: 5,
-      });
-    }
-  }, [discover, viewportCenter, location, hasRealLocation]);
-
   const handleSearch = useCallback(
-    (query: string, category?: CategorySlug) => {
+    (query: string) => {
       const searchLocation = viewportCenter ?? (location ? { latitude: location.latitude, longitude: location.longitude } : null);
       if (!searchLocation) return;
-      search(query, searchLocation, category);
+      search(query, searchLocation);
       setSheetMode("search");
       setSheetOpen(true);
     },
@@ -279,8 +276,6 @@ export default function Home() {
 
       const data = await response.json();
       setSelectedRemark(data.remark);
-      setSelectedPoi(null);
-      setSheetMode("story");
     } catch (error) {
       console.error("Error generating story:", error);
     } finally {
@@ -354,13 +349,6 @@ export default function Home() {
         />
       </div>
 
-      <DiscoverButton
-        onDiscover={handleDiscover}
-        status={status}
-        progress={progress}
-        disabled={(!hasRealLocation && !viewportCenter) || isDiscovering}
-      />
-
       {triggeredRemark && !sheetOpen && (
         <StoryNotification
           remark={triggeredRemark}
@@ -370,34 +358,30 @@ export default function Home() {
       )}
 
       <BottomSheet isOpen={sheetOpen} onClose={handleSheetClose}>
-        {sheetMode === "story" && selectedRemark && (
-          <StoryCard
-            remark={selectedRemark}
-            onNavigate={() =>
-              handleNavigate({
-                type: "remark",
-                remark: selectedRemark,
-                distance: 0,
-                score: 0,
-              })
-            }
-            onRegenerate={handleRegenerateStory}
-            isRegenerating={isRegenerating}
-            cooldownRemaining={cooldownRemaining}
-          />
-        )}
-        {sheetMode === "poi" && (
+        {(sheetMode === "story" || sheetMode === "poi") && (
           isLookingUpPoi ? (
             <div className="py-12 flex flex-col items-center justify-center">
               <div className="w-8 h-8 border-2 border-coral border-t-transparent rounded-full animate-spin mb-4" />
               <p className="text-[var(--foreground-secondary)]">Looking up place...</p>
             </div>
-          ) : selectedPoi ? (
+          ) : (selectedPoi || selectedRemark) ? (
             <POICard
-              poi={selectedPoi}
-              onNavigate={handleNavigateToPoi}
-              onGenerateStory={handleGenerateStoryForPoi}
-              isGenerating={generatingPoiId === selectedPoi.id}
+              poi={selectedPoi ?? remarkPoiToExternalPOI(selectedRemark!.poi)}
+              remark={selectedRemark}
+              onNavigate={selectedPoi ? handleNavigateToPoi : () =>
+                handleNavigate({
+                  type: "remark",
+                  remark: selectedRemark!,
+                  distance: 0,
+                  score: 0,
+                })
+              }
+              onGenerateStory={!selectedRemark ? handleGenerateStoryForPoi : undefined}
+              onRegenerate={selectedRemark ? handleRegenerateStory : undefined}
+              isGenerating={selectedPoi ? generatingPoiId === selectedPoi.id : false}
+              isRegenerating={isRegenerating}
+              cooldownRemaining={cooldownRemaining}
+              autoGenerate={!selectedRemark}
             />
           ) : null
         )}

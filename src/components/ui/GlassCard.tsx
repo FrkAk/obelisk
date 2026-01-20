@@ -10,7 +10,7 @@ interface GlassCardProps {
   className?: string;
   padding?: "none" | "sm" | "md" | "lg";
   radius?: "md" | "lg" | "xl" | "2xl";
-  variant?: "regular" | "thin" | "thick";
+  variant?: "regular" | "thin" | "thick" | "liquid" | "floating";
   onClick?: () => void;
   interactive?: boolean;
 }
@@ -33,6 +33,8 @@ const variantClasses = {
   regular: "glass",
   thin: "glass-thin",
   thick: "glass-thick",
+  liquid: "glass-liquid",
+  floating: "glass-floating",
 };
 
 /**
@@ -42,7 +44,7 @@ const variantClasses = {
  *     children: Content to render inside the card.
  *     padding: Padding size (none, sm, md, lg).
  *     radius: Border radius size (md, lg, xl, 2xl).
- *     variant: Glass intensity (regular, thin, thick).
+ *     variant: Glass intensity (regular, thin, thick, liquid, floating).
  *     onClick: Optional click handler.
  *     interactive: Enable hover/press animations without onClick.
  */

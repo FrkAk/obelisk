@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import Supercluster from "supercluster";
 import { MapView, type MapBounds } from "./MapView";
-import { RemarkPin } from "./RemarkPin";
+import { POIPin } from "./POIPin";
 import { ClusterPin } from "./ClusterPin";
 import { UserLocationMarker } from "./UserLocationMarker";
 import type { Remark, Poi, GeoLocation, CategorySlug } from "@/types";
@@ -159,7 +159,7 @@ export function MapContainer({
           const remark = pointData.properties.remark;
 
           return (
-            <RemarkPin
+            <POIPin
               key={remark.id}
               remark={remark}
               isSelected={remark.id === selectedRemarkId}

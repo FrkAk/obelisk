@@ -52,10 +52,16 @@ export async function generateText(
   });
 
   if (!response.ok) {
-    throw new Error(`Ollama API error: ${response.statusText}`);
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`Ollama API error: ${response.status} ${response.statusText} - ${errorText}`);
   }
 
   const data: OllamaGenerateResponse = await response.json();
+
+  if (!data.response) {
+    throw new Error(`Ollama returned empty response: ${JSON.stringify(data)}`);
+  }
+
   return data.response;
 }
 
@@ -77,8 +83,15 @@ export async function checkOllamaHealth(
 
     const data = await response.json();
     const models = data.models || [];
-    return models.some((m: { name: string }) => m.name.startsWith(model.split(":")[0]));
-  } catch {
+    const modelNames = models.map((m: { name: string }) => m.name);
+    const modelPrefix = model.split(":")[0];
+    const found = models.some((m: { name: string }) => m.name.startsWith(modelPrefix));
+
+    console.log(`[ollama] Health check - URL: ${OLLAMA_URL}, looking for: ${modelPrefix}, available: [${modelNames.join(", ")}], found: ${found}`);
+
+    return found;
+  } catch (error) {
+    console.error("[ollama] Health check failed:", error);
     return false;
   }
 }

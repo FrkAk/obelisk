@@ -12,7 +12,7 @@ interface UserLocationMarkerProps {
 const LOCATION_BLUE = "#007AFF";
 
 /**
- * Premium user location marker with three-ring design and heading indicator.
+ * Apple-style user location marker with subtle pulse animation.
  *
  * Args:
  *     location: Current user geolocation with optional heading.
@@ -28,9 +28,9 @@ export function UserLocationMarker({ location }: UserLocationMarkerProps) {
         <motion.div
           className="absolute rounded-full"
           style={{
-            width: 80,
-            height: 80,
-            background: `radial-gradient(circle, ${LOCATION_BLUE}15 0%, transparent 70%)`,
+            width: 64,
+            height: 64,
+            background: `radial-gradient(circle, ${LOCATION_BLUE}12 0%, transparent 70%)`,
           }}
           initial={{ scale: 0.5, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -40,16 +40,16 @@ export function UserLocationMarker({ location }: UserLocationMarkerProps) {
         <motion.div
           className="absolute rounded-full"
           style={{
-            width: 40,
-            height: 40,
-            backgroundColor: `${LOCATION_BLUE}20`,
+            width: 32,
+            height: 32,
+            backgroundColor: `${LOCATION_BLUE}15`,
           }}
           animate={{
-            scale: [1, 2.5],
-            opacity: [0.6, 0],
+            scale: [1, 2.2],
+            opacity: [0.5, 0],
           }}
           transition={{
-            duration: 2,
+            duration: 3,
             repeat: Infinity,
             ease: [0, 0, 0.2, 1],
           }}
@@ -58,10 +58,10 @@ export function UserLocationMarker({ location }: UserLocationMarkerProps) {
         <motion.div
           className="absolute rounded-full"
           style={{
-            width: 24,
-            height: 24,
-            backgroundColor: `${LOCATION_BLUE}25`,
-            border: `1.5px solid ${LOCATION_BLUE}40`,
+            width: 20,
+            height: 20,
+            backgroundColor: `${LOCATION_BLUE}20`,
+            border: `1px solid ${LOCATION_BLUE}30`,
           }}
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -71,11 +71,11 @@ export function UserLocationMarker({ location }: UserLocationMarkerProps) {
         <motion.div
           className="relative rounded-full"
           style={{
-            width: 14,
-            height: 14,
+            width: 12,
+            height: 12,
             backgroundColor: LOCATION_BLUE,
-            border: "2.5px solid white",
-            boxShadow: `0 2px 8px ${LOCATION_BLUE}50, 0 1px 3px rgba(0, 0, 0, 0.2)`,
+            border: "2px solid white",
+            boxShadow: `0 2px 6px ${LOCATION_BLUE}50, 0 1px 2px rgba(0, 0, 0, 0.15)`,
           }}
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -88,12 +88,12 @@ export function UserLocationMarker({ location }: UserLocationMarkerProps) {
             style={{
               width: 0,
               height: 0,
-              top: -12,
-              borderLeft: "5px solid transparent",
-              borderRight: "5px solid transparent",
-              borderBottom: `10px solid ${LOCATION_BLUE}`,
-              filter: `drop-shadow(0 1px 2px ${LOCATION_BLUE}40)`,
-              transformOrigin: "center 19px",
+              top: -10,
+              borderLeft: "4px solid transparent",
+              borderRight: "4px solid transparent",
+              borderBottom: `8px solid ${LOCATION_BLUE}`,
+              filter: `drop-shadow(0 1px 2px ${LOCATION_BLUE}30)`,
+              transformOrigin: "center 16px",
               transform: `rotate(${location.heading}deg)`,
             }}
             initial={{ opacity: 0, scale: 0 }}

@@ -200,25 +200,15 @@ export function SearchResults({
                 >
                   <POICard
                     poi={result.poi}
-                    nearbyRemark={result.nearbyRemark}
+                    remark={result.nearbyRemark}
                     onNavigate={() => onNavigate?.(result)}
-                    onDiscoverStory={
-                      result.nearbyRemark
-                        ? () =>
-                            onSelectStory?.({
-                              type: "remark",
-                              remark: result.nearbyRemark!,
-                              distance: result.distance,
-                              score: 0,
-                            })
-                        : undefined
-                    }
                     onGenerateStory={
                       !result.nearbyRemark && onGenerateStory
                         ? () => onGenerateStory(result)
                         : undefined
                     }
                     isGenerating={generatingPoiId === result.poi.id}
+                    autoGenerate={false}
                   />
                 </motion.div>
               ))}

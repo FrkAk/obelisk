@@ -37,6 +37,20 @@ export const springTransitions = {
     stiffness: 500,
     damping: 35,
   } as Transition,
+
+  liquid: {
+    type: "spring",
+    stiffness: 180,
+    damping: 22,
+    mass: 1.1,
+  } as Transition,
+
+  floatingEntry: {
+    type: "spring",
+    stiffness: 250,
+    damping: 28,
+    mass: 0.8,
+  } as Transition,
 } as const;
 
 export const buttonVariants: Variants = {
@@ -148,5 +162,19 @@ export const discoverButtonVariants: Variants = {
   hover: {
     scale: 1.05,
     transition: springTransitions.snappy,
+  },
+};
+
+export const contentFadeVariants: Variants = {
+  hidden: {
+    opacity: 0,
+  },
+  visible: {
+    opacity: 1,
+    transition: { duration: 0.3 },
+  },
+  exit: {
+    opacity: 0,
+    transition: { duration: 0.15 },
   },
 };

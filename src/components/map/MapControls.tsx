@@ -11,7 +11,7 @@ interface MapControlsProps {
 }
 
 /**
- * Glassmorphic map controls for zoom and location.
+ * Unified floating control pill for zoom and location.
  *
  * Args:
  *     onZoomIn: Callback when zoom in is pressed.
@@ -26,68 +26,63 @@ export function MapControls({
   hasUserLocation,
 }: MapControlsProps) {
   return (
-    <div className="absolute bottom-32 right-4 z-10 flex flex-col gap-2">
-      <motion.button
-        type="button"
-        onClick={onZoomIn}
-        className="w-11 h-11 glass rounded-xl flex items-center justify-center"
-        style={{
-          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1), inset 0 0.5px 0 var(--glass-border-highlight)",
-        }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        transition={springTransitions.quick}
-        aria-label="Zoom in"
-      >
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          className="text-[var(--foreground)]"
+    <div className="absolute bottom-36 right-5 z-10 flex flex-col gap-3">
+      <div className="glass-floating rounded-2xl overflow-hidden flex flex-col">
+        <motion.button
+          type="button"
+          onClick={onZoomIn}
+          className="w-12 h-12 flex items-center justify-center border-b border-[var(--glass-border)]"
+          whileHover={{ backgroundColor: "rgba(0, 0, 0, 0.03)" }}
+          whileTap={{ scale: 0.95 }}
+          transition={springTransitions.quick}
+          aria-label="Zoom in"
         >
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </motion.button>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            className="text-[var(--foreground)]"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </motion.button>
 
-      <motion.button
-        type="button"
-        onClick={onZoomOut}
-        className="w-11 h-11 glass rounded-xl flex items-center justify-center"
-        style={{
-          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1), inset 0 0.5px 0 var(--glass-border-highlight)",
-        }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        transition={springTransitions.quick}
-        aria-label="Zoom out"
-      >
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          className="text-[var(--foreground)]"
+        <motion.button
+          type="button"
+          onClick={onZoomOut}
+          className="w-12 h-12 flex items-center justify-center"
+          whileHover={{ backgroundColor: "rgba(0, 0, 0, 0.03)" }}
+          whileTap={{ scale: 0.95 }}
+          transition={springTransitions.quick}
+          aria-label="Zoom out"
         >
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </motion.button>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            className="text-[var(--foreground)]"
+          >
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </motion.button>
+      </div>
 
       <motion.button
         type="button"
         onClick={() => {
           if (hasUserLocation) onLocate();
         }}
-        className="w-11 h-11 glass rounded-xl flex items-center justify-center"
+        className="w-12 h-12 glass-floating rounded-2xl flex items-center justify-center"
         style={{
-          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1), inset 0 0.5px 0 var(--glass-border-highlight)",
           opacity: hasUserLocation ? 1 : 0.5,
         }}
         whileHover={hasUserLocation ? { scale: 1.05 } : undefined}

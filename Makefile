@@ -1,81 +1,74 @@
-.PHONY: run dev start stop restart clean destroy install migrate db-push db-studio db-seed db-seed-pois db-seed-osm logs help wait-db
+.PHONY: help setup run run-local stop logs rebuild destroy
 
-# Default target
-.DEFAULT_GOAL := help
+CYAN := \033[36m
+GREEN := \033[32m
+YELLOW := \033[33m
+RESET := \033[0m
 
-# Variables
-DOCKER_COMPOSE := docker compose -f docker/docker-compose.yml
+help:
+	@echo ""
+	@echo "$(CYAN)Obelisk$(RESET) - Ambient Storytelling App"
+	@echo ""
+	@echo "$(GREEN)Commands:$(RESET)"
+	@echo "  $(CYAN)setup$(RESET)      First-time setup (build, migrate, pull model, seed)"
+	@echo "  $(CYAN)run$(RESET)        Start on localhost:3000"
+	@echo "  $(CYAN)run-local$(RESET)  Start exposed to local network (same WiFi)"
+	@echo "  $(CYAN)stop$(RESET)       Stop services (keeps data)"
+	@echo "  $(CYAN)logs$(RESET)       View all logs"
+	@echo "  $(CYAN)rebuild$(RESET)    Rebuild without cache"
+	@echo "  $(CYAN)destroy$(RESET)    Stop and remove all data"
+	@echo ""
 
-help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+setup:
+	@echo "$(GREEN)Setting up Obelisk...$(RESET)"
+	docker compose build
+	docker compose up -d
+	@echo "Waiting for services..."
+	@sleep 10
+	docker compose exec app bun run drizzle-kit push
+	docker compose exec ollama ollama pull gemma3:4b-it-q4_K_M
+	docker compose exec app bun scripts/seed-pois.ts
+	-docker compose exec app bun scripts/generate-stories.ts || true
+	@echo ""
+	@echo "$(GREEN)Setup complete!$(RESET) Run 'make run' to start"
 
-install: ## Install dependencies
-	pnpm install
+run:
+	@echo "$(GREEN)Starting Obelisk...$(RESET)"
+	docker compose up -d
+	@sleep 3
+	-docker compose exec -T app bun run drizzle-kit push 2>/dev/null || true
+	@echo ""
+	@echo "$(GREEN)Obelisk running at http://localhost:3000$(RESET)"
 
-run: start wait-db migrate db-seed db-seed-pois db-seed-osm ## Start everything (services + dev server)
-	pnpm dev
+run-local:
+	@echo "$(GREEN)Starting Obelisk for local network...$(RESET)"
+	docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+	@sleep 3
+	-docker compose -f docker-compose.yml -f docker-compose.local.yml exec -T app bun run drizzle-kit push 2>/dev/null || true
+	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
+	echo ""; \
+	echo "$(GREEN)Obelisk running:$(RESET)"; \
+	echo "  Local:   http://localhost:3000"; \
+	echo "  Network: http://$$LOCAL_IP:3000"
 
-dev: ## Start dev server only (assumes services are running)
-	pnpm dev
+stop:
+	docker compose down
 
-start: ## Start Docker services
-	$(DOCKER_COMPOSE) up -d
+logs:
+	docker compose logs -f
 
-stop: ## Stop Docker services
-	$(DOCKER_COMPOSE) down
+rebuild:
+	@echo "$(YELLOW)Rebuilding without cache...$(RESET)"
+	docker compose down
+	rm -rf .next
+	docker compose build --no-cache
+	docker compose up -d
+	@sleep 3
+	-docker compose exec -T app bun run drizzle-kit push 2>/dev/null || true
+	@echo "$(GREEN)Rebuild complete!$(RESET)"
 
-restart: ## Restart Docker services
-	$(DOCKER_COMPOSE) restart
-
-clean: ## Stop services and remove volumes
-	$(DOCKER_COMPOSE) down -v
-
-destroy: ## Stop everything and remove all data
-	@echo "Stopping all services..."
-	-@pkill -f "next dev" 2>/dev/null || true
-	$(DOCKER_COMPOSE) down -v --remove-orphans
-	@echo "All services stopped and data removed"
-
-wait-db: ## Wait for database to be ready
-	@echo "Waiting for database..."
-	@until docker exec obelisk-postgres pg_isready -U obelisk -d obelisk > /dev/null 2>&1; do \
-		sleep 1; \
-	done
-	@echo "Database is ready"
-
-migrate: ## Run database migrations
-	@echo "Running migrations..."
-	@for f in drizzle/*.sql; do \
-		echo "Applying $$f..."; \
-		docker exec -i obelisk-postgres psql -U obelisk -d obelisk < "$$f" 2>/dev/null || true; \
-	done
-	@echo "Migrations complete"
-
-db-push: ## Push schema changes to database
-	pnpm db:push
-
-db-studio: ## Open Drizzle Studio
-	pnpm db:studio
-
-db-seed: ## Seed database with dev user
-	pnpm db:seed
-
-db-seed-pois: ## Seed database with POIs
-	pnpm db:seed-pois
-
-db-seed-osm: ## Seed database with OSM POIs from Munich
-	pnpm db:seed-osm
-
-logs: ## Show Docker service logs
-	$(DOCKER_COMPOSE) logs -f
-
-build: ## Build for production
-	pnpm build
-
-lint: ## Run linter
-	pnpm lint
-
-typecheck: ## Run TypeScript type check
-	pnpm typecheck
-
-check: lint typecheck ## Run lint and typecheck
+destroy:
+	@echo "$(YELLOW)Destroying all Obelisk data...$(RESET)"
+	docker compose down -v --remove-orphans
+	rm -rf .next node_modules
+	@echo "Done. Run 'make setup' to start fresh."

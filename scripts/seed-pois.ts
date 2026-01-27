@@ -1,205 +1,195 @@
-import "dotenv/config";
-import { db } from "../src/lib/db";
-import { pois, poiStories } from "../src/lib/db/schema";
+import { db } from "../src/lib/db/client";
+import { categories, pois } from "../src/lib/db/schema";
+import type { CategorySlug } from "../src/types";
 
-interface SeedPoi {
+const MUNICH_CENTER = {
+  lat: 48.137154,
+  lon: 11.576124,
+};
+
+const CATEGORY_DATA: Array<{
   name: string;
-  longitude: string;
-  latitude: string;
-  categories: string[];
-  tags: Record<string, string>;
-  wikipediaUrl?: string;
-  descriptionRaw: string;
-  story?: {
-    title: string;
-    teaser: string;
-    content: string;
-  };
-}
-
-const MUNICH_POIS: SeedPoi[] = [
-  {
-    name: "Karlsplatz (Stachus)",
-    longitude: "11.5656",
-    latitude: "48.1392",
-    categories: ["plaza", "historical"],
-    tags: { city: "Munich", type: "square" },
-    wikipediaUrl: "https://en.wikipedia.org/wiki/Karlsplatz,_Munich",
-    descriptionRaw:
-      "Karlsplatz, commonly known as Stachus, is a large square in central Munich. The name Stachus comes from the most popular pub in the area during the 18th century.",
-    story: {
-      title: "The Nickname Mystery",
-      teaser: "Why locals never say Karlsplatz",
-      content:
-        "No one in Munich calls this square by its official name. The nickname 'Stachus' outlived the tavern that inspired it by two centuries. Local legend says Eustachius Föderl's pub was so beloved that when King Karl Theodor renamed the square after himself in 1797, Münchners simply refused to comply.",
-    },
-  },
-  {
-    name: "Viktualienmarkt",
-    longitude: "11.5767",
-    latitude: "48.1352",
-    categories: ["market", "food"],
-    tags: { city: "Munich", type: "market" },
-    wikipediaUrl: "https://en.wikipedia.org/wiki/Viktualienmarkt",
-    descriptionRaw:
-      "The Viktualienmarkt is a daily food market in Munich, Germany. It developed from an original farmers market to a market for gourmet food.",
-    story: {
-      title: "The Eternal Market",
-      teaser: "200 years of fresh food",
-      content:
-        "Since 1807, generations of families have run these same stalls. The tradition runs so deep that some vendor families have passed down their spots for over six generations. The famous beer garden in the center rotates through Munich's six major breweries, changing taps every six weeks.",
-    },
-  },
-  {
-    name: "Frauenkirche",
-    longitude: "11.5738",
-    latitude: "48.1386",
-    categories: ["church", "landmark"],
-    tags: { city: "Munich", type: "cathedral", built: "1494" },
-    wikipediaUrl: "https://en.wikipedia.org/wiki/Frauenkirche,_Munich",
-    descriptionRaw:
-      "The Frauenkirche (Cathedral of Our Dear Lady) is a church in the Bavarian city of Munich that serves as the cathedral of the Archdiocese of Munich and Freising.",
-    story: {
-      title: "The Devil's Footprint",
-      teaser: "Look down at the entrance",
-      content:
-        "Legend has it that the architect made a deal with the devil: a church with no visible windows. Stand in the black footprint at the entrance and you'll see no windows - the pillars hide them perfectly. When the devil discovered the trick, he stamped his foot in rage, leaving the mark that remains today.",
-    },
-  },
-  {
-    name: "Marienplatz",
-    longitude: "11.5755",
-    latitude: "48.1374",
-    categories: ["plaza", "historical"],
-    tags: { city: "Munich", type: "square", established: "1158" },
-    wikipediaUrl: "https://en.wikipedia.org/wiki/Marienplatz",
-    descriptionRaw:
-      "Marienplatz is a central square in the city center of Munich, Germany. It has been the city's main square since 1158.",
-    story: {
-      title: "The Grateful City",
-      teaser: "A plague's end, frozen in gold",
-      content:
-        "The golden Virgin Mary atop the column wasn't always here. In 1638, after surviving Swedish occupation and plague, Munich erected this monument of gratitude. Every day at 11am and noon, the Glockenspiel performs a jousting tournament from 1568 - a victory that locals still celebrate 450 years later.",
-    },
-  },
-  {
-    name: "Hofbräuhaus",
-    longitude: "11.5798",
-    latitude: "48.1376",
-    categories: ["beer hall", "historical"],
-    tags: { city: "Munich", type: "brewery", established: "1589" },
-    wikipediaUrl: "https://en.wikipedia.org/wiki/Hofbr%C3%A4uhaus_am_Platzl",
-    descriptionRaw:
-      "The Hofbräuhaus am Platzl is a beer hall in Munich, Germany, originally built in 1589. It is one of Munich's oldest beer halls.",
-    story: {
-      title: "The Royal Pint",
-      teaser: "When dukes brewed their own",
-      content:
-        "Duke Wilhelm V built this brewery because he was tired of expensive imported beer. The Hofbräuhaus remained exclusively royal until 1828. Mozart drank here. Lenin planned revolution in its halls. Today, it still serves beer brewed according to the original 1589 recipe - strong, dark, and unmistakably Bavarian.",
-    },
-  },
-  {
-    name: "Englischer Garten",
-    longitude: "11.5922",
-    latitude: "48.1642",
-    categories: ["park", "nature"],
-    tags: { city: "Munich", type: "urban park", size: "375 hectares" },
-    wikipediaUrl: "https://en.wikipedia.org/wiki/Englischer_Garten",
-    descriptionRaw:
-      "The Englischer Garten is a large public park in the centre of Munich stretching from the city centre to the northeastern city limits. It is one of the world's largest urban parks.",
-    story: {
-      title: "Bigger Than Central Park",
-      teaser: "Munich's wild heart",
-      content:
-        "Few visitors realize this park is larger than Central Park and Hyde Park combined. Created in 1789, it was revolutionary: a royal hunting ground opened to commoners. Today, surfers ride an artificial wave at the Eisbach, nudists sunbathe freely, and over 7,500 people gather at the Chinese Tower beer garden on summer evenings.",
-    },
-  },
-  {
-    name: "Residenz München",
-    longitude: "11.5792",
-    latitude: "48.1414",
-    categories: ["palace", "museum"],
-    tags: { city: "Munich", type: "palace", rooms: "130" },
-    wikipediaUrl: "https://en.wikipedia.org/wiki/Munich_Residenz",
-    descriptionRaw:
-      "The Munich Residenz is the former royal palace of the Bavarian monarchs in the center of Munich. It is the largest city palace in Germany.",
-    story: {
-      title: "The Lucky Lion",
-      teaser: "Rub it for fortune",
-      content:
-        "At the entrance stands a bronze lion shield that locals touch for luck. The lions' noses gleam gold from centuries of hopeful hands. Inside lie 130 rooms spanning 600 years of Bavarian royalty, from medieval fortress to Renaissance palace to Baroque splendor - each generation adding their mark to Germany's largest city palace.",
-    },
-  },
-  {
-    name: "Alte Pinakothek",
-    longitude: "11.5700",
-    latitude: "48.1483",
-    categories: ["museum", "art"],
-    tags: { city: "Munich", type: "art museum", founded: "1836" },
-    wikipediaUrl: "https://en.wikipedia.org/wiki/Alte_Pinakothek",
-    descriptionRaw:
-      "The Alte Pinakothek is an art museum in Munich, Germany. It is one of the oldest galleries in the world and houses one of the most famous collections of Old Master paintings.",
-    story: {
-      title: "The King's Collection",
-      teaser: "500 years of masterpieces",
-      content:
-        "King Ludwig I built this temple to art because his collection outgrew his palace. Dürer, Rubens, Rembrandt - works that other museums would kill for hang casually on these walls. The building itself survived WWII bombs but was intentionally left partially unrestored, its brick patches a reminder that beauty can emerge from destruction.",
-    },
-  },
+  slug: CategorySlug;
+  icon: string;
+  color: string;
+}> = [
+  { name: "History", slug: "history", icon: "monument", color: "#FF6B4A" },
+  { name: "Food", slug: "food", icon: "utensils", color: "#FF9F9F" },
+  { name: "Art", slug: "art", icon: "palette", color: "#BF5AF2" },
+  { name: "Nature", slug: "nature", icon: "leaf", color: "#34C759" },
+  { name: "Architecture", slug: "architecture", icon: "building", color: "#5AC8FA" },
+  { name: "Hidden Gems", slug: "hidden", icon: "diamond", color: "#FFD60A" },
+  { name: "Views", slug: "views", icon: "eye", color: "#64D2FF" },
+  { name: "Culture", slug: "culture", icon: "masks", color: "#5E5CE6" },
 ];
 
-async function seedPois() {
-  console.log("Seeding POIs...\n");
-
-  for (const poiData of MUNICH_POIS) {
-    const existing = await db.query.pois.findFirst({
-      where: (pois, { eq }) => eq(pois.name, poiData.name),
-    });
-
-    if (existing) {
-      console.log(`  Skipping "${poiData.name}" (already exists)`);
-      continue;
-    }
-
-    const [poi] = await db
-      .insert(pois)
-      .values({
-        source: "seed",
-        name: poiData.name,
-        longitude: poiData.longitude,
-        latitude: poiData.latitude,
-        categories: poiData.categories,
-        tags: poiData.tags,
-        wikipediaUrl: poiData.wikipediaUrl,
-        descriptionRaw: poiData.descriptionRaw,
-      })
-      .returning();
-
-    console.log(`  Created POI: "${poi.name}"`);
-
-    if (poiData.story) {
-      await db.insert(poiStories).values({
-        poiId: poi.id,
-        storyType: "discovery",
-        title: poiData.story.title,
-        teaser: poiData.story.teaser,
-        content: poiData.story.content,
-      });
-      console.log(`    Added story: "${poiData.story.title}"`);
-    }
-  }
-
-  console.log("\nPOI seeding complete!");
-  console.log(`  Total POIs: ${MUNICH_POIS.length}`);
-  console.log(`  Location: Munich, Germany`);
-  console.log(`  Center: 48.137, 11.576 (Marienplatz area)`);
+interface OverpassElement {
+  type: string;
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
 }
 
-seedPois()
-  .catch((error) => {
-    console.error("POI seed failed:", error);
-    process.exit(1);
-  })
-  .finally(() => {
-    process.exit(0);
-  });
+interface OverpassResponse {
+  elements: OverpassElement[];
+}
+
+async function fetchMunichPois(): Promise<OverpassElement[]> {
+  const overpassQuery = `
+    [out:json][timeout:90];
+    (
+      node["historic"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
+      node["tourism"="museum"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
+      node["amenity"="place_of_worship"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
+      node["amenity"="biergarten"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
+      node["amenity"="theatre"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
+      node["tourism"="viewpoint"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
+    );
+    out body;
+  `;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(`Attempt ${attempt}/3...`);
+      const response = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `data=${encodeURIComponent(overpassQuery)}`,
+        signal: AbortSignal.timeout(120000),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Overpass API error: ${response.statusText}`);
+      }
+
+      const data: OverpassResponse = await response.json();
+      return data.elements;
+    } catch (error) {
+      console.log(`Attempt ${attempt} failed:`, error instanceof Error ? error.message : error);
+      if (attempt === 3) {
+        console.log("Using fallback POI data...");
+        return getFallbackPois();
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
+  return getFallbackPois();
+}
+
+function getFallbackPois(): OverpassElement[] {
+  return [
+    { type: "node", id: 1, lat: 48.1374, lon: 11.5755, tags: { name: "Marienplatz", historic: "square" } },
+    { type: "node", id: 2, lat: 48.1386, lon: 11.5730, tags: { name: "Frauenkirche", amenity: "place_of_worship", building: "church" } },
+    { type: "node", id: 3, lat: 48.1351, lon: 11.5820, tags: { name: "Viktualienmarkt", amenity: "marketplace" } },
+    { type: "node", id: 4, lat: 48.1416, lon: 11.5770, tags: { name: "Residenz München", historic: "palace", tourism: "museum" } },
+    { type: "node", id: 5, lat: 48.1500, lon: 11.5819, tags: { name: "Englischer Garten", leisure: "park" } },
+    { type: "node", id: 6, lat: 48.1394, lon: 11.5792, tags: { name: "Hofbräuhaus", amenity: "biergarten" } },
+    { type: "node", id: 7, lat: 48.1397, lon: 11.5785, tags: { name: "Bayerische Staatsoper", amenity: "theatre" } },
+    { type: "node", id: 8, lat: 48.1362, lon: 11.5767, tags: { name: "Altes Rathaus", historic: "monument" } },
+    { type: "node", id: 9, lat: 48.1363, lon: 11.5761, tags: { name: "Neues Rathaus", historic: "building", tourism: "attraction" } },
+    { type: "node", id: 10, lat: 48.1451, lon: 11.5579, tags: { name: "Pinakothek der Moderne", tourism: "museum" } },
+    { type: "node", id: 11, lat: 48.1482, lon: 11.5700, tags: { name: "Chinesischer Turm", amenity: "biergarten" } },
+    { type: "node", id: 12, lat: 48.1324, lon: 11.5830, tags: { name: "Deutsches Museum", tourism: "museum" } },
+    { type: "node", id: 13, lat: 48.1433, lon: 11.5678, tags: { name: "Theatinerkirche", amenity: "place_of_worship" } },
+    { type: "node", id: 14, lat: 48.1395, lon: 11.5670, tags: { name: "Feldherrnhalle", historic: "monument" } },
+    { type: "node", id: 15, lat: 48.1456, lon: 11.5582, tags: { name: "Alte Pinakothek", tourism: "museum" } },
+    { type: "node", id: 16, lat: 48.1519, lon: 11.5915, tags: { name: "Eisbachwelle", tourism: "attraction" } },
+    { type: "node", id: 17, lat: 48.1230, lon: 11.5500, tags: { name: "Schloss Nymphenburg", historic: "castle", tourism: "museum" } },
+    { type: "node", id: 18, lat: 48.1411, lon: 11.5599, tags: { name: "Königsplatz", historic: "square" } },
+    { type: "node", id: 19, lat: 48.1528, lon: 11.5817, tags: { name: "Monopteros", historic: "monument", tourism: "viewpoint" } },
+    { type: "node", id: 20, lat: 48.1343, lon: 11.5648, tags: { name: "Sendlinger Tor", historic: "city_gate" } },
+    { type: "node", id: 21, lat: 48.1378, lon: 11.5716, tags: { name: "Asamkirche", amenity: "place_of_worship" } },
+    { type: "node", id: 22, lat: 48.1405, lon: 11.5648, tags: { name: "Michaelskirche", amenity: "place_of_worship" } },
+    { type: "node", id: 23, lat: 48.1352, lon: 11.5749, tags: { name: "Peterskirche", amenity: "place_of_worship", tourism: "viewpoint" } },
+    { type: "node", id: 24, lat: 48.1377, lon: 11.5892, tags: { name: "Maximilianeum", historic: "building" } },
+    { type: "node", id: 25, lat: 48.1420, lon: 11.5770, tags: { name: "Odeonsplatz", historic: "square" } },
+  ];
+}
+
+function determineCategorySlug(tags: Record<string, string>): CategorySlug {
+  if (tags.historic) return "history";
+  if (tags.tourism === "museum") return "art";
+  if (tags.tourism === "viewpoint") return "views";
+  if (tags.amenity === "biergarten" || tags.amenity === "restaurant") return "food";
+  if (tags.leisure === "park" || tags.natural) return "nature";
+  if (tags.amenity === "theatre") return "culture";
+  if (tags.architect || tags.building === "church") return "architecture";
+  return "hidden";
+}
+
+async function main() {
+  console.log("Seeding categories...");
+
+  const insertedCategories = await db
+    .insert(categories)
+    .values(CATEGORY_DATA)
+    .onConflictDoNothing()
+    .returning();
+
+  const categoryMap = new Map<CategorySlug, string>();
+  const allCategories = insertedCategories.length > 0
+    ? insertedCategories
+    : await db.select().from(categories);
+
+  for (const cat of allCategories) {
+    categoryMap.set(cat.slug as CategorySlug, cat.id);
+  }
+
+  console.log(`Categories ready: ${categoryMap.size}`);
+
+  console.log("Fetching Munich POIs from Overpass API...");
+  const elements = await fetchMunichPois();
+  console.log(`Found ${elements.length} elements from Overpass`);
+
+  const poiData = elements
+    .filter((el) => el.tags?.name)
+    .map((el) => {
+      const lat = el.lat ?? el.center?.lat;
+      const lon = el.lon ?? el.center?.lon;
+
+      if (!lat || !lon) return null;
+
+      const tags = el.tags || {};
+      const categorySlug = determineCategorySlug(tags);
+      const categoryId = categoryMap.get(categorySlug);
+
+      return {
+        osmId: el.id,
+        name: tags.name!,
+        categoryId: categoryId ?? null,
+        latitude: lat,
+        longitude: lon,
+        address: tags["addr:street"]
+          ? `${tags["addr:street"]} ${tags["addr:housenumber"] ?? ""}, Munich`
+          : null,
+        wikipediaUrl: tags.wikipedia
+          ? `https://en.wikipedia.org/wiki/${tags.wikipedia.split(":")[1]}`
+          : null,
+        imageUrl: tags.image ?? null,
+        osmTags: tags,
+      };
+    })
+    .filter((poi): poi is NonNullable<typeof poi> => poi !== null);
+
+  console.log(`Prepared ${poiData.length} POIs for insertion`);
+
+  if (poiData.length > 0) {
+    const inserted = await db
+      .insert(pois)
+      .values(poiData)
+      .onConflictDoNothing()
+      .returning();
+
+    console.log(`Inserted ${inserted.length} new POIs`);
+  }
+
+  console.log("Seeding complete!");
+  process.exit(0);
+}
+
+main().catch((error) => {
+  console.error("Seeding failed:", error);
+  process.exit(1);
+});

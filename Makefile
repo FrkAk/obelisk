@@ -1,4 +1,4 @@
-.PHONY: help setup run run-local stop logs rebuild destroy db-up db-down
+.PHONY: help setup run run-local stop logs rebuild destroy
 
 CYAN := \033[36m
 GREEN := \033[32m
@@ -6,7 +6,15 @@ YELLOW := \033[33m
 RED := \033[31m
 RESET := \033[0m
 
-COMPOSE := docker compose -f docker-compose.jetson.yml
+ARCH := $(shell uname -m)
+
+ifeq ($(ARCH),aarch64)
+  COMPOSE := docker compose -f docker-compose.jetson.yml
+  PLATFORM := Jetson
+else
+  COMPOSE := docker compose
+  PLATFORM := PC
+endif
 
 export DATABASE_URL := postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
 export OLLAMA_URL := http://localhost:11434
@@ -14,7 +22,7 @@ export OLLAMA_MODEL ?= gemma3:27b
 
 help:
 	@echo ""
-	@echo "$(CYAN)Obelisk$(RESET) - Ambient Storytelling App (Jetson Thor)"
+	@echo "$(CYAN)Obelisk$(RESET) - Ambient Storytelling App ($(PLATFORM) / $(ARCH))"
 	@echo ""
 	@echo "$(GREEN)Commands:$(RESET)"
 	@echo "  $(CYAN)setup$(RESET)      First-time setup (deps, db, model, seed)"
@@ -26,8 +34,10 @@ help:
 	@echo "  $(CYAN)destroy$(RESET)    Stop and remove all data"
 	@echo ""
 
+ifeq ($(ARCH),aarch64)
+
 setup:
-	@echo "$(GREEN)Setting up Obelisk on Jetson Thor...$(RESET)"
+	@echo "$(GREEN)Setting up Obelisk on $(PLATFORM)...$(RESET)"
 	@echo ""
 	@echo "$(CYAN)[1/6]$(RESET) Installing dependencies..."
 	bun install
@@ -52,7 +62,7 @@ setup:
 	@echo "$(GREEN)Setup complete!$(RESET) Run 'make run' to start"
 
 run:
-	@echo "$(GREEN)Starting Obelisk...$(RESET)"
+	@echo "$(GREEN)Starting Obelisk ($(PLATFORM))...$(RESET)"
 	$(COMPOSE) up -d
 	@sleep 3
 	-bun run drizzle-kit push 2>/dev/null || true
@@ -63,7 +73,7 @@ run:
 	bun run dev
 
 run-local:
-	@echo "$(GREEN)Starting Obelisk for local network...$(RESET)"
+	@echo "$(GREEN)Starting Obelisk for local network ($(PLATFORM))...$(RESET)"
 	$(COMPOSE) up -d
 	@sleep 3
 	-bun run drizzle-kit push 2>/dev/null || true
@@ -76,16 +86,8 @@ run-local:
 	echo "Press Ctrl+C to stop the app"
 	bun run dev --hostname 0.0.0.0
 
-stop:
-	@echo "Stopping services..."
-	$(COMPOSE) down
-	@echo "$(GREEN)Stopped.$(RESET) Data preserved."
-
-logs:
-	$(COMPOSE) logs -f
-
 rebuild:
-	@echo "$(YELLOW)Rebuilding...$(RESET)"
+	@echo "$(YELLOW)Rebuilding ($(PLATFORM))...$(RESET)"
 	$(COMPOSE) down
 	rm -rf .next node_modules
 	bun install
@@ -93,6 +95,67 @@ rebuild:
 	@sleep 3
 	-bun run drizzle-kit push 2>/dev/null || true
 	@echo "$(GREEN)Rebuild complete!$(RESET) Run 'make run' to start"
+
+else
+
+setup:
+	@echo "$(GREEN)Setting up Obelisk on $(PLATFORM)...$(RESET)"
+	@echo ""
+	@echo "$(CYAN)[1/5]$(RESET) Building and starting services..."
+	$(COMPOSE) up -d --build
+	@echo "Waiting for services..."
+	@sleep 8
+	@echo ""
+	@echo "$(CYAN)[2/5]$(RESET) Running migrations..."
+	$(COMPOSE) exec app bun run drizzle-kit push
+	@echo ""
+	@echo "$(CYAN)[3/5]$(RESET) Ensuring Ollama model..."
+	$(COMPOSE) exec ollama ollama pull $(OLLAMA_MODEL)
+	@echo ""
+	@echo "$(CYAN)[4/5]$(RESET) Seeding POIs..."
+	$(COMPOSE) exec app bun scripts/seed-pois.ts
+	@echo ""
+	@echo "$(CYAN)[5/5]$(RESET) Generating stories..."
+	-$(COMPOSE) exec app bun scripts/generate-stories.ts || true
+	@echo ""
+	@echo "$(GREEN)Setup complete!$(RESET) Run 'make run' to start"
+
+run:
+	@echo "$(GREEN)Starting Obelisk ($(PLATFORM))...$(RESET)"
+	@echo ""
+	@echo "$(GREEN)App starting at http://localhost:3000$(RESET)"
+	@echo "Press Ctrl+C to stop"
+	@echo ""
+	$(COMPOSE) up
+
+run-local:
+	@echo "$(GREEN)Starting Obelisk for local network ($(PLATFORM))...$(RESET)"
+	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
+	echo ""; \
+	echo "$(GREEN)App starting:$(RESET)"; \
+	echo "  Local:   http://localhost:3000"; \
+	echo "  Network: http://$$LOCAL_IP:3000"; \
+	echo ""; \
+	echo "Press Ctrl+C to stop"
+	docker compose -f docker-compose.yml -f docker-compose.local.yml up
+
+rebuild:
+	@echo "$(YELLOW)Rebuilding ($(PLATFORM))...$(RESET)"
+	$(COMPOSE) down
+	$(COMPOSE) up -d --build
+	@sleep 3
+	$(COMPOSE) exec app bun run drizzle-kit push
+	@echo "$(GREEN)Rebuild complete!$(RESET) Run 'make run' to start"
+
+endif
+
+stop:
+	@echo "Stopping services..."
+	$(COMPOSE) down
+	@echo "$(GREEN)Stopped.$(RESET) Data preserved."
+
+logs:
+	$(COMPOSE) logs -f
 
 destroy:
 	@echo "$(YELLOW)Destroying all Obelisk data...$(RESET)"

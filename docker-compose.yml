@@ -9,6 +9,8 @@ services:
       - .:/app
       - /app/node_modules
       - /app/.next
+    env_file:
+      - .env.local
     environment:
       DATABASE_URL: postgresql://obelisk:obelisk_dev@postgres:5432/obelisk
       OLLAMA_URL: http://ollama:11434
@@ -20,7 +22,7 @@ services:
     command: bun run dev
 
   postgres:
-    image: postgis/postgis:15-3.4
+    image: postgres:15-alpine
     environment:
       POSTGRES_DB: obelisk
       POSTGRES_USER: obelisk

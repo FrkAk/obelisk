@@ -26,25 +26,85 @@ const OSM_CATEGORY_MAPPING: Record<string, string> = {
   biergarten: "food",
   food_court: "food",
   ice_cream: "food",
+  bakery: "food",
+  deli: "food",
+  confectionery: "food",
+  food_and_drink: "food",
+  food_and_drink_stores: "food",
+
   museum: "art",
   gallery: "art",
+
   theatre: "culture",
   cinema: "culture",
   arts_centre: "culture",
+  library: "culture",
+  community_centre: "culture",
+  university: "culture",
+  school: "culture",
+  college: "culture",
+  arts_and_entertainment: "culture",
+  education: "culture",
+
   park: "nature",
   garden: "nature",
   nature_reserve: "nature",
+  zoo: "nature",
+  aquarium: "nature",
+  botanical_garden: "nature",
+  playground: "nature",
+  dog_park: "nature",
+  park_like: "nature",
+
   church: "architecture",
   cathedral: "architecture",
+  chapel: "architecture",
+  mosque: "architecture",
+  synagogue: "architecture",
+  temple: "architecture",
+  shrine: "architecture",
+  place_of_worship: "architecture",
+  monastery: "architecture",
+  tower: "architecture",
+  townhall: "architecture",
+  courthouse: "architecture",
+  religion: "architecture",
+  "religious-christian": "architecture",
+  "religious-muslim": "architecture",
+  "religious-jewish": "architecture",
+  "religious-buddhist": "architecture",
+  "religious-shinto": "architecture",
+
   castle: "history",
   monument: "history",
   memorial: "history",
   archaeological_site: "history",
   ruins: "history",
+  battlefield: "history",
+  city_gate: "history",
+  wayside_shrine: "history",
+  wayside_cross: "history",
+  historic: "history",
+
   viewpoint: "views",
+
   attraction: "hidden",
   hotel: "hidden",
   hostel: "hidden",
+  marketplace: "hidden",
+  fountain: "hidden",
+  hospital: "hidden",
+  clinic: "hidden",
+  pharmacy: "hidden",
+  fire_station: "hidden",
+  police: "hidden",
+  lodging: "hidden",
+  shop: "hidden",
+  general: "hidden",
+  commercial_services: "hidden",
+  motorist: "hidden",
+  visitor_amenities: "hidden",
+  industrial: "hidden",
 };
 
 /**
@@ -286,7 +346,7 @@ async function lookupFromNominatim(
 
     console.log(`[poi/lookup] Nominatim extraTags for "${name}":`, JSON.stringify(extraTags));
 
-    const category = mapOsmTypeToCategory(best.type, best.class, categoryHint);
+    const category = mapOsmTypeToCategory(best.type, best.class, categoryHint, extraTags);
 
     return {
       id: `nominatim-${best.place_id}`,
@@ -310,7 +370,24 @@ async function lookupFromNominatim(
   }
 }
 
-function mapOsmTypeToCategory(type: string, osmClass: string, hint?: string): string {
+/**
+ * Classifies a POI using a 4-layer priority system.
+ *
+ * Args:
+ *     type: Nominatim OSM type (e.g., "place_of_worship", "restaurant").
+ *     osmClass: Nominatim OSM class (e.g., "amenity", "tourism").
+ *     hint: Optional Mapbox class or maki value from frontend click.
+ *     extraTags: Optional Nominatim extratags for refinement.
+ *
+ * Returns:
+ *     A valid category slug string.
+ */
+function mapOsmTypeToCategory(
+  type: string,
+  osmClass: string,
+  hint?: string,
+  extraTags?: Record<string, string>
+): string {
   if (hint && OSM_CATEGORY_MAPPING[hint]) {
     return OSM_CATEGORY_MAPPING[hint];
   }
@@ -319,10 +396,21 @@ function mapOsmTypeToCategory(type: string, osmClass: string, hint?: string): st
     return OSM_CATEGORY_MAPPING[type];
   }
 
-  if (osmClass === "amenity" || osmClass === "shop") return "food";
-  if (osmClass === "tourism") return "hidden";
+  if (extraTags) {
+    const building = extraTags.building;
+    if (building === "church" || building === "cathedral" || building === "mosque" ||
+        building === "synagogue" || building === "temple" || building === "chapel") {
+      return "architecture";
+    }
+    if (extraTags.religion) return "architecture";
+    if (extraTags.cuisine) return "food";
+  }
+
   if (osmClass === "historic") return "history";
   if (osmClass === "leisure") return "nature";
+  if (osmClass === "tourism") return "hidden";
+  if (osmClass === "amenity") return "hidden";
+  if (osmClass === "shop") return "hidden";
 
   return "hidden";
 }

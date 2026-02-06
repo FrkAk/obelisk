@@ -117,6 +117,8 @@ export async function POST(request: NextRequest) {
           name: poi.name,
           categoryName: poi.categoryName || "Hidden Gems",
           address: poi.address,
+          latitude: poi.latitude,
+          longitude: poi.longitude,
           wikipediaUrl: poi.wikipediaUrl,
           osmTags: poi.osmTags,
         });

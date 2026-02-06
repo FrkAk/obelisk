@@ -2,6 +2,7 @@ interface OllamaGenerateRequest {
   model: string;
   prompt: string;
   stream?: boolean;
+  think?: boolean;
   options?: {
     temperature?: number;
     top_p?: number;
@@ -17,14 +18,14 @@ interface OllamaGenerateResponse {
 }
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-const DEFAULT_MODEL = "gemma3:4b-it-q4_K_M";
+const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
 
 /**
  * Generates text using Ollama.
  *
  * Args:
  *     prompt: The prompt to send to the model.
- *     model: The model to use (defaults to gemma3:4b-it-q4_K_M).
+ *     model: The model to use (defaults to OLLAMA_MODEL env or gemma3:27b).
  *     options: Generation options (temperature, top_p, num_predict).
  *
  * Returns:
@@ -42,10 +43,11 @@ export async function generateText(
       model,
       prompt,
       stream: false,
+      think: false,
       options: {
         temperature: 0.7,
         top_p: 0.9,
-        num_predict: 500,
+        num_predict: 1024,
         ...options,
       },
     } satisfies OllamaGenerateRequest),

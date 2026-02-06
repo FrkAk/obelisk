@@ -1,4 +1,6 @@
 import { generateText } from "./ollama";
+import { detectLocale, buildLanguagePrompt } from "./localization";
+import type { LocaleInfo } from "./localization";
 import type { WebsiteContent } from "@/lib/web/scraper";
 import type { WebSearchContext } from "@/lib/web/webSearch";
 
@@ -6,6 +8,8 @@ interface PoiContext {
   name: string;
   categoryName: string;
   address?: string | null;
+  latitude?: number;
+  longitude?: number;
   wikipediaUrl?: string | null;
   osmTags?: Record<string, string> | null;
 }
@@ -193,9 +197,10 @@ function buildHonestyGuidelines(confidence: ConfidenceSignals): string {
 - Your reputation depends on being trustworthy, not just positive`;
 }
 
-function buildBasicPrompt(poi: PoiContext, additionalInfo: string, confidence: ConfidenceSignals): string {
+function buildBasicPrompt(poi: PoiContext, additionalInfo: string, confidence: ConfidenceSignals, locale: LocaleInfo): string {
   const persona = getPersonaForCategory(poi.categoryName);
   const honestyGuidelines = buildHonestyGuidelines(confidence);
+  const languagePrompt = buildLanguagePrompt(locale);
 
   return `${persona.voice}
 
@@ -207,6 +212,8 @@ Address: {address}
 Additional info: {info}
 
 ${honestyGuidelines}
+
+${languagePrompt}
 
 ${persona.perspective}
 
@@ -232,10 +239,12 @@ function buildEnhancedPrompt(
   websiteInfo: string,
   webResearchInfo: string,
   additionalInfo: string,
-  confidence: ConfidenceSignals
+  confidence: ConfidenceSignals,
+  locale: LocaleInfo
 ): string {
   const persona = getPersonaForCategory(poi.categoryName);
   const honestyGuidelines = buildHonestyGuidelines(confidence);
+  const languagePrompt = buildLanguagePrompt(locale);
 
   return `${persona.voice}
 
@@ -251,6 +260,8 @@ BACKGROUND INFO (use to inform your perspective, but DON'T quote directly):
 {info}
 
 ${honestyGuidelines}
+
+${languagePrompt}
 
 ${persona.perspective}
 
@@ -294,10 +305,12 @@ LOCAL_TIP: [your tip]`
 export async function generateStory(poi: PoiContext): Promise<GeneratedStory> {
   const additionalInfo = buildAdditionalInfo(poi.osmTags);
   const confidence = assessConfidence(poi.osmTags, null);
+  const locale = await detectLocale(poi.address, poi.latitude, poi.longitude);
 
   console.log(`[storyGenerator] Confidence for "${poi.name}": ${confidence.level} (concerns: ${confidence.concerns.join(", ") || "none"})`);
+  console.log(`[storyGenerator] Locale: ${locale.country} (${locale.language})`);
 
-  const prompt = buildBasicPrompt(poi, additionalInfo, confidence);
+  const prompt = buildBasicPrompt(poi, additionalInfo, confidence, locale);
 
   const response = await generateText(prompt);
   return parseStoryResponse(response);
@@ -316,8 +329,10 @@ export async function generateStory(poi: PoiContext): Promise<GeneratedStory> {
 export async function generateEnhancedStory(poi: EnhancedPoiContext): Promise<GeneratedStory> {
   const additionalInfo = buildAdditionalInfo(poi.osmTags);
   const confidence = assessConfidence(poi.osmTags, poi.websiteContent, poi.webSearchContext);
+  const locale = await detectLocale(poi.address, poi.latitude, poi.longitude);
 
   console.log(`[storyGenerator] Confidence for "${poi.name}": ${confidence.level} (concerns: ${confidence.concerns.join(", ") || "none"})`);
+  console.log(`[storyGenerator] Locale: ${locale.country} (${locale.language})`);
   console.log(`[storyGenerator] Web search: ${confidence.hasWebSearchResults ? "yes" : "no"}, Scraped: ${confidence.hasScrapedWebContent ? "yes" : "no"}`);
 
   const hasWebsiteInfo = poi.websiteContent &&
@@ -327,7 +342,7 @@ export async function generateEnhancedStory(poi: EnhancedPoiContext): Promise<Ge
   const hasWebResearch = poi.webSearchContext && poi.webSearchContext.results.length > 0;
 
   if (!hasWebsiteInfo && !hasWebResearch) {
-    const prompt = buildBasicPrompt(poi, additionalInfo, confidence);
+    const prompt = buildBasicPrompt(poi, additionalInfo, confidence, locale);
     const response = await generateText(prompt);
     return parseStoryResponse(response);
   }
@@ -340,7 +355,7 @@ export async function generateEnhancedStory(poi: EnhancedPoiContext): Promise<Ge
     ? buildWebResearchString(poi.webSearchContext!)
     : "No web research available";
 
-  const prompt = buildEnhancedPrompt(poi, websiteInfo, webResearchInfo, additionalInfo, confidence);
+  const prompt = buildEnhancedPrompt(poi, websiteInfo, webResearchInfo, additionalInfo, confidence, locale);
 
   const response = await generateText(prompt);
   return parseStoryResponse(response);

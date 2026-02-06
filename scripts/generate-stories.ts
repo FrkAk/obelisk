@@ -10,7 +10,7 @@ async function main() {
 
   if (!isHealthy) {
     console.error("Ollama is not available or model not loaded.");
-    console.log("Run: docker compose exec ollama ollama pull gemma3:4b-it-q4_K_M");
+    console.log(`Run: ollama pull ${process.env.OLLAMA_MODEL || "gemma3:27b"}`);
     process.exit(1);
   }
 
@@ -23,6 +23,8 @@ async function main() {
       id: pois.id,
       name: pois.name,
       address: pois.address,
+      latitude: pois.latitude,
+      longitude: pois.longitude,
       wikipediaUrl: pois.wikipediaUrl,
       osmTags: pois.osmTags,
       categoryName: categories.name,
@@ -31,7 +33,7 @@ async function main() {
     .leftJoin(categories, eq(pois.categoryId, categories.id))
     .leftJoin(remarks, eq(pois.id, remarks.poiId))
     .where(isNull(remarks.id))
-    .limit(100);
+    .limit(10);
 
   if (poisWithoutRemarks.length === 0) {
     console.log("All POIs already have remarks!");
@@ -46,6 +48,8 @@ async function main() {
       name: poi.name,
       categoryName: poi.categoryName || "Hidden Gems",
       address: poi.address,
+      latitude: poi.latitude,
+      longitude: poi.longitude,
       wikipediaUrl: poi.wikipediaUrl,
       osmTags: poi.osmTags,
     },

@@ -1,74 +1,101 @@
-.PHONY: help setup run run-local stop logs rebuild destroy
+.PHONY: help setup run run-local stop logs rebuild destroy db-up db-down
 
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
+RED := \033[31m
 RESET := \033[0m
+
+COMPOSE := docker compose -f docker-compose.jetson.yml
+
+export DATABASE_URL := postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
+export OLLAMA_URL := http://localhost:11434
+export OLLAMA_MODEL ?= gemma3:27b
 
 help:
 	@echo ""
-	@echo "$(CYAN)Obelisk$(RESET) - Ambient Storytelling App"
+	@echo "$(CYAN)Obelisk$(RESET) - Ambient Storytelling App (Jetson Thor)"
 	@echo ""
 	@echo "$(GREEN)Commands:$(RESET)"
-	@echo "  $(CYAN)setup$(RESET)      First-time setup (build, migrate, pull model, seed)"
+	@echo "  $(CYAN)setup$(RESET)      First-time setup (deps, db, model, seed)"
 	@echo "  $(CYAN)run$(RESET)        Start on localhost:3000"
 	@echo "  $(CYAN)run-local$(RESET)  Start exposed to local network (same WiFi)"
 	@echo "  $(CYAN)stop$(RESET)       Stop services (keeps data)"
-	@echo "  $(CYAN)logs$(RESET)       View all logs"
-	@echo "  $(CYAN)rebuild$(RESET)    Rebuild without cache"
+	@echo "  $(CYAN)logs$(RESET)       View database logs"
+	@echo "  $(CYAN)rebuild$(RESET)    Clean rebuild (deps + next cache)"
 	@echo "  $(CYAN)destroy$(RESET)    Stop and remove all data"
 	@echo ""
 
 setup:
-	@echo "$(GREEN)Setting up Obelisk...$(RESET)"
-	docker compose build
-	docker compose up -d
-	@echo "Waiting for services..."
-	@sleep 10
-	docker compose exec app bun run drizzle-kit push
-	docker compose exec ollama ollama pull gemma3:4b-it-q4_K_M
-	docker compose exec app bun scripts/seed-pois.ts
-	-docker compose exec app bun scripts/generate-stories.ts || true
+	@echo "$(GREEN)Setting up Obelisk on Jetson Thor...$(RESET)"
+	@echo ""
+	@echo "$(CYAN)[1/6]$(RESET) Installing dependencies..."
+	bun install
+	@echo ""
+	@echo "$(CYAN)[2/6]$(RESET) Starting PostgreSQL..."
+	$(COMPOSE) up -d
+	@echo "Waiting for database..."
+	@sleep 8
+	@echo ""
+	@echo "$(CYAN)[3/6]$(RESET) Running migrations..."
+	bun run drizzle-kit push
+	@echo ""
+	@echo "$(CYAN)[4/6]$(RESET) Ensuring Ollama model..."
+	ollama pull $(OLLAMA_MODEL)
+	@echo ""
+	@echo "$(CYAN)[5/6]$(RESET) Seeding POIs..."
+	bun scripts/seed-pois.ts
+	@echo ""
+	@echo "$(CYAN)[6/6]$(RESET) Generating stories..."
+	-bun scripts/generate-stories.ts || true
 	@echo ""
 	@echo "$(GREEN)Setup complete!$(RESET) Run 'make run' to start"
 
 run:
 	@echo "$(GREEN)Starting Obelisk...$(RESET)"
-	docker compose up -d
+	$(COMPOSE) up -d
 	@sleep 3
-	-docker compose exec -T app bun run drizzle-kit push 2>/dev/null || true
+	-bun run drizzle-kit push 2>/dev/null || true
 	@echo ""
-	@echo "$(GREEN)Obelisk running at http://localhost:3000$(RESET)"
+	@echo "$(GREEN)App starting at http://localhost:3000$(RESET)"
+	@echo "Press Ctrl+C to stop the app"
+	@echo ""
+	bun run dev
 
 run-local:
 	@echo "$(GREEN)Starting Obelisk for local network...$(RESET)"
-	docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+	$(COMPOSE) up -d
 	@sleep 3
-	-docker compose -f docker-compose.yml -f docker-compose.local.yml exec -T app bun run drizzle-kit push 2>/dev/null || true
+	-bun run drizzle-kit push 2>/dev/null || true
 	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
 	echo ""; \
-	echo "$(GREEN)Obelisk running:$(RESET)"; \
+	echo "$(GREEN)App starting:$(RESET)"; \
 	echo "  Local:   http://localhost:3000"; \
-	echo "  Network: http://$$LOCAL_IP:3000"
+	echo "  Network: http://$$LOCAL_IP:3000"; \
+	echo ""; \
+	echo "Press Ctrl+C to stop the app"
+	bun run dev --hostname 0.0.0.0
 
 stop:
-	docker compose down
+	@echo "Stopping services..."
+	$(COMPOSE) down
+	@echo "$(GREEN)Stopped.$(RESET) Data preserved."
 
 logs:
-	docker compose logs -f
+	$(COMPOSE) logs -f
 
 rebuild:
-	@echo "$(YELLOW)Rebuilding without cache...$(RESET)"
-	docker compose down
-	rm -rf .next
-	docker compose build --no-cache
-	docker compose up -d
+	@echo "$(YELLOW)Rebuilding...$(RESET)"
+	$(COMPOSE) down
+	rm -rf .next node_modules
+	bun install
+	$(COMPOSE) up -d
 	@sleep 3
-	-docker compose exec -T app bun run drizzle-kit push 2>/dev/null || true
-	@echo "$(GREEN)Rebuild complete!$(RESET)"
+	-bun run drizzle-kit push 2>/dev/null || true
+	@echo "$(GREEN)Rebuild complete!$(RESET) Run 'make run' to start"
 
 destroy:
 	@echo "$(YELLOW)Destroying all Obelisk data...$(RESET)"
-	docker compose down -v --remove-orphans
+	$(COMPOSE) down -v --remove-orphans
 	rm -rf .next node_modules
 	@echo "Done. Run 'make setup' to start fresh."

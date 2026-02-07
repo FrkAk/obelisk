@@ -19,6 +19,7 @@ interface MapContainerProps {
   selectedRemarkId?: string;
   isLoading: boolean;
   userLocation?: GeoLocation | null;
+  flyToLocation?: { latitude: number; longitude: number; ts: number } | null;
 }
 
 type RemarkProperties = { remark: Remark & { poi: Poi } };
@@ -37,6 +38,7 @@ export function MapContainer({
   selectedRemarkId,
   isLoading,
   userLocation,
+  flyToLocation,
 }: MapContainerProps) {
   const [viewState, setViewState] = useState<{ zoom: number; bounds: MapBounds | null }>({
     zoom: 14,
@@ -149,6 +151,7 @@ export function MapContainer({
         onMoveEnd={handleMoveEnd}
         onViewStateChange={handleViewStateChange}
         onPoiClick={onPoiClick}
+        flyToLocation={flyToLocation}
       >
         {userLocation && <UserLocationMarker location={userLocation} />}
         {clusters.map((cluster) => {

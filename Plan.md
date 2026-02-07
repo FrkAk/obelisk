@@ -154,6 +154,7 @@ obelisk/
 ## Implementation Phases (Core P0 - 6 Weeks)
 
 ### Week 1-2: Foundation (COMPLETED)
+
 - [x] Initialize Next.js 15 + TypeScript + Tailwind
 - [x] Set up PostgreSQL + PostGIS (Docker)
 - [x] Create database schema with Drizzle
@@ -165,6 +166,7 @@ obelisk/
 - [x] Set up design tokens (colors, blur, shadows)
 
 ### Week 3-4: Data + Pins (COMPLETED)
+
 - [x] Create Overpass API query for Munich POIs
 - [x] Build POI seed script
 - [x] Seed 50+ Munich POIs with category mapping
@@ -176,6 +178,7 @@ obelisk/
 - [x] Display POI markers on map with category colors
 
 ### Week 5-6: Stories + Geofencing (COMPLETED)
+
 - [x] Build `GET /api/remarks` endpoint
 - [x] Build `BottomSheet` component (iOS-style)
 - [x] Build `StoryCard` component
@@ -189,6 +192,7 @@ obelisk/
 - [x] Animation polish
 
 ### UI Visual Refinement (COMPLETED)
+
 - [x] Design tokens: iOS typography scale, enhanced shadows, multi-layer glass variants
 - [x] Spring animation system: snappy, bouncy, smooth presets (Framer Motion)
 - [x] Bottom sheet polish: proper drag handle (36×5px pill), spring physics, dynamic shadows
@@ -199,6 +203,7 @@ obelisk/
 - [x] Glass components: border-top highlight, inner shadow depth, variant system
 
 ### Integrated Map & Search Architecture (PARTIAL — search needs Phase 2 refinement)
+
 - [x] Mapbox GL JS integration (replaced MapLibre for premium visuals)
 - [x] OpenStreetMap POI data via Nominatim and Overpass APIs
 - [x] Dark mode automatic switching with Mapbox styles
@@ -211,9 +216,162 @@ obelisk/
 
 ### Future (Phase 2)
 
+#### Phase 2 Priority Order
+
+| Priority | Feature | Status |
+|----------|---------|--------|
+| P1 | Search Overhaul | [ ] Not started |
+| P2 | Settings Page | [ ] Not started |
+| P3 | PWA App | [ ] Not started |
+| P4 | Language Support (i18n) | [ ] Not started |
+| P5 | Exploration Mode | [ ] Detailed above |
+| P6 | Audio Playback | [ ] Not started |
+| P7 | User Accounts | [ ] Not started |
+| P8 | Statistics & Analytics | [ ] Not started |
+| P9 | Public Deployment | [ ] Not started |
+
 ---
 
-#### Explore Mode — "Your Local Friend" (Key Differentiator)
+#### P1 — Search Overhaul
+
+**Vision:** Search is not keyword matching — Obelisk understands intent. *"I am hungry and I want hamburger but not expensive yet delicious"* should return nearby affordable burger spots ranked by quality. Obelisk is the local friend who knows exactly where to send you.
+
+**Key requirements:**
+
+- **Contextual area awareness:** Search respects where the user is looking on the map, not just GPS. If user pans to another neighborhood, search operates in that viewport area and surroundings
+- **Intent-based parsing:** Improve LLM query parser reliability — current AI parsing via Ollama is inconsistent. Robust fallback chain, better prompt engineering. Support natural language like *"quiet café with wifi near the river"* or *"something fun to do tonight"*
+- **Responsive results UI:** Current SearchResults doesn't match StoryCard/POICard polish. Needs glassmorphic card treatment, category icons, distance badges, smooth animations
+- **POI card navigation from search:** Tapping a search result must open a navigable POI card (same flow as pin-tap). Currently broken — search results don't connect to POICard/StoryCard sheet modes
+- **Uniform UX:** Search flow and pin-tap flow must converge — same card design, same actions (navigate, listen, regenerate), same bottom sheet behavior
+
+**Current state:**
+
+- Two-tier query parser: regex patterns + Ollama AI fallback (`src/lib/search/queryParser.ts`)
+- Dual result sources: Obelisk DB + Nominatim/Overpass (`src/app/api/search/route.ts`)
+- Scoring system exists but English-only, limited category vocabulary
+- SearchResults UI not responsive, no card navigation on tap
+- No map viewport awareness — always searches from GPS position
+
+**Files to modify:**
+
+- `src/lib/search/queryParser.ts` — improve parsing reliability, add viewport context
+- `src/app/api/search/route.ts` — accept viewport bounds, improve orchestration
+- `src/components/search/SearchResults.tsx` — redesign for responsive glassmorphic cards
+- `src/components/search/SearchBar.tsx` — better loading states, viewport awareness
+- `src/hooks/useSearch.ts` — pass map viewport center/bounds
+- `src/app/page.tsx` — connect search result tap → POI/story card navigation
+
+---
+
+#### P2 — Settings Page
+
+**Vision:** Settings is not a separate screen — it's a card inside the bottom sheet, exactly like StoryCard and POICard. Follows Apple Maps pattern: tap your profile picture, settings card slides up in the same sheet. No page navigation, no route change, no new screen — just another sheet mode. The user never leaves the map.
+
+**UI/UX design (must match existing card patterns exactly):**
+
+SettingsCard reuses the exact patterns from `StoryCard.tsx` and `POICard.tsx`:
+
+- **Header:** 40×40px `rounded-xl` icon badge with gradient background (`linear-gradient(135deg, ${color}20 0%, ${color}10 100%)` + `1px solid ${color}30` border), title at 18px `font-semibold`, subtitle with `GlassPill`
+- **Icon badge:** Gear icon in coral gradient box
+- **Entry animation:** `motion.article` with `initial={{ opacity: 0, y: 20 }}`, `animate={{ opacity: 1, y: 0 }}`, `transition={springTransitions.smooth}`
+- **Section grouping:** `glass-thin rounded-xl` containers (same as Local Tip sections)
+- **Section headers:** 12px `font-semibold text-coral` with icon (matching Local Tip label pattern)
+- **Controls:** 44×44px touch targets, `glass-floating rounded-xl` buttons (same as navigate/regenerate buttons)
+- **Bottom action bar:** `border-t border-[var(--glass-border)]` separator, `glass-floating rounded-xl` buttons with `whileHover={{ scale: 1.05 }}`, `whileTap={{ scale: 0.95 }}`
+- **Typography:** CSS variables — `text-[var(--foreground)]` primary, `text-[var(--foreground-secondary)]` labels (18px titles, 16px body, 14px secondary, 13px metadata, 12px captions)
+- **Spacing:** `space-y-4` between sections
+
+**Trigger — profile button on map:**
+
+- Position: top-right of map, alongside existing controls in `MapControls.tsx`
+- Style: `glass-floating rounded-xl` circle (44×44px), user avatar or generic person icon
+- Behavior: sets `sheetMode = "settings"`, opens BottomSheet with SettingsCard
+
+**Sheet mode integration:**
+
+- Add `"settings"` to SheetMode: `"story" | "search" | "poi" | "settings" | null`
+- BottomSheet is content-agnostic (`children: ReactNode`), SettingsCard drops in directly
+- Same snap points (35%, 55%, 85%), drag-to-dismiss via existing spring physics
+
+**Settings sections:**
+
+- **Appearance:** Dark mode toggle (currently auto from `prefers-color-scheme`, add manual: Auto / Light / Dark)
+- **Language:** UI language selector + story language preference (placeholder until i18n P4, wire UI now)
+- **Map:** Style preference (streets/dark/satellite), default zoom, distance units (km/mi)
+- **Account:** User profile section (placeholder until P7), shows "Sign In" prompt initially
+- **About:** App version, credits, feedback link
+
+**Files to create/modify:**
+
+- New: `src/components/settings/SettingsCard.tsx`
+- `src/app/page.tsx` — add `"settings"` to SheetMode, render SettingsCard, state management
+- `src/components/map/MapControls.tsx` — add profile/settings trigger button
+
+---
+
+#### P3 — PWA App
+
+**Vision:** Release as installable PWA on Android and iOS. Native app (especially iOS) is the long-term goal, but no Mac for debugging. PWA is the pragmatic first step — minimal effort for maximum reach.
+
+**Key requirements:**
+
+- **Service worker:** Cache app shell, map tiles, recently viewed stories for offline access
+- **Install prompt:** "Add to Home Screen" flow for Android and iOS Safari
+- **Offline shell:** App loads without internet, shows cached content with "offline" indicator
+- **Background sync:** Queue story regeneration when offline, sync when back online
+- **Push notifications:** Prepare infrastructure for geofence-triggered push (future)
+- **Icon assets:** Generate proper icon-192.png, icon-512.png, apple-touch-icon
+
+**Current state:**
+
+- `manifest.json` exists with correct metadata
+- `layout.tsx` has apple-web-app-capable meta tags
+- `next.config.ts` has `output: "standalone"`
+- **Missing:** No service worker, no PWA plugin, no offline support (~70% ready)
+
+**Approach:** Use `serwist` (modern next-pwa successor) or `next-pwa` for service worker with workbox caching.
+
+**Files to create/modify:**
+
+- `next.config.ts` — add PWA plugin
+- New: `public/sw.js` or auto-generated via plugin
+- `public/manifest.json` — verify and complete
+- Generate icon assets (icon-192.png, icon-512.png, apple-touch-icon.png)
+
+---
+
+#### P4 — Language Support (i18n)
+
+**Vision:** No hardcoded English strings in UI. Users switch language from settings. First new language: Turkish. Adding more languages must be trivial.
+
+**Key requirements:**
+
+- **i18n framework:** `next-intl` (Next.js App Router native) or `react-i18next`
+- **Locale files:** `en.json` and `tr.json` as first two locales
+- **Scope:** All ~40+ hardcoded UI strings (search placeholders, card labels, buttons, loading states, errors, metadata)
+- **Language selector:** In settings card (P2), persisted to localStorage/cookie
+- **Story language:** Separate from UI language — user may want English UI but Turkish stories. Ties into existing content localization (`src/lib/ai/localization.ts`)
+- **LLM prompts:** Story generation adapts to selected story language (full language output, not just locale expressions)
+
+**Current state:**
+
+- Content localization exists for AI stories — 11 locale profiles with local expressions (`localization.ts`)
+- Zero UI i18n — all text hardcoded English across ~15+ component files
+- No i18n library installed
+- Hardcoded strings in: SearchBar, SearchResults, POICard, StoryCard, StoryNotification, page.tsx, layout.tsx, manifest.json
+
+**Files to create/modify:**
+
+- New: `src/i18n/` directory with config and locale JSON files
+- New: `src/i18n/locales/en.json`, `src/i18n/locales/tr.json`
+- ~15 component files — replace string literals with translation keys
+- `src/app/layout.tsx` — i18n provider wrapper
+- `src/app/providers.tsx` — locale provider
+- Settings card — language selector UI
+
+---
+
+#### P5 — Explore Mode — "Your Local Friend" (Key Differentiator)
 
 Explore Mode is Obelisk's signature feature. It transforms the app from a passive story listener into an **active local companion**. When activated, Obelisk takes the initiative — it scans the user's surroundings, discovers interesting places, generates a personalized walking route, and guides the user through it with stories and tips delivered via audio.
 
@@ -261,6 +419,7 @@ Explore Mode is Obelisk's signature feature. It transforms the app from a passiv
 ##### Route Generation Logic
 
 **Input signals for POI selection:**
+
 - User's GPS position (center point)
 - Time of day → morning: cafés, bakeries; afternoon: museums, parks; evening: restaurants, bars, viewpoints
 - Available POIs in radius (Overpass categories: historic, tourism, amenity, leisure)
@@ -269,6 +428,7 @@ Explore Mode is Obelisk's signature feature. It transforms the app from a passiv
 - Walking distance between stops (prefer 100-400m gaps for natural flow)
 
 **LLM Route Planning Prompt (conceptual):**
+
 ```
 You are a local guide creating a walking tour. Given these nearby POIs:
 [list of POIs with categories, distances, and whether they have stories]
@@ -286,6 +446,7 @@ Output: ordered list of POI IDs with brief "why this stop" reasoning
 ```
 
 **Route scoring algorithm:**
+
 - Story availability: +30 (has remark) / +10 (can generate)
 - Category diversity: +20 per unique category in route
 - Distance penalty: -5 per 100m beyond 300m between consecutive stops
@@ -309,6 +470,7 @@ The user puts on headphones and Obelisk becomes a voice in their ear — a frien
 | **Route end** | Wrap-up + stats | *"Nice walk! You covered 1.8km and heard 5 stories. There's a beer garden right here if you want to sit down."* |
 
 **TTS Pipeline:**
+
 1. All audio generated via Piper (self-hosted TTS)
 2. Route start narration generated on-the-fly when route is created
 3. Story audio pre-generated for POIs with existing remarks
@@ -317,6 +479,7 @@ The user puts on headphones and Obelisk becomes a voice in their ear — a frien
 6. User can pause/resume, skip story, or ask for repeat
 
 **Audio Controls (minimal, glanceable):**
+
 ```
 ┌─────────────────────────────────────┐
 │  🎧 Exploring Munich                │
@@ -329,17 +492,20 @@ The user puts on headphones and Obelisk becomes a voice in their ear — a frien
 ##### UI/UX Design
 
 **Explore Mode Button:**
+
 - Prominent on map, glassmorphic, pulsing glow (reuse `discoverButtonVariants`)
 - Label: "Explore" with compass icon
 - Position: bottom-center, above bottom sheet area
 
 **Scanning State:**
+
 - Map zooms out slightly to show scan radius
 - Pulsing ring animation around user location (1-2km)
 - Glass card: *"Scanning your surroundings..."* with shimmer animation
 - POI pins appear one by one as they're discovered (staggered pop animation)
 
 **Route Preview (before starting):**
+
 - Bottom sheet at 50% snap with route summary
 - Map shows: numbered pins connected by dashed walking path
 - Each stop shows: category icon, name, distance from previous, ~reading time
@@ -347,6 +513,7 @@ The user puts on headphones and Obelisk becomes a voice in their ear — a frien
 - User can tap any stop to preview the story card
 
 **Active Exploration:**
+
 - Map follows user (auto-center with heading)
 - Current stop highlighted, upcoming stop pulsing gently
 - Completed stops shown as muted/checked
@@ -356,6 +523,7 @@ The user puts on headphones and Obelisk becomes a voice in their ear — a frien
 - Swipe up on audio bar → full story card
 
 **Route Adaptation:**
+
 - User walks off-route → subtle toast: *"Looks like you're going your own way — want me to adjust?"*
 - User stays at stop >5 min → remaining stops recalculated for time
 - New interesting POI nearby → glassmorphic card: *"Detour? There's something cool 50m away"*
@@ -363,6 +531,7 @@ The user puts on headphones and Obelisk becomes a voice in their ear — a frien
 ##### Technical Architecture
 
 **New types:**
+
 ```typescript
 interface ExploreRoute {
   id: string;
@@ -393,6 +562,7 @@ interface ExploreSession {
 ```
 
 **New hook — `useExploreMode`:**
+
 - Manages full explore session lifecycle
 - Calls `/api/explore/generate-route` to create the route
 - Tracks progress through stops
@@ -401,12 +571,14 @@ interface ExploreSession {
 - Returns: `{ session, startExploring, skipStop, pauseExploring, endExploring }`
 
 **New API endpoints:**
+
 - `POST /api/explore/generate-route` — lat/lng + time context → `ExploreRoute`
   - Internally: Overpass scan + Obelisk DB check + LLM route ordering
 - `POST /api/explore/adapt-route` — current position + remaining stops → updated route
 - `GET /api/explore/transition` — current stop + next stop → transition narration text
 
 **New components:**
+
 - `ExploreButton.tsx` — Map overlay button to start explore mode
 - `ExploreScanning.tsx` — Scanning animation overlay
 - `ExploreRoutePreview.tsx` — Route summary in bottom sheet
@@ -417,6 +589,7 @@ interface ExploreSession {
 **New sheet mode:** `"explore"` added to `SheetMode`
 
 **Reuses existing infrastructure:**
+
 - `useGeofence` — with custom config (30m trigger radius for stops)
 - `/api/pois/discover` — surrounding POI scan via Overpass
 - `/api/remarks/generate-for-poi` — on-demand story generation at stops
@@ -444,6 +617,7 @@ interface ExploreSession {
 ##### Content & Tone — The Local Friend Voice
 
 **Narration principles:**
+
 - **Conversational, not scripted** — *"So this place..."* not *"Welcome to stop number 3"*
 - **Opinionated** — *"Honestly, the terrace is overrated — grab a seat inside"*
 - **Contextual humor** — *"They say Mozart played here. They say that about everywhere in Munich, but this one might be true"*
@@ -452,26 +626,140 @@ interface ExploreSession {
 - **Encouraging** — *"You've got great taste — this is one of my favorite spots"*
 
 **Transition narration between stops:**
+
 - Not just *"Walk 200m north"* but *"Walk up this street — notice the Art Nouveau facades? That's from when this was the artist quarter"*
 - Brief, 10-20 second audio bridges that add value while walking
 - Can reference things visible along the way (buildings, streets, landmarks)
 
 **Route start examples by time of day:**
+
 - Morning: *"Good morning! I found a route that starts with the best coffee in the neighborhood and ends at a park. 5 stops, 30 minutes. Let's go."*
 - Afternoon: *"Nice afternoon for a walk. I've got 6 stops for you — some history, a hidden courtyard, and that bakery everyone talks about. 45 minutes, 1.5km."*
 - Evening: *"Perfect evening stroll ahead. I'm taking you past two historic spots, a great viewpoint for sunset, and we'll finish at a beer garden. Ready?"*
 
 ---
 
-#### Other Phase 2 Features
+#### P6 — Audio Playback
 
-- Audio playback (TTS with Piper) — also powers Explore Mode narration
-- **Search overhaul:** fix query parsing reliability, responsive search results UI, POI card navigation from search results, uniform UX across search and pin-tap flows
-- Settings page: dark mode toggle, language selection (UI + story language), user account management
-- PWA / Mobile App: service worker, manifest, offline shell — or React Native / Expo wrapper
-- Statistics & analytics: usage tracking, story engagement metrics, geofence trigger rates, session duration, popular POIs — required before public launch
-- Public deployment: expose on existing domain after strict security audit (rate limiting, API auth, env vars, CORS, CSP headers, Ollama isolation) and analytics in place
-- User accounts, offline caching, category filter UI
+**Vision:** Audio must feel like a human voice — warm, natural, conversational — like ChatGPT voice mode. Not robotic TTS. Combined with phone gyroscope, Obelisk becomes a spatial audio guide that knows where you're looking and points you to what matters: *"To your left, there's a magnificent church built in the 14th century..."*
+
+**Key requirements:**
+
+- **Natural voice quality:** Piper TTS with high-quality voice models, or evaluate alternatives (Coqui, Bark, cloud TTS APIs) if Piper can't achieve human-like quality
+- **Gyroscope-aware narration:** Phone gyroscope/compass determines user facing direction. Audio adapts with directional cues — immersive spatial guide experience
+- **Device orientation API:** `DeviceOrientationEvent` for compass heading + GPS position → relative bearing to POIs
+- **Directional language generation:** LLM generates direction-aware narration (left, right, behind you, straight ahead) based on user heading vs POI bearing
+- **Audio pipeline:**
+  1. Story text → TTS engine → audio buffer
+  2. Pre-generate for nearby POIs (500m preload tier)
+  3. Stream or play from cache
+  4. Seamless queue between segments (no silence gaps)
+- **Audio controls:** Minimal floating player — play/pause, skip, volume. Glanceable, `glass-floating rounded-xl` style. Doesn't block map
+- **Background playback:** Audio continues when screen locked (critical for walking)
+- **Offline cache:** Pre-generated audio stored for offline playback
+
+**Current state:**
+
+- "Listen" button placeholder in StoryCard (non-functional)
+- Piper in tech stack but not integrated
+- No audio player, no TTS pipeline, no gyroscope hooks
+- Remark schema has `audio_url` column (ready)
+
+**Files to create/modify:**
+
+- New: `src/hooks/useDeviceOrientation.ts` — gyroscope/compass heading
+- New: `src/hooks/useAudioPlayer.ts` — playback state management
+- New: `src/components/audio/AudioPlayer.tsx` — floating mini player
+- New: `src/lib/audio/tts.ts` — TTS generation client (Piper API)
+- New: `src/lib/geo/bearing.ts` — relative direction calculation
+- New: `src/app/api/audio/generate/route.ts` — server-side TTS endpoint
+- `src/lib/ai/storyGenerator.ts` — directional narration prompt variant
+
+---
+
+#### P7 — User Accounts
+
+**Vision:** Enable personalization, saved preferences, bookmarks, and eventually user-generated content. Start simple — auth and basic profile. Optimize for minimal data transfer. Respect privacy.
+
+**Key requirements:**
+
+- **Authentication:** Email/password + OAuth (Google, Apple Sign-In)
+- **Profile:** Display name, avatar, language preferences, interest categories
+- **Saved content:** Bookmarked stories, visited POI history
+- **Preferences sync:** Language, dark mode, notifications synced across devices
+- **Internet optimization:** Minimize API calls, efficient data sync, delta updates
+- **Privacy-first:** Minimal data collection, clear policy, user data export/delete
+
+**Database additions:**
+
+- `users` table (id, email, display_name, avatar_url, preferences JSONB, created_at)
+- `bookmarks` table (user_id, remark_id, created_at)
+- `visit_history` table (user_id, poi_id, visited_at)
+
+---
+
+#### P8 — Statistics & Analytics
+
+**Vision:** We are not people trackers. But to monetize and improve the product, we need data. Privacy-respecting analytics that enable revenue strategies like promoted results and interest-based recommendations — not invasive surveillance. Walk the fine line carefully and don't fall to the dark side.
+
+**What to collect (anonymized/aggregated):**
+
+- Story engagement: read/listen rates, duration
+- Search patterns: anonymized queries, result click-through
+- Geofence triggers: active areas, popular walking paths
+- Session metrics: duration, stories per session, feature usage
+- Category preferences: aggregate interest distribution
+
+**What NOT to collect:**
+
+- Precise location history trails
+- Personal identification without consent
+- Cross-app tracking
+- Third-party data sharing without explicit opt-in
+
+**Monetization foundation:**
+
+- Interest-based result ordering (promote relevant businesses, not highest bidder)
+- Aggregate area popularity data (valuable for tourism boards, city planning)
+- Anonymous usage patterns for product improvement
+
+**Privacy safeguards:**
+
+- Analytics opt-out in settings
+- Data anonymization pipeline (no raw user→location mapping)
+- GDPR-compliant data handling
+- Transparent privacy policy
+
+**Implementation:** Self-hosted analytics (Plausible, Umami, or custom) — no Google Analytics
+
+---
+
+#### P9 — Public Deployment
+
+**Vision:** Before going public, the app must be hardened. We protect our infrastructure, our users' data, and our rights. No shortcuts on security.
+
+**Security audit checklist:**
+
+- Rate limiting on all API endpoints (especially search, story generation)
+- API authentication (JWT or session-based)
+- Environment variable audit (no secrets in client bundle)
+- CORS policy (restrict to known origins)
+- CSP headers (Content Security Policy)
+- Ollama isolation (not exposed to public internet, only accessible from app server)
+- Input sanitization on all user inputs
+- SQL injection prevention (Drizzle ORM parameterized queries — verify)
+- XSS prevention (React default escaping — verify edge cases)
+
+**Infrastructure:**
+
+- HTTPS everywhere
+- DDoS protection (Cloudflare or similar)
+- Automated backups (PostgreSQL)
+- Health monitoring and alerting
+- Log aggregation (no sensitive data in logs)
+
+**Prerequisites:** User accounts (P7) and analytics (P8) in place before public launch
+**Deploy target:** Existing domain, behind reverse proxy with security layers
 
 ---
 
@@ -526,16 +814,19 @@ CREATE INDEX idx_remarks_poi ON remarks(poi_id);
 ## Design System (Glassmorphism)
 
 **Light Mode:**
+
 - Glass: `rgba(255,255,255,0.72)` + `backdrop-blur(20px)`
 - Border: `1px solid rgba(255,255,255,0.5)`
 - Radius: `16-24px`
 - Shadow: `0 8px 32px rgba(0,0,0,0.08)`
 
 **Dark Mode:**
+
 - Glass: `rgba(30,30,30,0.75)` + `backdrop-blur(20px)`
 - Background: `#000000` (true black)
 
 **Colors:**
+
 - Coral (Primary): `#FF6B4A`
 - User Location: `#5AC8FA`
 - History: `#FF6B4A`, Food: `#FF9F9F`, Art: `#BF5AF2`
@@ -576,11 +867,13 @@ Cooldown Rules:
 ## Verification Checklist
 
 **Docker Setup:**
+
 - [x] `make setup` completes without errors
 - [x] `docker compose ps` shows all 3 services running
-- [x] App accessible at http://localhost:3000
+- [x] App accessible at <http://localhost:3000>
 
 **Functionality:**
+
 - [x] Map loads with Munich centered (Mapbox GL JS with streets/dark styles)
 - [x] 408 POIs seeded, 100 stories generated with category colors
 - [x] Tap pin -> story card appears in bottom sheet (glassmorphism UI)
@@ -590,10 +883,12 @@ Cooldown Rules:
 - [ ] Mobile responsive -> works on phone viewport (not yet tested)
 
 **Code Quality:**
+
 - [ ] `make lint` passes with no errors
 - [ ] `make typecheck` passes with no errors
 
 **Verified Features (2026-01-17):**
+
 - Interactive Map: Mapbox GL JS with auto light/dark mode switching, loads < 2s
 - Story Cards: "Tiny Treasures, Big Stories" (Spielzeugmuseum), "Shadows & Sparkling Secrets" (GOP Theater)
 - Category colors: Coral (architecture), Purple (art), Blue (culture)
@@ -603,5 +898,6 @@ Cooldown Rules:
 - Listen button ready for Phase 2 TTS
 
 **Known Issues:**
+
 - Search: query parsing unreliable, results UI not responsive, POI card navigation from search broken
 - Mobile responsive: not yet tested on phone viewport

@@ -111,9 +111,23 @@ export interface SearchResponse {
   };
 }
 
+export interface ViewportBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+export interface ViewportContext {
+  center: SearchLocation;
+  bounds: ViewportBounds;
+  zoom: number;
+}
+
 export interface SearchRequest {
   query: string;
   location: SearchLocation;
+  viewport?: ViewportContext;
   radius?: number;
   limit?: number;
 }

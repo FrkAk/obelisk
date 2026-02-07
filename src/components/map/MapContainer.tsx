@@ -8,11 +8,13 @@ import { ClusterPin } from "./ClusterPin";
 import { UserLocationMarker } from "./UserLocationMarker";
 import type { Remark, Poi, GeoLocation, CategorySlug } from "@/types";
 import { CATEGORY_COLORS } from "@/types";
+import type { ViewportBounds } from "@/lib/search/types";
 
 interface MapContainerProps {
   remarks: (Remark & { poi: Poi })[];
   onPinClick: (remark: Remark & { poi: Poi }) => void;
   onViewportChange?: (center: { latitude: number; longitude: number }) => void;
+  onViewportUpdate?: (update: { center: { latitude: number; longitude: number }; bounds: ViewportBounds; zoom: number }) => void;
   onPoiClick?: (poi: { name: string; latitude: number; longitude: number; category?: string }) => void;
   selectedRemarkId?: string;
   isLoading: boolean;
@@ -30,6 +32,7 @@ export function MapContainer({
   remarks,
   onPinClick,
   onViewportChange,
+  onViewportUpdate,
   onPoiClick,
   selectedRemarkId,
   isLoading,
@@ -41,6 +44,7 @@ export function MapContainer({
   });
 
   const superclusterRef = useRef<Supercluster<RemarkProperties> | null>(null);
+  const lastCenterRef = useRef<{ latitude: number; longitude: number } | null>(null);
 
   const points: GeoJSON.Feature<GeoJSON.Point, RemarkProperties>[] = useMemo(
     () =>
@@ -95,13 +99,28 @@ export function MapContainer({
     [supercluster]
   );
 
+  const handleMoveEnd = useCallback(
+    (center: { latitude: number; longitude: number }) => {
+      lastCenterRef.current = center;
+      onViewportChange?.(center);
+    },
+    [onViewportChange]
+  );
+
   const handleViewStateChange = useCallback(
     (state: { zoom: number; bounds: MapBounds }) => {
       setViewState(state);
+      if (onViewportUpdate && lastCenterRef.current) {
+        const [west, south, east, north] = state.bounds;
+        onViewportUpdate({
+          center: lastCenterRef.current,
+          bounds: { west, south, east, north },
+          zoom: state.zoom,
+        });
+      }
     },
-    []
+    [onViewportUpdate]
   );
-
 
   const getClusterExpansionZoom = useCallback(
     (clusterId: number): number => {
@@ -127,7 +146,7 @@ export function MapContainer({
       <MapView
         initialCenter={initialCenter}
         userLocation={userLocation}
-        onMoveEnd={onViewportChange}
+        onMoveEnd={handleMoveEnd}
         onViewStateChange={handleViewStateChange}
         onPoiClick={onPoiClick}
       >

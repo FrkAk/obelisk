@@ -2,33 +2,23 @@ import { generateText } from "@/lib/ai/ollama";
 import type { ParsedIntent, SearchQueryType, SearchFilters } from "./types";
 import type { CategorySlug } from "@/types";
 
-const QUERY_PARSE_PROMPT = `You are a search query parser for a location-based discovery app. Parse the user's search query into structured JSON.
+const QUERY_PARSE_PROMPT = `You are a search query parser for a Munich discovery app. Parse the user's query into structured JSON.
 
-Categories available: history, food, art, nature, architecture, hidden, views, culture
+Categories: history, food, art, nature, architecture, hidden, views, culture
+Types: "simple", "contextual", "complex", "discovery", "route"
+Filters: outdoor (bool), budget (number), partySize (number), openNow (bool), wifi (bool), quiet (bool)
 
-Parse the query and extract:
-- type: "simple" (basic search like "coffee"), "contextual" (descriptive like "quiet place"), "complex" (multiple requirements), "discovery" (random/surprise me), "route" (path-based)
-- category: the most relevant category from the list above, or null if none applies
-- filters: object with boolean/number values for: outdoor, budget (number in euros), partySize (number), openNow, wifi, quiet
-- keywords: array of key search terms
-
-Respond ONLY with valid JSON, no explanation.
+Output ONLY a JSON object on a single line.
 
 Examples:
-Query: "coffee nearby"
-{"type":"simple","category":"food","filters":{},"keywords":["coffee","cafe"]}
+Query: "quiet café with wifi"
+{"type":"contextual","category":"food","filters":{"wifi":true,"quiet":true},"keywords":["cafe","coffee"]}
 
-Query: "quiet café with wifi to work"
-{"type":"contextual","category":"food","filters":{"wifi":true,"quiet":true},"keywords":["cafe","coffee","work"]}
-
-Query: "lunch for 5, outdoor seating, under €15"
+Query: "lunch for 5, outdoor, under €15"
 {"type":"complex","category":"food","filters":{"outdoor":true,"budget":15,"partySize":5},"keywords":["lunch","restaurant"]}
 
 Query: "surprise me with history"
 {"type":"discovery","category":"history","filters":{},"keywords":["history"]}
-
-Query: "what's on my way to the station"
-{"type":"route","category":null,"filters":{},"keywords":["station"]}
 
 Now parse this query:
 Query: "{{QUERY}}"`;
@@ -61,32 +51,64 @@ export async function parseQueryIntent(query: string): Promise<ParsedIntent> {
   try {
     const prompt = QUERY_PARSE_PROMPT.replace("{{QUERY}}", query);
     const response = await generateText(prompt, undefined, {
-      temperature: 0.3,
-      num_predict: 200,
+      temperature: 0.2,
+      num_predict: 150,
     });
 
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    const extracted = extractJsonFromResponse(response);
+    if (!extracted) {
       return fallbackParse(query);
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    return validateAndNormalize(parsed);
+    return validateAndNormalize(extracted);
   } catch {
     return fallbackParse(query);
   }
 }
 
+/**
+ * Extracts a JSON object from a potentially noisy LLM response.
+ *
+ * Args:
+ *     response: Raw text response from the LLM.
+ *
+ * Returns:
+ *     Parsed JSON object, or null if extraction fails.
+ */
+function extractJsonFromResponse(response: string): Record<string, unknown> | null {
+  const trimmed = response.trim();
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {}
+
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    try {
+      return JSON.parse(fenceMatch[1].trim());
+    } catch {}
+  }
+
+  const objectMatch = trimmed.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
+  if (objectMatch) {
+    try {
+      return JSON.parse(objectMatch[0]);
+    } catch {}
+  }
+
+  return null;
+}
+
 function detectSimplePatterns(query: string): ParsedIntent | null {
   const lowerQuery = query.toLowerCase().trim();
 
-  const foodPatterns = /\b(coffee|cafe|café|restaurant|food|eat|eating|lunch|dinner|breakfast|pizza|burger|sushi|bar|pub|beer|drink|tea|bakery|bistro|snack|hot chocolate|espresso|latte|cappuccino)\b/g;
-  const historyPatterns = /\b(history|historic|museum|monument|memorial|castle|old|ancient)\b/g;
-  const artPatterns = /\b(art|gallery|museum|painting|sculpture|exhibition)\b/g;
-  const naturePatterns = /\b(park|garden|nature|tree|green|outdoor|walk|forest)\b/g;
-  const viewsPatterns = /\b(view|viewpoint|lookout|panorama|scenic)\b/g;
-  const architecturePatterns = /\b(building|architecture|church|cathedral|tower|palace)\b/g;
-  const culturePatterns = /\b(theatre|theater|cinema|concert|music|show|performance)\b/g;
+  const foodPatterns = /\b(coffee|cafe|café|restaurant|food|eat|eating|lunch|dinner|breakfast|pizza|burger|sushi|bar|pub|beer|drink|tea|bakery|bistro|snack|hot chocolate|espresso|latte|cappuccino|kaffee|bier|essen|mittagessen|frühstück|abendessen|bäckerei|wirtshaus|brauhaus|biergarten|konditorei)\b/g;
+  const historyPatterns = /\b(history|historic|museum|monument|memorial|castle|old|ancient|geschichte|historisch|denkmal|schloss|burg)\b/g;
+  const artPatterns = /\b(art|gallery|museum|painting|sculpture|exhibition|kunst|galerie|ausstellung|gemälde)\b/g;
+  const naturePatterns = /\b(park|garden|nature|tree|green|outdoor|walk|forest|garten|natur|wald|wiese|fluss|isar)\b/g;
+  const viewsPatterns = /\b(view|viewpoint|lookout|panorama|scenic|aussicht|aussichtspunkt)\b/g;
+  const architecturePatterns = /\b(building|architecture|church|cathedral|tower|palace|gebäude|architektur|kirche|dom|turm|rathaus)\b/g;
+  const culturePatterns = /\b(theatre|theater|cinema|concert|music|show|performance|kultur|kino|konzert|aufführung|oper|musik)\b/g;
 
   const discoveryPatterns = /\b(surprise|random|anything|discover|explore)\b/;
   const routePatterns = /\b(way|route|path|between|along|on my way)\b/;
@@ -140,11 +162,11 @@ function detectSimplePatterns(query: string): ParsedIntent | null {
     filters.wifi = true;
     type = "contextual";
   }
-  if (/\b(outdoor|outside|terrace|patio)\b/.test(lowerQuery)) {
+  if (/\b(outdoor|outside|terrace|patio|draußen)\b/.test(lowerQuery)) {
     filters.outdoor = true;
     type = "contextual";
   }
-  if (/\b(quiet|peaceful|calm)\b/.test(lowerQuery)) {
+  if (/\b(quiet|peaceful|calm|ruhig|leise|gemütlich)\b/.test(lowerQuery)) {
     filters.quiet = true;
     type = "contextual";
   }

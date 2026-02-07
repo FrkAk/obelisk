@@ -1,45 +1,40 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { POICard } from "@/components/poi/POICard";
-import { GlassCard } from "@/components/ui";
-import { springTransitions } from "@/lib/ui/animations";
+import { GlassCard, GlassPill } from "@/components/ui";
+import { springTransitions, searchResultVariants } from "@/lib/ui/animations";
+import { CATEGORY_COLORS } from "@/types";
+import type { CategorySlug } from "@/types";
 import type { SearchResult, ObeliskResult, ExternalResult } from "@/lib/search/types";
 
 interface SearchResultsProps {
   results: SearchResult[];
   conversationalResponse?: string;
   isLoading?: boolean;
-  onNavigate?: (result: SearchResult) => void;
-  onSelectStory?: (result: ObeliskResult) => void;
-  onGenerateStory?: (result: ExternalResult) => void;
+  onResultTap: (result: SearchResult) => void;
   generatingPoiId?: string | null;
 }
 
 /**
- * Displays unified search results with conversational response.
+ * Displays unified search results as a single sorted card list.
  *
  * Args:
- *     results: Array of search results (Obelisk remarks + external POIs).
+ *     results: Pre-sorted array of search results (Obelisk remarks + external POIs).
  *     conversationalResponse: AI-generated response about the results.
  *     isLoading: Whether results are loading.
- *     onNavigate: Callback when navigation is requested for a result.
- *     onSelectStory: Callback when an Obelisk story is selected.
- *     onGenerateStory: Callback when story generation is requested for a POI.
- *     generatingPoiId: ID of POI currently being generated, for loading state.
+ *     onResultTap: Callback when any result card is tapped.
+ *     generatingPoiId: ID of POI currently generating a story, for loading state.
  */
 export function SearchResults({
   results,
   conversationalResponse,
   isLoading = false,
-  onNavigate,
-  onSelectStory,
-  onGenerateStory,
+  onResultTap,
   generatingPoiId,
 }: SearchResultsProps) {
   if (isLoading) {
     return (
-      <div className="space-y-4 py-6">
+      <div className="space-y-3 py-6">
         <LoadingSkeleton />
         <LoadingSkeleton />
         <LoadingSkeleton />
@@ -66,15 +61,8 @@ export function SearchResults({
     );
   }
 
-  const obeliskResults = results.filter(
-    (r): r is ObeliskResult => r.type === "remark"
-  );
-  const externalResults = results.filter(
-    (r): r is ExternalResult => r.type === "external"
-  );
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {conversationalResponse && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -94,144 +82,210 @@ export function SearchResults({
         </motion.div>
       )}
 
-      {obeliskResults.length > 0 && (
-        <section>
-          <h3 className="text-[14px] font-semibold text-[var(--foreground-secondary)] uppercase tracking-wide mb-3">
-            Stories ({obeliskResults.length})
-          </h3>
-          <div className="space-y-4">
-            <AnimatePresence mode="popLayout">
-              {obeliskResults.map((result, index) => (
-                <motion.div
-                  key={result.remark.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ ...springTransitions.smooth, delay: index * 0.05 }}
-                >
-                  <GlassCard
-                    padding="md"
-                    radius="xl"
-                    onClick={() => onSelectStory?.(result)}
-                    interactive
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <h4
-                            className="font-semibold text-[var(--foreground)] leading-tight mb-1"
-                            style={{ fontSize: "17px" }}
-                          >
-                            {result.remark.title}
-                          </h4>
-                          <p className="text-[14px] text-[var(--foreground-secondary)]">
-                            {result.remark.poi.name}
-                          </p>
-                        </div>
-                        {result.remark.poi.imageUrl && (
-                          <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0">
-                            <img
-                              src={result.remark.poi.imageUrl}
-                              alt={result.remark.poi.name}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      {result.remark.teaser && (
-                        <p className="text-[14px] text-[var(--foreground-secondary)] line-clamp-2">
-                          {result.remark.teaser}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-3 text-[13px] text-[var(--foreground-secondary)]">
-                        <span className="flex items-center gap-1">
-                          <svg
-                            className="w-4 h-4 opacity-60"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                          >
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
-                          </svg>
-                          {formatDuration(result.remark.durationSeconds)}
-                        </span>
-                        {result.distance && (
-                          <span>{formatDistance(result.distance)}</span>
-                        )}
-                        {result.remark.poi.category && (
-                          <span
-                            className="px-2 py-0.5 rounded-full text-[12px] font-medium"
-                            style={{
-                              backgroundColor: `${result.remark.poi.category.color}20`,
-                              color: result.remark.poi.category.color,
-                            }}
-                          >
-                            {result.remark.poi.category.name}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </GlassCard>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </section>
-      )}
-
-      {externalResults.length > 0 && (
-        <section>
-          <h3 className="text-[14px] font-semibold text-[var(--foreground-secondary)] uppercase tracking-wide mb-3">
-            Places ({externalResults.length})
-          </h3>
-          <div className="space-y-4">
-            <AnimatePresence mode="popLayout">
-              {externalResults.map((result, index) => (
-                <motion.div
-                  key={result.poi.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{
-                    ...springTransitions.smooth,
-                    delay: (obeliskResults.length + index) * 0.05,
-                  }}
-                >
-                  <POICard
-                    poi={result.poi}
-                    remark={result.nearbyRemark}
-                    onNavigate={() => onNavigate?.(result)}
-                    onGenerateStory={
-                      !result.nearbyRemark && onGenerateStory
-                        ? () => onGenerateStory(result)
-                        : undefined
-                    }
-                    isGenerating={generatingPoiId === result.poi.id}
-                    autoGenerate={false}
-                  />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </section>
-      )}
+      <div className="space-y-3">
+        <AnimatePresence mode="popLayout">
+          {results.map((result, index) => (
+            <motion.div
+              key={getResultKey(result)}
+              custom={index}
+              variants={searchResultVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
+              <SearchResultCard
+                result={result}
+                onTap={() => onResultTap(result)}
+                isGenerating={
+                  result.type === "external" &&
+                  generatingPoiId === result.poi.id
+                }
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
     </div>
+  );
+}
+
+interface SearchResultCardProps {
+  result: SearchResult;
+  onTap: () => void;
+  isGenerating: boolean;
+}
+
+/**
+ * Single search result card with category icon, metadata, and badges.
+ *
+ * Args:
+ *     result: The search result to display.
+ *     onTap: Callback when the card is tapped.
+ *     isGenerating: Whether a story is currently being generated for this result.
+ */
+function SearchResultCard({ result, onTap, isGenerating }: SearchResultCardProps) {
+  const categoryInfo = getCategoryInfo(result);
+  const title = getTitle(result);
+  const subtitle = getSubtitle(result);
+  const teaser = getTeaser(result);
+  const thumbnail = getThumbnail(result);
+  const isObelisk = result.type === "remark";
+
+  return (
+    <GlassCard padding="md" radius="xl" onClick={onTap} interactive>
+      <div className="space-y-3">
+        <div className="flex items-start gap-3">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{
+              background: categoryInfo.color
+                ? `linear-gradient(135deg, ${categoryInfo.color}30, ${categoryInfo.color}15)`
+                : "var(--glass-bg)",
+            }}
+          >
+            <span className="text-lg">{categoryInfo.icon}</span>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <h4 className="text-[17px] font-semibold text-[var(--foreground)] leading-tight mb-0.5 truncate">
+              {title}
+            </h4>
+            <p className="text-[14px] text-[var(--foreground-secondary)] truncate">
+              {subtitle}
+            </p>
+          </div>
+
+          {thumbnail && (
+            <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0">
+              <img
+                src={thumbnail}
+                alt={title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
+        </div>
+
+        {teaser && (
+          <p className="text-[14px] text-[var(--foreground-secondary)] line-clamp-2 leading-relaxed">
+            {teaser}
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {categoryInfo.name && (
+            <GlassPill size="sm" color={categoryInfo.color}>
+              {categoryInfo.name}
+            </GlassPill>
+          )}
+
+          {result.distance != null && (
+            <GlassPill size="sm">
+              {formatDistance(result.distance)}
+            </GlassPill>
+          )}
+
+          {isObelisk && (
+            <>
+              <GlassPill size="sm">
+                {formatDuration(result.remark.durationSeconds)}
+              </GlassPill>
+              <GlassPill size="sm" color="#FF6B4A">
+                Story
+              </GlassPill>
+            </>
+          )}
+
+          {isGenerating && (
+            <GlassPill size="sm" color="#FF6B4A">
+              Generating...
+            </GlassPill>
+          )}
+        </div>
+      </div>
+    </GlassCard>
   );
 }
 
 function LoadingSkeleton() {
   return (
-    <div className="glass rounded-[20px] p-4 space-y-3 animate-pulse">
-      <div className="flex justify-between">
-        <div className="h-5 w-48 bg-gray-200 dark:bg-gray-700 rounded" />
-        <div className="h-12 w-12 bg-gray-200 dark:bg-gray-700 rounded-xl" />
+    <GlassCard padding="md" radius="xl" variant="thin">
+      <div className="space-y-3 animate-pulse">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[var(--glass-bg)]" />
+          <div className="flex-1 space-y-2">
+            <div className="h-5 w-48 bg-[var(--glass-bg)] rounded" />
+            <div className="h-4 w-32 bg-[var(--glass-bg)] rounded" />
+          </div>
+          <div className="w-14 h-14 rounded-xl bg-[var(--glass-bg)]" />
+        </div>
+        <div className="h-4 w-full bg-[var(--glass-bg)] rounded" />
+        <div className="h-4 w-3/4 bg-[var(--glass-bg)] rounded" />
       </div>
-      <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
-      <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded" />
-      <div className="h-4 w-3/4 bg-gray-200 dark:bg-gray-700 rounded" />
-    </div>
+    </GlassCard>
   );
+}
+
+function getResultKey(result: SearchResult): string {
+  if (result.type === "remark") return result.remark.id;
+  return result.poi.id;
+}
+
+interface CategoryInfo {
+  name: string;
+  icon: string;
+  color: string;
+}
+
+function getCategoryInfo(result: SearchResult): CategoryInfo {
+  if (result.type === "remark" && result.remark.poi?.category) {
+    const cat = result.remark.poi.category;
+    return { name: cat.name, icon: cat.icon, color: cat.color };
+  }
+
+  if (result.type === "external") {
+    const slug = result.poi.category as CategorySlug;
+    const color = CATEGORY_COLORS[slug];
+    if (color) {
+      return { name: slug, icon: getCategoryIcon(slug), color };
+    }
+  }
+
+  return { name: "", icon: "📍", color: "" };
+}
+
+function getCategoryIcon(slug: CategorySlug): string {
+  const icons: Record<CategorySlug, string> = {
+    history: "🏛️",
+    food: "🍴",
+    art: "🎨",
+    nature: "🌿",
+    architecture: "🏗️",
+    hidden: "💎",
+    views: "🌄",
+    culture: "🎭",
+  };
+  return icons[slug] ?? "📍";
+}
+
+function getTitle(result: SearchResult): string {
+  if (result.type === "remark") return result.remark.title;
+  return result.poi.name;
+}
+
+function getSubtitle(result: SearchResult): string {
+  if (result.type === "remark") return result.remark.poi?.name ?? "";
+  return result.poi.address ?? result.poi.category;
+}
+
+function getTeaser(result: SearchResult): string | null {
+  if (result.type === "remark") return result.remark.teaser;
+  return null;
+}
+
+function getThumbnail(result: SearchResult): string | null {
+  if (result.type === "remark") return result.remark.poi?.imageUrl ?? null;
+  return result.poi.imageUrl ?? null;
 }
 
 function formatDuration(seconds: number): string {

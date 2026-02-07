@@ -5,12 +5,14 @@ import { parseQueryIntent } from "@/lib/search/queryParser";
 import { searchNominatim } from "@/lib/search/nominatim";
 import { enrichPOIs, searchByAmenityOverpass } from "@/lib/search/overpass";
 import { generateText } from "@/lib/ai/ollama";
+import { haversineDistance } from "@/lib/geo/distance";
 import type {
   SearchResult,
   ObeliskResult,
   ExternalResult,
   ParsedIntent,
   ExternalPOI,
+  ViewportBounds,
 } from "@/lib/search/types";
 import type { Remark, Poi, Category } from "@/types";
 
@@ -20,44 +22,65 @@ const requestSchema = z.object({
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
   }),
+  viewport: z.object({
+    center: z.object({ latitude: z.number(), longitude: z.number() }),
+    bounds: z.object({ west: z.number(), south: z.number(), east: z.number(), north: z.number() }),
+    zoom: z.number(),
+  }).optional(),
   radius: z.number().min(100).max(5000).default(1000),
   limit: z.number().min(1).max(50).default(20),
 });
 
 type RemarkWithPoi = Remark & { poi: Poi & { category?: Category } };
 
-function calculateDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371e3;
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+/**
+ * Derives search center and radius from viewport or falls back to GPS location.
+ *
+ * Args:
+ *     location: GPS-based fallback location.
+ *     viewport: Optional viewport context from the map.
+ *     defaultRadius: Fallback radius in meters.
+ *
+ * Returns:
+ *     Search center, effective radius, zoom level, and optional viewport bounds.
+ */
+function computeSearchLocation(
+  location: { latitude: number; longitude: number },
+  viewport?: { center: { latitude: number; longitude: number }; bounds: ViewportBounds; zoom: number },
+  defaultRadius: number = 1000
+): { center: { latitude: number; longitude: number }; radius: number; zoom: number; bounds?: ViewportBounds } {
+  if (!viewport) {
+    return { center: location, radius: defaultRadius, zoom: 14 };
+  }
 
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const diagonal = haversineDistance(
+    viewport.bounds.south, viewport.bounds.west,
+    viewport.bounds.north, viewport.bounds.east
+  );
+  const radius = Math.min(diagonal / 2, 5000);
 
-  return R * c;
+  return {
+    center: viewport.center,
+    radius,
+    zoom: viewport.zoom,
+    bounds: viewport.bounds,
+  };
 }
 
 function scoreObeliskResult(
   remark: RemarkWithPoi,
   intent: ParsedIntent,
-  distance: number
+  distance: number,
+  zoom: number
 ): number {
-  let score = 100;
+  let score = 70;
 
-  const distancePenalty = Math.min(distance / 100, 20);
+  const zoomFactor = Math.max(1, zoom - 10) / 8;
+  const distancePenalty = Math.min(distance / 100, 20) * zoomFactor;
   score -= distancePenalty;
 
   if (intent.category && remark.poi.category?.slug === intent.category) {
-    score += 30;
+    score += 25;
   }
 
   if (intent.keywords.length > 0) {
@@ -77,19 +100,21 @@ function scoreObeliskResult(
     score += matchingKeywords.length * 10;
   }
 
-  score += 15;
+  score += 10;
 
-  return Math.max(0, score);
+  return Math.min(100, Math.max(0, score));
 }
 
 function scoreExternalResult(
   poi: ExternalPOI,
   intent: ParsedIntent,
-  distance: number
+  distance: number,
+  zoom: number
 ): number {
-  let score = 50;
+  let score = 60;
 
-  const distancePenalty = Math.min(distance / 100, 20);
+  const zoomFactor = Math.max(1, zoom - 10) / 8;
+  const distancePenalty = Math.min(distance / 100, 20) * zoomFactor;
   score -= distancePenalty;
 
   if (intent.category && poi.category === intent.category) {
@@ -112,7 +137,7 @@ function scoreExternalResult(
     score += 2;
   }
 
-  return Math.max(0, score);
+  return Math.min(100, Math.max(0, score));
 }
 
 function findNearbyRemark(
@@ -122,7 +147,7 @@ function findNearbyRemark(
   const maxDistance = 100;
 
   return remarks.find((remark) => {
-    const distance = calculateDistance(
+    const distance = haversineDistance(
       poi.latitude,
       poi.longitude,
       remark.poi.latitude,
@@ -189,7 +214,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { query, location, radius, limit } = parseResult.data;
+    const { query, location, viewport, radius, limit } = parseResult.data;
+
+    const searchCtx = computeSearchLocation(location, viewport, radius);
 
     const parseStart = Date.now();
     const intent = await parseQueryIntent(query);
@@ -197,16 +224,16 @@ export async function POST(request: NextRequest) {
 
     if (intent.type === "discovery") {
       const randomRemark = await getRandomRemark(
-        location.latitude,
-        location.longitude,
-        radius * 2,
+        searchCtx.center.latitude,
+        searchCtx.center.longitude,
+        searchCtx.radius * 2,
         intent.category
       );
 
       if (randomRemark) {
-        const distance = calculateDistance(
-          location.latitude,
-          location.longitude,
+        const distance = haversineDistance(
+          searchCtx.center.latitude,
+          searchCtx.center.longitude,
           randomRemark.poi.latitude,
           randomRemark.poi.longitude
         );
@@ -234,9 +261,9 @@ export async function POST(request: NextRequest) {
 
     const obeliskStart = Date.now();
     const remarksRaw = await searchRemarks({
-      latitude: location.latitude,
-      longitude: location.longitude,
-      radiusMeters: radius,
+      latitude: searchCtx.center.latitude,
+      longitude: searchCtx.center.longitude,
+      radiusMeters: searchCtx.radius,
       category: intent.category,
       keywords: intent.keywords,
       limit,
@@ -254,9 +281,9 @@ export async function POST(request: NextRequest) {
           intent.category === "food"
             ? ["cafe", "restaurant"]
             : ["cafe", "restaurant", "bar"];
-        externalPois = await searchByAmenityOverpass(amenityTypes, location, radius);
+        externalPois = await searchByAmenityOverpass(amenityTypes, searchCtx.center, searchCtx.radius);
       } else {
-        externalPois = await searchNominatim(intent, location, radius, limit);
+        externalPois = await searchNominatim(intent, searchCtx.center, searchCtx.radius, limit, searchCtx.bounds);
       }
 
       if (externalPois.length > 0 && externalPois.length <= 10) {
@@ -268,9 +295,9 @@ export async function POST(request: NextRequest) {
     externalTime = Date.now() - externalStart;
 
     const obeliskResults: ObeliskResult[] = remarks.map((remark) => {
-      const distance = calculateDistance(
-        location.latitude,
-        location.longitude,
+      const distance = haversineDistance(
+        searchCtx.center.latitude,
+        searchCtx.center.longitude,
         remark.poi.latitude,
         remark.poi.longitude
       );
@@ -278,14 +305,14 @@ export async function POST(request: NextRequest) {
         type: "remark" as const,
         remark,
         distance,
-        score: scoreObeliskResult(remark, intent, distance),
+        score: scoreObeliskResult(remark, intent, distance, searchCtx.zoom),
       };
     });
 
     const externalResults: ExternalResult[] = externalPois.map((poi) => {
-      const distance = poi.distance ?? calculateDistance(
-        location.latitude,
-        location.longitude,
+      const distance = poi.distance ?? haversineDistance(
+        searchCtx.center.latitude,
+        searchCtx.center.longitude,
         poi.latitude,
         poi.longitude
       );
@@ -294,7 +321,7 @@ export async function POST(request: NextRequest) {
         poi,
         nearbyRemark: findNearbyRemark(poi, remarks),
         distance,
-        score: scoreExternalResult(poi, intent, distance),
+        score: scoreExternalResult(poi, intent, distance, searchCtx.zoom),
       };
     });
 

@@ -11,7 +11,8 @@ import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
 import { useSearch } from "@/hooks/useSearch";
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Remark, Poi } from "@/types";
-import type { ObeliskResult, SearchResult, ExternalResult, ExternalPOI } from "@/lib/search/types";
+import type { SearchResult, ExternalPOI, ViewportBounds } from "@/lib/search/types";
+import { haversineDistance } from "@/lib/geo/distance";
 
 type SheetMode = "story" | "search" | "poi" | null;
 
@@ -38,7 +39,11 @@ export default function Home() {
   const [selectedPoi, setSelectedPoi] = useState<ExternalPOI | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
-  const [viewportCenter, setViewportCenter] = useState<ViewportCenter | null>(null);
+  const [viewportState, setViewportState] = useState<{
+    center: ViewportCenter | null;
+    bounds: ViewportBounds | null;
+    zoom: number;
+  }>({ center: null, bounds: null, zoom: 14 });
   const [generatingPoiId, setGeneratingPoiId] = useState<string | null>(null);
   const [isLookingUpPoi, setIsLookingUpPoi] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -52,7 +57,7 @@ export default function Home() {
   const viewportDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const { remarks, isLoading, location, hasRealLocation } = useNearbyRemarks({
-    externalLocation: viewportCenter,
+    externalLocation: viewportState.center,
   });
   const { triggeredRemark, dismissNotification } = useGeofence(remarks);
   const {
@@ -144,8 +149,19 @@ export default function Home() {
         clearTimeout(viewportDebounceRef.current);
       }
       viewportDebounceRef.current = setTimeout(() => {
-        setViewportCenter(center);
+        setViewportState((prev) => ({ ...prev, center }));
       }, 300);
+    },
+    []
+  );
+
+  const handleViewportUpdate = useCallback(
+    (update: { center: { latitude: number; longitude: number }; bounds: ViewportBounds; zoom: number }) => {
+      setViewportState({
+        center: update.center,
+        bounds: update.bounds,
+        zoom: update.zoom,
+      });
     },
     []
   );
@@ -198,13 +214,18 @@ export default function Home() {
 
   const handleSearch = useCallback(
     (query: string) => {
-      const searchLocation = viewportCenter ?? (location ? { latitude: location.latitude, longitude: location.longitude } : null);
+      const searchLocation = viewportState.center ?? (location ? { latitude: location.latitude, longitude: location.longitude } : null);
       if (!searchLocation) return;
-      search(query, searchLocation);
+      const viewport = viewportState.bounds ? {
+        center: searchLocation,
+        bounds: viewportState.bounds,
+        zoom: viewportState.zoom,
+      } : undefined;
+      search(query, searchLocation, undefined, viewport);
       setSheetMode("search");
       setSheetOpen(true);
     },
-    [viewportCenter, location, search]
+    [viewportState, location, search]
   );
 
   const handleSearchClear = useCallback(() => {
@@ -215,44 +236,15 @@ export default function Home() {
     }
   }, [clearSearch, sheetMode]);
 
-  const handleSelectStory = useCallback((result: ObeliskResult) => {
-    setSelectedRemark(result.remark);
-    setSheetMode("story");
-  }, []);
-
-  const handleNavigate = useCallback((result: SearchResult) => {
-    const lat = result.type === "remark" ? result.remark.poi.latitude : result.poi.latitude;
-    const lng = result.type === "remark" ? result.remark.poi.longitude : result.poi.longitude;
-    const name = result.type === "remark" ? result.remark.poi.name : result.poi.name;
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&destination_place_id=${encodeURIComponent(name)}`,
-      "_blank"
-    );
-  }, []);
-
-  const handleGenerateStory = useCallback(async (result: ExternalResult) => {
-    setGeneratingPoiId(result.poi.id);
-
-    try {
-      const response = await fetch("/api/remarks/generate-for-poi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ poi: result.poi }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error("Failed to generate story:", error);
-        return;
-      }
-
-      const data = await response.json();
-      setSelectedRemark(data.remark);
+  const handleSearchResultTap = useCallback((result: SearchResult) => {
+    if (result.type === "remark") {
+      setSelectedRemark(result.remark);
+      setSelectedPoi(null);
       setSheetMode("story");
-    } catch (error) {
-      console.error("Error generating story:", error);
-    } finally {
-      setGeneratingPoiId(null);
+    } else {
+      setSelectedPoi(result.poi);
+      setSelectedRemark(result.nearbyRemark ?? null);
+      setSheetMode(result.nearbyRemark ? "story" : "poi");
     }
   }, []);
 
@@ -283,13 +275,20 @@ export default function Home() {
     }
   }, [selectedPoi]);
 
+  const isUsingViewport = !!(viewportState.center && hasRealLocation && location &&
+    haversineDistance(viewportState.center.latitude, viewportState.center.longitude,
+      location.latitude, location.longitude) > 200);
+
   const handleNavigateToPoi = useCallback(() => {
-    if (!selectedPoi) return;
+    const lat = selectedPoi?.latitude ?? selectedRemark?.poi.latitude;
+    const lng = selectedPoi?.longitude ?? selectedRemark?.poi.longitude;
+    const name = selectedPoi?.name ?? selectedRemark?.poi.name;
+    if (!lat || !lng || !name) return;
     window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${selectedPoi.latitude},${selectedPoi.longitude}&destination_place_id=${encodeURIComponent(selectedPoi.name)}`,
+      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&destination_place_id=${encodeURIComponent(name)}`,
       "_blank"
     );
-  }, [selectedPoi]);
+  }, [selectedPoi, selectedRemark]);
 
   const handleRegenerateStory = useCallback(async () => {
     if (!selectedRemark || isRegenerating || cooldownRemaining > 0) return;
@@ -333,6 +332,7 @@ export default function Home() {
         remarks={remarks}
         onPinClick={handlePinClick}
         onViewportChange={handleViewportChange}
+        onViewportUpdate={handleViewportUpdate}
         onPoiClick={handlePoiClick}
         selectedRemarkId={selectedRemark?.id}
         isLoading={isLoading}
@@ -345,7 +345,8 @@ export default function Home() {
           onClear={handleSearchClear}
           isLoading={isSearching}
           searchStage={searchStage}
-          placeholder={hasRealLocation || viewportCenter ? "Ask Obelisk anything..." : "Getting location..."}
+          placeholder={hasRealLocation || viewportState.center ? "Ask Obelisk anything..." : "Getting location..."}
+          isUsingViewport={isUsingViewport}
         />
       </div>
 
@@ -368,14 +369,7 @@ export default function Home() {
             <POICard
               poi={selectedPoi ?? remarkPoiToExternalPOI(selectedRemark!.poi)}
               remark={selectedRemark}
-              onNavigate={selectedPoi ? handleNavigateToPoi : () =>
-                handleNavigate({
-                  type: "remark",
-                  remark: selectedRemark!,
-                  distance: 0,
-                  score: 0,
-                })
-              }
+              onNavigate={handleNavigateToPoi}
               onGenerateStory={!selectedRemark ? handleGenerateStoryForPoi : undefined}
               onRegenerate={selectedRemark ? handleRegenerateStory : undefined}
               isGenerating={selectedPoi ? generatingPoiId === selectedPoi.id : false}
@@ -390,9 +384,7 @@ export default function Home() {
             results={searchResults}
             conversationalResponse={conversationalResponse ?? undefined}
             isLoading={isSearching}
-            onNavigate={handleNavigate}
-            onSelectStory={handleSelectStory}
-            onGenerateStory={handleGenerateStory}
+            onResultTap={handleSearchResultTap}
             generatingPoiId={generatingPoiId}
           />
         )}

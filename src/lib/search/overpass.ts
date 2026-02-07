@@ -1,4 +1,5 @@
 import type { OverpassElement, ExternalPOI, SearchLocation } from "./types";
+import { haversineDistance } from "@/lib/geo/distance";
 
 const OVERPASS_SERVERS = [
   "https://overpass-api.de/api/interpreter",
@@ -107,7 +108,7 @@ export async function searchByAmenityOverpass(
         category: mapAmenityToCategory(el.tags?.amenity ?? ""),
         latitude: lat,
         longitude: lon,
-        distance: calculateDistance(location.latitude, location.longitude, lat, lon),
+        distance: haversineDistance(location.latitude, location.longitude, lat, lon),
         ...extractPOIDetails(el),
         source: "overpass" as const,
       };
@@ -161,7 +162,7 @@ export async function searchByTags(
         category: mapAmenityToCategory(el.tags?.amenity ?? el.tags?.tourism ?? ""),
         latitude: lat,
         longitude: lon,
-        distance: calculateDistance(location.latitude, location.longitude, lat, lon),
+        distance: haversineDistance(location.latitude, location.longitude, lat, lon),
         ...extractPOIDetails(el),
         source: "overpass" as const,
       };
@@ -221,26 +222,6 @@ function mapAmenityToCategory(amenity: string): string {
   if (cultureAmenities.includes(amenity)) return "culture";
   if (amenity === "museum" || amenity === "gallery") return "art";
   return "hidden";
-}
-
-function calculateDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371e3;
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
 }
 
 function delay(ms: number): Promise<void> {

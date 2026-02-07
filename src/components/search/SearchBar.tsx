@@ -20,6 +20,7 @@ interface SearchBarProps {
   isLoading?: boolean;
   searchStage?: SearchStage;
   placeholder?: string;
+  isUsingViewport?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ interface SearchBarProps {
  *     isLoading: Whether search is in progress.
  *     searchStage: Current search stage.
  *     placeholder: Placeholder text.
+ *     isUsingViewport: Whether search uses viewport instead of GPS location.
  */
 export function SearchBar({
   onSearch,
@@ -38,6 +40,7 @@ export function SearchBar({
   isLoading = false,
   searchStage = "idle",
   placeholder = "Ask Obelisk anything...",
+  isUsingViewport = false,
 }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
@@ -172,6 +175,20 @@ export function SearchBar({
           )}
         </AnimatePresence>
       </motion.div>
+
+      <AnimatePresence>
+        {isUsingViewport && !isFocused && !isLoading && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={springTransitions.quick}
+            className="text-[12px] text-[var(--foreground-secondary)] text-center mt-1.5"
+          >
+            Searching this area
+          </motion.p>
+        )}
+      </AnimatePresence>
     </form>
   );
 }

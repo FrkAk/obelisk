@@ -5,6 +5,7 @@ import type {
   SearchResult,
   SearchResponse,
   ParsedIntent,
+  ViewportContext,
 } from "@/lib/search/types";
 import type { CategorySlug } from "@/types";
 
@@ -26,7 +27,8 @@ interface UseSearchReturn {
   search: (
     query: string,
     location: { latitude: number; longitude: number },
-    category?: CategorySlug
+    category?: CategorySlug,
+    viewport?: ViewportContext
   ) => Promise<void>;
   clear: () => void;
 }
@@ -55,7 +57,8 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
     async (
       query: string,
       location: { latitude: number; longitude: number },
-      category?: CategorySlug
+      category?: CategorySlug,
+      viewport?: ViewportContext
     ) => {
       setIsLoading(true);
       setError(null);
@@ -74,6 +77,7 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
             location,
             radius,
             limit,
+            viewport,
           }),
         });
 

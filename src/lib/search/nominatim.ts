@@ -3,7 +3,9 @@ import type {
   ExternalPOI,
   SearchLocation,
   ParsedIntent,
+  ViewportBounds,
 } from "./types";
+import { haversineDistance } from "@/lib/geo/distance";
 
 const NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
 const USER_AGENT = "Obelisk/1.0 (https://obelisk.app)";
@@ -71,26 +73,6 @@ function buildSearchQuery(intent: ParsedIntent): string {
   return keywords[0] || "cafe";
 }
 
-function calculateDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371e3;
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
-}
-
 /**
  * Searches for POIs using the Nominatim API.
  *
@@ -99,6 +81,7 @@ function calculateDistance(
  *     location: User's current location.
  *     radius: Search radius in meters.
  *     limit: Maximum number of results.
+ *     viewportBounds: Optional viewport bounds to use instead of radius-based viewbox.
  *
  * Returns:
  *     Array of external POI results.
@@ -107,11 +90,14 @@ export async function searchNominatim(
   intent: ParsedIntent,
   location: SearchLocation,
   radius: number = 1000,
-  limit: number = 20
+  limit: number = 20,
+  viewportBounds?: ViewportBounds
 ): Promise<ExternalPOI[]> {
   const query = buildSearchQuery(intent);
 
-  const viewbox = calculateViewbox(location, radius);
+  const viewbox = viewportBounds
+    ? `${viewportBounds.west},${viewportBounds.north},${viewportBounds.east},${viewportBounds.south}`
+    : calculateViewbox(location, radius);
   const params = new URLSearchParams({
     q: query,
     format: "json",
@@ -144,7 +130,7 @@ export async function searchNominatim(
       category: mapOsmToCategory(result.class, result.type),
       latitude: parseFloat(result.lat),
       longitude: parseFloat(result.lon),
-      distance: calculateDistance(
+      distance: haversineDistance(
         location.latitude,
         location.longitude,
         parseFloat(result.lat),
@@ -208,7 +194,7 @@ export async function searchByAmenity(
       category: mapOsmToCategory(result.class, result.type),
       latitude: parseFloat(result.lat),
       longitude: parseFloat(result.lon),
-      distance: calculateDistance(
+      distance: haversineDistance(
         location.latitude,
         location.longitude,
         parseFloat(result.lat),

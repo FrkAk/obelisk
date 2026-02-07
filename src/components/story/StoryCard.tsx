@@ -24,6 +24,13 @@ const CATEGORY_ICONS: Record<string, string> = {
   hidden: "✨",
   views: "👀",
   culture: "🎭",
+  shopping: "🛍️",
+  nightlife: "🌙",
+  sports: "⚽",
+  health: "🏥",
+  transport: "🚇",
+  education: "🎓",
+  services: "🏢",
 };
 
 /**

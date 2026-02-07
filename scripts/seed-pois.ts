@@ -21,6 +21,13 @@ const CATEGORY_DATA: Array<{
   { name: "Hidden Gems", slug: "hidden", icon: "diamond", color: "#FFD60A" },
   { name: "Views", slug: "views", icon: "eye", color: "#64D2FF" },
   { name: "Culture", slug: "culture", icon: "masks", color: "#5E5CE6" },
+  { name: "Shopping", slug: "shopping", icon: "bag", color: "#FF8A65" },
+  { name: "Nightlife", slug: "nightlife", icon: "moon", color: "#CE93D8" },
+  { name: "Sports", slug: "sports", icon: "ball", color: "#4CAF50" },
+  { name: "Health", slug: "health", icon: "cross", color: "#EF5350" },
+  { name: "Transport", slug: "transport", icon: "train", color: "#78909C" },
+  { name: "Education", slug: "education", icon: "book", color: "#FFAB40" },
+  { name: "Services", slug: "services", icon: "briefcase", color: "#A1887F" },
 ];
 
 interface OverpassElement {
@@ -112,9 +119,16 @@ function determineCategorySlug(tags: Record<string, string>): CategorySlug {
   if (tags.historic) return "history";
   if (tags.tourism === "museum") return "art";
   if (tags.tourism === "viewpoint") return "views";
-  if (tags.amenity === "biergarten" || tags.amenity === "restaurant") return "food";
+  if (tags.amenity === "biergarten" || tags.amenity === "restaurant" || tags.amenity === "cafe" || tags.amenity === "fast_food") return "food";
+  if (tags.amenity === "bar" || tags.amenity === "pub" || tags.amenity === "nightclub") return "nightlife";
+  if (tags.amenity === "hospital" || tags.amenity === "pharmacy" || tags.amenity === "clinic" || tags.amenity === "doctors") return "health";
+  if (tags.amenity === "university" || tags.amenity === "school" || tags.amenity === "college" || tags.amenity === "library") return "education";
+  if (tags.amenity === "police" || tags.amenity === "fire_station" || tags.amenity === "bank" || tags.amenity === "post_office") return "services";
+  if (tags.shop) return "shopping";
   if (tags.leisure === "park" || tags.natural) return "nature";
+  if (tags.leisure === "sports_centre" || tags.leisure === "stadium" || tags.leisure === "fitness_centre") return "sports";
   if (tags.amenity === "theatre") return "culture";
+  if (tags.amenity === "bus_station" || tags.railway) return "transport";
   if (tags.architect || tags.building === "church") return "architecture";
   return "hidden";
 }

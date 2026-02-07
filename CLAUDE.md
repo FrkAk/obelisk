@@ -132,6 +132,12 @@ obelisk/
 
 ---
 
+## Package Manager
+
+Always use `bun` / `bunx` instead of `npm` / `pnpm` / `npx`.
+
+---
+
 ## Commands
 
 ### Make (primary interface)

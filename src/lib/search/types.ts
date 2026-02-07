@@ -7,6 +7,8 @@ export type SearchQueryType =
   | "discovery"
   | "route";
 
+export type SearchMode = "name" | "keyword" | "conversational";
+
 export interface SearchFilters {
   outdoor?: boolean;
   budget?: number;
@@ -18,9 +20,12 @@ export interface SearchFilters {
 
 export interface ParsedIntent {
   type: SearchQueryType;
+  mode: SearchMode;
   category?: CategorySlug;
   filters: SearchFilters;
   keywords: string[];
+  placeName?: string;
+  cuisineTypes?: string[];
 }
 
 export interface SearchLocation {

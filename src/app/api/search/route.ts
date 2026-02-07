@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { searchRemarks, getRandomRemark } from "@/lib/db/queries/search";
+import { searchRemarks, getRandomRemark, searchRemarksByName } from "@/lib/db/queries/search";
 import { parseQueryIntent } from "@/lib/search/queryParser";
-import { searchNominatim } from "@/lib/search/nominatim";
+import { searchNominatim, searchNominatimByName } from "@/lib/search/nominatim";
 import { enrichPOIs, searchByAmenityOverpass } from "@/lib/search/overpass";
 import { generateText } from "@/lib/ai/ollama";
 import { haversineDistance } from "@/lib/geo/distance";
@@ -14,7 +14,7 @@ import type {
   ExternalPOI,
   ViewportBounds,
 } from "@/lib/search/types";
-import type { Remark, Poi, Category } from "@/types";
+import type { RemarkWithPoi } from "@/lib/db/queries/search";
 
 const requestSchema = z.object({
   query: z.string().min(1).max(500),
@@ -30,8 +30,6 @@ const requestSchema = z.object({
   radius: z.number().min(100).max(5000).default(1000),
   limit: z.number().min(1).max(50).default(20),
 });
-
-type RemarkWithPoi = Remark & { poi: Poi & { category?: Category } };
 
 /**
  * Derives search center and radius from viewport or falls back to GPS location.
@@ -67,13 +65,32 @@ function computeSearchLocation(
   };
 }
 
+function computeNameMatchBonus(name: string, placeName?: string, keywords?: string[]): number {
+  if (!name) return 0;
+  const lowerName = name.toLowerCase();
+
+  if (placeName) {
+    const lowerPlace = placeName.toLowerCase();
+    if (lowerName === lowerPlace) return 35;
+    if (lowerName.includes(lowerPlace)) return 25;
+  }
+
+  if (keywords && keywords.length > 0) {
+    const hasKeywordMatch = keywords.some((kw) => lowerName.includes(kw.toLowerCase()));
+    if (hasKeywordMatch) return 15;
+  }
+
+  return 0;
+}
+
 function scoreObeliskResult(
   remark: RemarkWithPoi,
   intent: ParsedIntent,
   distance: number,
-  zoom: number
+  zoom: number,
+  isGlobal: boolean = false
 ): number {
-  let score = 70;
+  let score = isGlobal ? 55 : 70;
 
   const zoomFactor = Math.max(1, zoom - 10) / 8;
   const distancePenalty = Math.min(distance / 100, 20) * zoomFactor;
@@ -100,6 +117,7 @@ function scoreObeliskResult(
     score += matchingKeywords.length * 10;
   }
 
+  score += computeNameMatchBonus(remark.poi.name, intent.placeName, intent.keywords);
   score += 10;
 
   return Math.min(100, Math.max(0, score));
@@ -109,9 +127,10 @@ function scoreExternalResult(
   poi: ExternalPOI,
   intent: ParsedIntent,
   distance: number,
-  zoom: number
+  zoom: number,
+  isGlobal: boolean = false
 ): number {
-  let score = 60;
+  let score = isGlobal ? 50 : 60;
 
   const zoomFactor = Math.max(1, zoom - 10) / 8;
   const distancePenalty = Math.min(distance / 100, 20) * zoomFactor;
@@ -136,6 +155,8 @@ function scoreExternalResult(
   if (poi.phone) {
     score += 2;
   }
+
+  score += computeNameMatchBonus(poi.name, intent.placeName, intent.keywords);
 
   return Math.min(100, Math.max(0, score));
 }
@@ -197,11 +218,143 @@ Respond conversationally. If there are Obelisk stories, mention them as highligh
   }
 }
 
+function deduplicateResults(results: SearchResult[]): SearchResult[] {
+  const seen = new Set<string>();
+  return results.filter((result) => {
+    const key = result.type === "remark"
+      ? `remark-${result.remark.id}`
+      : `external-${result.poi.osmId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function searchNameMode(
+  intent: ParsedIntent,
+  searchCtx: { center: { latitude: number; longitude: number }; radius: number; zoom: number; bounds?: ViewportBounds },
+  limit: number
+): Promise<{ obeliskResults: ObeliskResult[]; externalResults: ExternalResult[]; obeliskTime: number; externalTime: number }> {
+  const placeName = intent.placeName || intent.keywords[0] || "";
+
+  const obeliskStart = Date.now();
+  const remarksRaw = await searchRemarksByName(placeName, intent.category, limit);
+  const obeliskTime = Date.now() - obeliskStart;
+
+  const externalStart = Date.now();
+  let externalPois: ExternalPOI[] = [];
+  try {
+    externalPois = await searchNominatimByName(placeName, searchCtx.center, limit, searchCtx.bounds);
+  } catch (error) {
+    console.error("External name search error:", error);
+  }
+  const externalTime = Date.now() - externalStart;
+
+  console.log(`[search] Name mode: placeName="${placeName}", obelisk: ${remarksRaw.length}, external: ${externalPois.length}`);
+
+  const obeliskResults: ObeliskResult[] = remarksRaw.map((remark) => {
+    const distance = haversineDistance(
+      searchCtx.center.latitude, searchCtx.center.longitude,
+      remark.poi.latitude, remark.poi.longitude
+    );
+    return {
+      type: "remark" as const,
+      remark,
+      distance,
+      score: scoreObeliskResult(remark, intent, distance, searchCtx.zoom, true),
+    };
+  });
+
+  const externalResults: ExternalResult[] = externalPois.map((poi) => {
+    const distance = poi.distance ?? haversineDistance(
+      searchCtx.center.latitude, searchCtx.center.longitude,
+      poi.latitude, poi.longitude
+    );
+    return {
+      type: "external" as const,
+      poi,
+      nearbyRemark: findNearbyRemark(poi, remarksRaw),
+      distance,
+      score: scoreExternalResult(poi, intent, distance, searchCtx.zoom, true),
+    };
+  });
+
+  return { obeliskResults, externalResults, obeliskTime, externalTime };
+}
+
+async function searchKeywordMode(
+  intent: ParsedIntent,
+  searchCtx: { center: { latitude: number; longitude: number }; radius: number; zoom: number; bounds?: ViewportBounds },
+  limit: number
+): Promise<{ obeliskResults: ObeliskResult[]; externalResults: ExternalResult[]; obeliskTime: number; externalTime: number }> {
+  const obeliskStart = Date.now();
+  const remarksRaw = await searchRemarks({
+    latitude: searchCtx.center.latitude,
+    longitude: searchCtx.center.longitude,
+    radiusMeters: searchCtx.radius,
+    category: intent.category,
+    keywords: intent.keywords,
+    limit,
+  });
+  const obeliskTime = Date.now() - obeliskStart;
+
+  const externalStart = Date.now();
+  let externalPois: ExternalPOI[] = [];
+  try {
+    if (intent.filters.wifi || intent.filters.outdoor) {
+      const amenityTypes = intent.category === "food"
+        ? ["cafe", "restaurant"]
+        : ["cafe", "restaurant", "bar"];
+      externalPois = await searchByAmenityOverpass(amenityTypes, searchCtx.center, searchCtx.radius);
+    } else {
+      externalPois = await searchNominatim(intent, searchCtx.center, searchCtx.radius, limit, searchCtx.bounds);
+    }
+
+    if (externalPois.length > 0 && externalPois.length <= 10) {
+      externalPois = await enrichPOIs(externalPois);
+    }
+  } catch (error) {
+    console.error("External search error:", error);
+  }
+  const externalTime = Date.now() - externalStart;
+
+  console.log(`[search] Keyword mode: obelisk: ${remarksRaw.length}, external: ${externalPois.length}`);
+
+  const remarks = remarksRaw as RemarkWithPoi[];
+
+  const obeliskResults: ObeliskResult[] = remarks.map((remark) => {
+    const distance = haversineDistance(
+      searchCtx.center.latitude, searchCtx.center.longitude,
+      remark.poi.latitude, remark.poi.longitude
+    );
+    return {
+      type: "remark" as const,
+      remark,
+      distance,
+      score: scoreObeliskResult(remark, intent, distance, searchCtx.zoom, false),
+    };
+  });
+
+  const externalResults: ExternalResult[] = externalPois.map((poi) => {
+    const distance = poi.distance ?? haversineDistance(
+      searchCtx.center.latitude, searchCtx.center.longitude,
+      poi.latitude, poi.longitude
+    );
+    return {
+      type: "external" as const,
+      poi,
+      nearbyRemark: findNearbyRemark(poi, remarks),
+      distance,
+      score: scoreExternalResult(poi, intent, distance, searchCtx.zoom, false),
+    };
+  });
+
+  return { obeliskResults, externalResults, obeliskTime, externalTime };
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let parseTime = 0;
-  let obeliskTime = 0;
-  let externalTime = 0;
 
   try {
     const body = await request.json();
@@ -259,81 +412,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const obeliskStart = Date.now();
-    const remarksRaw = await searchRemarks({
-      latitude: searchCtx.center.latitude,
-      longitude: searchCtx.center.longitude,
-      radiusMeters: searchCtx.radius,
-      category: intent.category,
-      keywords: intent.keywords,
-      limit,
-    });
-    obeliskTime = Date.now() - obeliskStart;
+    console.log(`[search] Query: "${query}", mode: ${intent.mode}, category: ${intent.category}`);
 
-    const remarks = remarksRaw as RemarkWithPoi[];
+    let obeliskResults: ObeliskResult[];
+    let externalResults: ExternalResult[];
+    let obeliskTime: number;
+    let externalTime: number;
 
-    const externalStart = Date.now();
-    let externalPois: ExternalPOI[] = [];
-
-    try {
-      if (intent.filters.wifi || intent.filters.outdoor) {
-        const amenityTypes =
-          intent.category === "food"
-            ? ["cafe", "restaurant"]
-            : ["cafe", "restaurant", "bar"];
-        externalPois = await searchByAmenityOverpass(amenityTypes, searchCtx.center, searchCtx.radius);
-      } else {
-        externalPois = await searchNominatim(intent, searchCtx.center, searchCtx.radius, limit, searchCtx.bounds);
-      }
-
-      if (externalPois.length > 0 && externalPois.length <= 10) {
-        externalPois = await enrichPOIs(externalPois);
-      }
-    } catch (error) {
-      console.error("External search error:", error);
+    if (intent.mode === "name") {
+      ({ obeliskResults, externalResults, obeliskTime, externalTime } = await searchNameMode(intent, searchCtx, limit));
+    } else {
+      ({ obeliskResults, externalResults, obeliskTime, externalTime } = await searchKeywordMode(intent, searchCtx, limit));
     }
-    externalTime = Date.now() - externalStart;
 
-    const obeliskResults: ObeliskResult[] = remarks.map((remark) => {
-      const distance = haversineDistance(
-        searchCtx.center.latitude,
-        searchCtx.center.longitude,
-        remark.poi.latitude,
-        remark.poi.longitude
-      );
-      return {
-        type: "remark" as const,
-        remark,
-        distance,
-        score: scoreObeliskResult(remark, intent, distance, searchCtx.zoom),
-      };
-    });
+    const preDedup = obeliskResults.length + externalResults.length;
+    const allResults: SearchResult[] = deduplicateResults(
+      [...obeliskResults, ...externalResults].sort((a, b) => b.score - a.score)
+    ).slice(0, limit);
 
-    const externalResults: ExternalResult[] = externalPois.map((poi) => {
-      const distance = poi.distance ?? haversineDistance(
-        searchCtx.center.latitude,
-        searchCtx.center.longitude,
-        poi.latitude,
-        poi.longitude
-      );
-      return {
-        type: "external" as const,
-        poi,
-        nearbyRemark: findNearbyRemark(poi, remarks),
-        distance,
-        score: scoreExternalResult(poi, intent, distance, searchCtx.zoom),
-      };
-    });
-
-    const allResults: SearchResult[] = [...obeliskResults, ...externalResults]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+    const obeliskCount = allResults.filter((r) => r.type === "remark").length;
+    const externalCount = allResults.filter((r) => r.type === "external").length;
+    console.log(`[search] Results: ${allResults.length} (${obeliskCount} stories, ${externalCount} places), deduped from ${preDedup}`);
 
     const conversationalResponse = await generateConversationalResponse(
       allResults,
       query,
       intent
     );
+
+    const totalTime = Date.now() - startTime;
+    console.log(`[search] Timing: parse=${parseTime}ms, obelisk=${obeliskTime}ms, external=${externalTime}ms, total=${totalTime}ms`);
 
     return NextResponse.json({
       results: allResults,
@@ -343,7 +451,7 @@ export async function POST(request: NextRequest) {
         parseMs: parseTime,
         obeliskMs: obeliskTime,
         externalMs: externalTime,
-        totalMs: Date.now() - startTime,
+        totalMs: totalTime,
       },
     });
   } catch (error) {

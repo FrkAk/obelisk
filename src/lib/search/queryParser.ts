@@ -1,30 +1,45 @@
-import { generateText } from "@/lib/ai/ollama";
-import type { ParsedIntent, SearchQueryType, SearchFilters } from "./types";
+import { generateText, SEARCH_MODEL } from "@/lib/ai/ollama";
+import type { ParsedIntent, SearchQueryType, SearchFilters, SearchMode } from "./types";
 import type { CategorySlug } from "@/types";
 
-const QUERY_PARSE_PROMPT = `You are a search query parser for a Munich discovery app. Parse the user's query into structured JSON.
+const QUERY_PARSE_PROMPT = `You are a search query parser for a Munich discovery app. Classify the query and extract structured intent.
 
-Categories: history, food, art, nature, architecture, hidden, views, culture
-Types: "simple", "contextual", "complex", "discovery", "route"
+Modes:
+- "name": Query refers to a specific place by name (e.g., "Marienplatz", "Zara", "Hofbräuhaus")
+- "keyword": Query describes a type/category of place (e.g., "pizza", "quiet cafe", "museum")
+- "conversational": Query is a natural language request (e.g., "I want a cozy place for coffee", "where can I find good burgers")
+
+Categories: history, food, art, nature, architecture, hidden, views, culture, shopping, nightlife, sports, health, transport, education, services
 Filters: outdoor (bool), budget (number), partySize (number), openNow (bool), wifi (bool), quiet (bool)
 
-Output ONLY a JSON object on a single line.
+Output ONLY a JSON object on a single line:
+{"mode":"name|keyword|conversational","placeName":"string or null","category":"slug or null","cuisineTypes":["array"],"filters":{},"keywords":["array"],"type":"simple|contextual|complex|discovery|route"}
 
 Examples:
+Query: "Marienplatz"
+{"mode":"name","placeName":"Marienplatz","category":null,"cuisineTypes":[],"filters":{},"keywords":["marienplatz"],"type":"simple"}
+
+Query: "pizza"
+{"mode":"keyword","placeName":null,"category":"food","cuisineTypes":["pizza"],"filters":{},"keywords":["pizza","restaurant"],"type":"simple"}
+
+Query: "I want hamburger but find me a cafe first, I need espresso"
+{"mode":"conversational","placeName":null,"category":"food","cuisineTypes":["cafe","coffee"],"filters":{},"keywords":["cafe","coffee","espresso"],"type":"contextual"}
+
 Query: "quiet café with wifi"
-{"type":"contextual","category":"food","filters":{"wifi":true,"quiet":true},"keywords":["cafe","coffee"]}
+{"mode":"keyword","placeName":null,"category":"food","cuisineTypes":["cafe"],"filters":{"wifi":true,"quiet":true},"keywords":["cafe","coffee"],"type":"contextual"}
+
+Query: "Zara"
+{"mode":"name","placeName":"Zara","category":null,"cuisineTypes":[],"filters":{},"keywords":["zara"],"type":"simple"}
 
 Query: "lunch for 5, outdoor, under €15"
-{"type":"complex","category":"food","filters":{"outdoor":true,"budget":15,"partySize":5},"keywords":["lunch","restaurant"]}
-
-Query: "surprise me with history"
-{"type":"discovery","category":"history","filters":{},"keywords":["history"]}
+{"mode":"keyword","placeName":null,"category":"food","cuisineTypes":[],"filters":{"outdoor":true,"budget":15,"partySize":5},"keywords":["lunch","restaurant"],"type":"complex"}
 
 Now parse this query:
 Query: "{{QUERY}}"`;
 
 const DEFAULT_INTENT: ParsedIntent = {
   type: "simple",
+  mode: "keyword",
   filters: {},
   keywords: [],
 };
@@ -36,32 +51,43 @@ const DEFAULT_INTENT: ParsedIntent = {
  *     query: The user's search query in natural language.
  *
  * Returns:
- *     Structured intent with type, category, filters, and keywords.
+ *     Structured intent with type, mode, category, filters, and keywords.
  */
 export async function parseQueryIntent(query: string): Promise<ParsedIntent> {
   if (!query.trim()) {
     return DEFAULT_INTENT;
   }
 
-  const simplePatterns = detectSimplePatterns(query);
-  if (simplePatterns) {
-    return simplePatterns;
+  const discoveryMatch = /^\s*(surprise\s+me|discover|explore|random|anything)\b/i;
+  if (discoveryMatch.test(query)) {
+    console.log(`[queryParser] Discovery fast-path: "${query}"`);
+    return {
+      type: "discovery",
+      mode: "keyword",
+      filters: {},
+      keywords: [query.toLowerCase().trim()],
+    };
   }
 
   try {
     const prompt = QUERY_PARSE_PROMPT.replace("{{QUERY}}", query);
-    const response = await generateText(prompt, undefined, {
-      temperature: 0.2,
-      num_predict: 150,
+    const response = await generateText(prompt, SEARCH_MODEL, {
+      temperature: 0.1,
+      num_predict: 100,
     });
+    console.log(`[queryParser] LLM raw response: ${response}`);
 
     const extracted = extractJsonFromResponse(response);
     if (!extracted) {
+      console.log(`[queryParser] Fallback triggered for: "${query}"`);
       return fallbackParse(query);
     }
 
-    return validateAndNormalize(extracted);
+    const intent = validateAndNormalize(extracted);
+    console.log(`[queryParser] Query: "${query}", mode: ${intent.mode}, category: ${intent.category}`);
+    return intent;
   } catch {
+    console.log(`[queryParser] Fallback triggered for: "${query}"`);
     return fallbackParse(query);
   }
 }
@@ -99,109 +125,6 @@ function extractJsonFromResponse(response: string): Record<string, unknown> | nu
   return null;
 }
 
-function detectSimplePatterns(query: string): ParsedIntent | null {
-  const lowerQuery = query.toLowerCase().trim();
-
-  const foodPatterns = /\b(coffee|cafe|café|restaurant|food|eat|eating|lunch|dinner|breakfast|pizza|burger|sushi|bar|pub|beer|drink|tea|bakery|bistro|snack|hot chocolate|espresso|latte|cappuccino|kaffee|bier|essen|mittagessen|frühstück|abendessen|bäckerei|wirtshaus|brauhaus|biergarten|konditorei)\b/g;
-  const historyPatterns = /\b(history|historic|museum|monument|memorial|castle|old|ancient|geschichte|historisch|denkmal|schloss|burg)\b/g;
-  const artPatterns = /\b(art|gallery|museum|painting|sculpture|exhibition|kunst|galerie|ausstellung|gemälde)\b/g;
-  const naturePatterns = /\b(park|garden|nature|tree|green|outdoor|walk|forest|garten|natur|wald|wiese|fluss|isar)\b/g;
-  const viewsPatterns = /\b(view|viewpoint|lookout|panorama|scenic|aussicht|aussichtspunkt)\b/g;
-  const architecturePatterns = /\b(building|architecture|church|cathedral|tower|palace|gebäude|architektur|kirche|dom|turm|rathaus)\b/g;
-  const culturePatterns = /\b(theatre|theater|cinema|concert|music|show|performance|kultur|kino|konzert|aufführung|oper|musik)\b/g;
-
-  const discoveryPatterns = /\b(surprise|random|anything|discover|explore)\b/;
-  const routePatterns = /\b(way|route|path|between|along|on my way)\b/;
-
-  let type: SearchQueryType = "simple";
-  let category: CategorySlug | undefined;
-  const filters: SearchFilters = {};
-  const keywords: string[] = [];
-
-  if (discoveryPatterns.test(lowerQuery)) {
-    type = "discovery";
-  } else if (routePatterns.test(lowerQuery)) {
-    type = "route";
-  }
-
-  const foodMatches = [...lowerQuery.matchAll(foodPatterns)].map(m => m[0]);
-  const historyMatches = [...lowerQuery.matchAll(historyPatterns)].map(m => m[0]);
-  const artMatches = [...lowerQuery.matchAll(artPatterns)].map(m => m[0]);
-  const natureMatches = [...lowerQuery.matchAll(naturePatterns)].map(m => m[0]);
-  const viewsMatches = [...lowerQuery.matchAll(viewsPatterns)].map(m => m[0]);
-  const architectureMatches = [...lowerQuery.matchAll(architecturePatterns)].map(m => m[0]);
-  const cultureMatches = [...lowerQuery.matchAll(culturePatterns)].map(m => m[0]);
-
-  if (foodMatches.length > 0) {
-    category = "food";
-    keywords.push(...foodMatches);
-    if (foodMatches.some(m => ["coffee", "tea", "café", "cafe", "espresso", "latte", "cappuccino", "hot chocolate"].includes(m))) {
-      keywords.push("cafe");
-    }
-  } else if (historyMatches.length > 0) {
-    category = "history";
-    keywords.push(...historyMatches, "history", "historic");
-  } else if (artMatches.length > 0) {
-    category = "art";
-    keywords.push(...artMatches, "art", "gallery");
-  } else if (natureMatches.length > 0) {
-    category = "nature";
-    keywords.push(...natureMatches, "park", "nature");
-  } else if (viewsMatches.length > 0) {
-    category = "views";
-    keywords.push(...viewsMatches, "viewpoint", "scenic");
-  } else if (architectureMatches.length > 0) {
-    category = "architecture";
-    keywords.push(...architectureMatches, "architecture", "building");
-  } else if (cultureMatches.length > 0) {
-    category = "culture";
-    keywords.push(...cultureMatches, "culture", "entertainment");
-  }
-
-  if (/\b(wifi|wi-fi|internet)\b/.test(lowerQuery)) {
-    filters.wifi = true;
-    type = "contextual";
-  }
-  if (/\b(outdoor|outside|terrace|patio|draußen)\b/.test(lowerQuery)) {
-    filters.outdoor = true;
-    type = "contextual";
-  }
-  if (/\b(quiet|peaceful|calm|ruhig|leise|gemütlich)\b/.test(lowerQuery)) {
-    filters.quiet = true;
-    type = "contextual";
-  }
-  if (/\b(open now|currently open)\b/.test(lowerQuery)) {
-    filters.openNow = true;
-  }
-
-  const budgetMatch = lowerQuery.match(/under\s*[€$]?\s*(\d+)|[€$]\s*(\d+)\s*max|budget\s*[€$]?\s*(\d+)/);
-  if (budgetMatch) {
-    const amount = budgetMatch[1] || budgetMatch[2] || budgetMatch[3];
-    filters.budget = parseInt(amount, 10);
-    type = "complex";
-  }
-
-  const partySizeMatch = lowerQuery.match(/for\s*(\d+)\s*(people|persons|guests)?|\b(\d+)\s*(people|persons|guests)/);
-  if (partySizeMatch) {
-    const size = partySizeMatch[1] || partySizeMatch[3];
-    filters.partySize = parseInt(size, 10);
-    type = "complex";
-  }
-
-  if (!category && keywords.length === 0) {
-    return null;
-  }
-
-  const uniqueKeywords = [...new Set(keywords)];
-
-  return {
-    type,
-    category,
-    filters,
-    keywords: uniqueKeywords.length > 0 ? uniqueKeywords : [lowerQuery],
-  };
-}
-
 function fallbackParse(query: string): ParsedIntent {
   const words = query
     .toLowerCase()
@@ -209,10 +132,14 @@ function fallbackParse(query: string): ParsedIntent {
     .split(/\s+/)
     .filter((w) => w.length > 2);
 
+  const isNameQuery = words.length <= 2;
+
   return {
     type: "simple",
+    mode: isNameQuery ? "name" : "keyword",
     filters: {},
     keywords: words.slice(0, 5),
+    placeName: isNameQuery ? query.trim() : undefined,
   };
 }
 
@@ -234,6 +161,11 @@ function validateAndNormalize(parsed: unknown): ParsedIntent {
     ? (obj.type as SearchQueryType)
     : "simple";
 
+  const validModes: SearchMode[] = ["name", "keyword", "conversational"];
+  const mode: SearchMode = validModes.includes(obj.mode as SearchMode)
+    ? (obj.mode as SearchMode)
+    : "keyword";
+
   const validCategories: CategorySlug[] = [
     "history",
     "food",
@@ -243,6 +175,13 @@ function validateAndNormalize(parsed: unknown): ParsedIntent {
     "hidden",
     "views",
     "culture",
+    "shopping",
+    "nightlife",
+    "sports",
+    "health",
+    "transport",
+    "education",
+    "services",
   ];
   const category: CategorySlug | undefined =
     typeof obj.category === "string" && validCategories.includes(obj.category as CategorySlug)
@@ -266,5 +205,12 @@ function validateAndNormalize(parsed: unknown): ParsedIntent {
     ? obj.keywords.filter((k): k is string => typeof k === "string")
     : [];
 
-  return { type, category, filters, keywords };
+  const placeName: string | undefined =
+    typeof obj.placeName === "string" ? obj.placeName : undefined;
+
+  const cuisineTypes: string[] = Array.isArray(obj.cuisineTypes)
+    ? obj.cuisineTypes.filter((c): c is string => typeof c === "string")
+    : [];
+
+  return { type, mode, category, filters, keywords, placeName, cuisineTypes };
 }

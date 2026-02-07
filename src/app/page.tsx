@@ -9,14 +9,17 @@ import { POICard } from "@/components/poi/POICard";
 import { useGeofence } from "@/hooks/useGeofence";
 import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
 import { useSearch } from "@/hooks/useSearch";
+import { AnimatePresence, motion } from "framer-motion";
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Remark, Poi } from "@/types";
 import type { SearchResult, ExternalPOI, ViewportBounds } from "@/lib/search/types";
 import { haversineDistance } from "@/lib/geo/distance";
+import { springTransitions } from "@/lib/ui/animations";
 
 type SheetMode = "story" | "search" | "poi" | null;
 
 function remarkPoiToExternalPOI(poi: Poi): ExternalPOI {
+  const tags = (poi.osmTags ?? {}) as Record<string, string>;
   return {
     id: poi.id,
     osmId: poi.osmId ?? 0,
@@ -25,6 +28,14 @@ function remarkPoiToExternalPOI(poi: Poi): ExternalPOI {
     category: poi.category?.slug ?? "history",
     latitude: poi.latitude,
     longitude: poi.longitude,
+    address: poi.address ?? undefined,
+    openingHours: tags.opening_hours ?? undefined,
+    phone: tags.phone ?? tags["contact:phone"] ?? undefined,
+    website: tags.website ?? tags["contact:website"] ?? undefined,
+    cuisine: tags.cuisine ?? undefined,
+    hasWifi: tags.internet_access === "wlan" || tags.internet_access === "yes",
+    hasOutdoorSeating: tags.outdoor_seating === "yes",
+    imageUrl: poi.imageUrl ?? undefined,
     source: "overpass",
   };
 }
@@ -48,7 +59,11 @@ export default function Home() {
   const [isLookingUpPoi, setIsLookingUpPoi] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [lastSearchQuery, setLastSearchQuery] = useState<string | null>(null);
+  const [hasMapMovedSinceSearch, setHasMapMovedSinceSearch] = useState(false);
+  const [previousSheetMode, setPreviousSheetMode] = useState<SheetMode>(null);
 
+  const lastSearchQueryRef = useRef<string | null>(null);
   const regenerateCooldownsRef = useRef<Map<string, number>>(new Map());
   const cooldownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -141,6 +156,7 @@ export default function Home() {
     setSheetMode(null);
     setSelectedRemark(null);
     setSelectedPoi(null);
+    setPreviousSheetMode(null);
   }, []);
 
   const handleViewportChange = useCallback(
@@ -150,6 +166,9 @@ export default function Home() {
       }
       viewportDebounceRef.current = setTimeout(() => {
         setViewportState((prev) => ({ ...prev, center }));
+        if (lastSearchQueryRef.current) {
+          setHasMapMovedSinceSearch(true);
+        }
       }, 300);
     },
     []
@@ -222,6 +241,9 @@ export default function Home() {
         zoom: viewportState.zoom,
       } : undefined;
       search(query, searchLocation, undefined, viewport);
+      setLastSearchQuery(query);
+      lastSearchQueryRef.current = query;
+      setHasMapMovedSinceSearch(false);
       setSheetMode("search");
       setSheetOpen(true);
     },
@@ -230,6 +252,9 @@ export default function Home() {
 
   const handleSearchClear = useCallback(() => {
     clearSearch();
+    setLastSearchQuery(null);
+    setHasMapMovedSinceSearch(false);
+    lastSearchQueryRef.current = null;
     if (sheetMode === "search") {
       setSheetOpen(false);
       setSheetMode(null);
@@ -237,6 +262,7 @@ export default function Home() {
   }, [clearSearch, sheetMode]);
 
   const handleSearchResultTap = useCallback((result: SearchResult) => {
+    setPreviousSheetMode(sheetMode);
     if (result.type === "remark") {
       setSelectedRemark(result.remark);
       setSelectedPoi(null);
@@ -246,7 +272,7 @@ export default function Home() {
       setSelectedRemark(result.nearbyRemark ?? null);
       setSheetMode(result.nearbyRemark ? "story" : "poi");
     }
-  }, []);
+  }, [sheetMode]);
 
   const handleGenerateStoryForPoi = useCallback(async () => {
     if (!selectedPoi) return;
@@ -274,6 +300,19 @@ export default function Home() {
       setGeneratingPoiId(null);
     }
   }, [selectedPoi]);
+
+  const handleSearchThisArea = useCallback(() => {
+    if (lastSearchQuery) {
+      handleSearch(lastSearchQuery);
+    }
+  }, [lastSearchQuery, handleSearch]);
+
+  const handleBackToResults = useCallback(() => {
+    setSelectedRemark(null);
+    setSelectedPoi(null);
+    setSheetMode("search");
+    setPreviousSheetMode(null);
+  }, []);
 
   const isUsingViewport = !!(viewportState.center && hasRealLocation && location &&
     haversineDistance(viewportState.center.latitude, viewportState.center.longitude,
@@ -350,6 +389,30 @@ export default function Home() {
         />
       </div>
 
+      <AnimatePresence>
+        {lastSearchQuery && hasMapMovedSinceSearch && !isSearching && (
+          <motion.div
+            className="absolute left-1/2 z-15 pt-2"
+            style={{ top: "calc(var(--safe-area-top, 0px) + 72px)" }}
+            initial={{ opacity: 0, y: -10, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: -10, x: "-50%" }}
+            transition={springTransitions.floatingEntry}
+          >
+            <button
+              onClick={handleSearchThisArea}
+              className="flex items-center gap-2 px-4 py-2 glass-floating rounded-full text-[13px] font-medium text-[var(--foreground)] shadow-lg"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+              </svg>
+              Search this area
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {triggeredRemark && !sheetOpen && (
         <StoryNotification
           remark={triggeredRemark}
@@ -376,6 +439,7 @@ export default function Home() {
               isRegenerating={isRegenerating}
               cooldownRemaining={cooldownRemaining}
               autoGenerate={!selectedRemark}
+              onBack={previousSheetMode === "search" ? handleBackToResults : undefined}
             />
           ) : null
         )}

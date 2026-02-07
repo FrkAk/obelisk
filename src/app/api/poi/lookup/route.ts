@@ -20,8 +20,6 @@ type RemarkWithPoi = Remark & { poi: Poi };
 const OSM_CATEGORY_MAPPING: Record<string, string> = {
   restaurant: "food",
   cafe: "food",
-  bar: "food",
-  pub: "food",
   fast_food: "food",
   biergarten: "food",
   food_court: "food",
@@ -32,19 +30,61 @@ const OSM_CATEGORY_MAPPING: Record<string, string> = {
   food_and_drink: "food",
   food_and_drink_stores: "food",
 
+  bar: "nightlife",
+  pub: "nightlife",
+  nightclub: "nightlife",
+
   museum: "art",
   gallery: "art",
 
   theatre: "culture",
   cinema: "culture",
   arts_centre: "culture",
-  library: "culture",
   community_centre: "culture",
-  university: "culture",
-  school: "culture",
-  college: "culture",
   arts_and_entertainment: "culture",
-  education: "culture",
+
+  university: "education",
+  school: "education",
+  college: "education",
+  library: "education",
+  education: "education",
+  kindergarten: "education",
+
+  hospital: "health",
+  clinic: "health",
+  pharmacy: "health",
+  doctors: "health",
+  dentist: "health",
+  veterinary: "health",
+
+  police: "services",
+  fire_station: "services",
+  bank: "services",
+  post_office: "services",
+  atm: "services",
+  bureau_de_change: "services",
+  commercial_services: "services",
+
+  shop: "shopping",
+  clothes: "shopping",
+  supermarket: "shopping",
+  mall: "shopping",
+  department_store: "shopping",
+  marketplace: "shopping",
+
+  stadium: "sports",
+  sports_centre: "sports",
+  swimming_pool: "sports",
+  fitness_centre: "sports",
+  pitch: "sports",
+
+  bus_station: "transport",
+  station: "transport",
+  parking: "transport",
+  fuel: "transport",
+  car_rental: "transport",
+  taxi: "transport",
+  motorist: "transport",
 
   park: "nature",
   garden: "nature",
@@ -91,18 +131,9 @@ const OSM_CATEGORY_MAPPING: Record<string, string> = {
   attraction: "hidden",
   hotel: "hidden",
   hostel: "hidden",
-  marketplace: "hidden",
   fountain: "hidden",
-  hospital: "hidden",
-  clinic: "hidden",
-  pharmacy: "hidden",
-  fire_station: "hidden",
-  police: "hidden",
   lodging: "hidden",
-  shop: "hidden",
   general: "hidden",
-  commercial_services: "hidden",
-  motorist: "hidden",
   visitor_amenities: "hidden",
   industrial: "hidden",
 };
@@ -410,7 +441,7 @@ function mapOsmTypeToCategory(
   if (osmClass === "leisure") return "nature";
   if (osmClass === "tourism") return "hidden";
   if (osmClass === "amenity") return "hidden";
-  if (osmClass === "shop") return "hidden";
+  if (osmClass === "shop") return "shopping";
 
   return "hidden";
 }

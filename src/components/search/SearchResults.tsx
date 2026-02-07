@@ -5,7 +5,7 @@ import { GlassCard, GlassPill } from "@/components/ui";
 import { springTransitions, searchResultVariants } from "@/lib/ui/animations";
 import { CATEGORY_COLORS } from "@/types";
 import type { CategorySlug } from "@/types";
-import type { SearchResult, ObeliskResult, ExternalResult } from "@/lib/search/types";
+import type { SearchResult } from "@/lib/search/types";
 
 interface SearchResultsProps {
   results: SearchResult[];
@@ -264,6 +264,13 @@ function getCategoryIcon(slug: CategorySlug): string {
     hidden: "💎",
     views: "🌄",
     culture: "🎭",
+    shopping: "🛍️",
+    nightlife: "🌙",
+    sports: "⚽",
+    health: "🏥",
+    transport: "🚇",
+    education: "🎓",
+    services: "🏢",
   };
   return icons[slug] ?? "📍";
 }

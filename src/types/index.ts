@@ -6,7 +6,14 @@ export type CategorySlug =
   | "architecture"
   | "hidden"
   | "views"
-  | "culture";
+  | "culture"
+  | "shopping"
+  | "nightlife"
+  | "sports"
+  | "health"
+  | "transport"
+  | "education"
+  | "services";
 
 export interface Category {
   id: string;
@@ -71,6 +78,13 @@ export const CATEGORY_COLORS: Record<CategorySlug, string> = {
   hidden: "#FFD60A",
   views: "#64D2FF",
   culture: "#5E5CE6",
+  shopping: "#FF8A65",
+  nightlife: "#CE93D8",
+  sports: "#4CAF50",
+  health: "#EF5350",
+  transport: "#78909C",
+  education: "#FFAB40",
+  services: "#A1887F",
 };
 
 export const DEFAULT_GEOFENCE_CONFIG: GeofenceConfig = {

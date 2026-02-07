@@ -19,6 +19,7 @@ endif
 export DATABASE_URL := postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
 export OLLAMA_URL := http://localhost:11434
 export OLLAMA_MODEL ?= gemma3:27b
+export OLLAMA_SEARCH_MODEL ?= gemma3:4b
 
 help:
 	@echo ""
@@ -50,8 +51,9 @@ setup:
 	@echo "$(CYAN)[3/6]$(RESET) Running migrations..."
 	bun run drizzle-kit push
 	@echo ""
-	@echo "$(CYAN)[4/6]$(RESET) Ensuring Ollama model..."
+	@echo "$(CYAN)[4/6]$(RESET) Ensuring Ollama models..."
 	ollama pull $(OLLAMA_MODEL)
+	ollama pull $(OLLAMA_SEARCH_MODEL)
 	@echo ""
 	@echo "$(CYAN)[5/6]$(RESET) Seeding POIs..."
 	bun scripts/seed-pois.ts
@@ -109,8 +111,9 @@ setup:
 	@echo "$(CYAN)[2/5]$(RESET) Running migrations..."
 	$(COMPOSE) exec app bun run drizzle-kit push
 	@echo ""
-	@echo "$(CYAN)[3/5]$(RESET) Ensuring Ollama model..."
+	@echo "$(CYAN)[3/5]$(RESET) Ensuring Ollama models..."
 	$(COMPOSE) exec ollama ollama pull $(OLLAMA_MODEL)
+	$(COMPOSE) exec ollama ollama pull $(OLLAMA_SEARCH_MODEL)
 	@echo ""
 	@echo "$(CYAN)[4/5]$(RESET) Seeding POIs..."
 	$(COMPOSE) exec app bun scripts/seed-pois.ts

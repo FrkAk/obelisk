@@ -1,6 +1,6 @@
 import { db } from "../client";
 import { remarks, pois, categories } from "../schema";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, ilike, or } from "drizzle-orm";
 import type { CategorySlug, Remark, Poi, Category } from "@/types";
 
 interface SearchRemarksParams {
@@ -12,9 +12,103 @@ interface SearchRemarksParams {
   limit?: number;
 }
 
-type RemarkWithPoi = Remark & {
+export type RemarkWithPoi = Remark & {
   poi: Poi & { category?: Category };
 };
+
+function remarkPoiSelect() {
+  return {
+    remarkId: remarks.id,
+    remarkPoiId: remarks.poiId,
+    remarkTitle: remarks.title,
+    remarkTeaser: remarks.teaser,
+    remarkContent: remarks.content,
+    remarkLocalTip: remarks.localTip,
+    remarkDurationSeconds: remarks.durationSeconds,
+    remarkAudioUrl: remarks.audioUrl,
+    remarkCreatedAt: remarks.createdAt,
+    poiId: pois.id,
+    poiOsmId: pois.osmId,
+    poiName: pois.name,
+    poiCategoryId: pois.categoryId,
+    poiLatitude: pois.latitude,
+    poiLongitude: pois.longitude,
+    poiAddress: pois.address,
+    poiWikipediaUrl: pois.wikipediaUrl,
+    poiImageUrl: pois.imageUrl,
+    poiOsmTags: pois.osmTags,
+    poiCreatedAt: pois.createdAt,
+    categoryId: categories.id,
+    categoryName: categories.name,
+    categorySlug: categories.slug,
+    categoryIcon: categories.icon,
+    categoryColor: categories.color,
+  };
+}
+
+interface RemarkPoiRow {
+  remarkId: string;
+  remarkPoiId: string | null;
+  remarkTitle: string;
+  remarkTeaser: string | null;
+  remarkContent: string;
+  remarkLocalTip: string | null;
+  remarkDurationSeconds: number | null;
+  remarkAudioUrl: string | null;
+  remarkCreatedAt: Date | null;
+  poiId: string;
+  poiOsmId: number | null;
+  poiName: string;
+  poiCategoryId: string | null;
+  poiLatitude: number;
+  poiLongitude: number;
+  poiAddress: string | null;
+  poiWikipediaUrl: string | null;
+  poiImageUrl: string | null;
+  poiOsmTags: Record<string, string> | null;
+  poiCreatedAt: Date | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categorySlug: string | null;
+  categoryIcon: string | null;
+  categoryColor: string | null;
+}
+
+function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
+  return {
+    id: row.remarkId,
+    poiId: row.remarkPoiId!,
+    title: row.remarkTitle,
+    teaser: row.remarkTeaser,
+    content: row.remarkContent,
+    localTip: row.remarkLocalTip,
+    durationSeconds: row.remarkDurationSeconds ?? 45,
+    audioUrl: row.remarkAudioUrl,
+    createdAt: row.remarkCreatedAt ?? new Date(),
+    poi: {
+      id: row.poiId,
+      osmId: row.poiOsmId,
+      name: row.poiName,
+      categoryId: row.poiCategoryId!,
+      latitude: row.poiLatitude,
+      longitude: row.poiLongitude,
+      address: row.poiAddress,
+      wikipediaUrl: row.poiWikipediaUrl,
+      imageUrl: row.poiImageUrl,
+      osmTags: row.poiOsmTags,
+      createdAt: row.poiCreatedAt ?? new Date(),
+      category: row.categoryId
+        ? {
+            id: row.categoryId,
+            name: row.categoryName!,
+            slug: row.categorySlug! as CategorySlug,
+            icon: row.categoryIcon!,
+            color: row.categoryColor!,
+          }
+        : undefined,
+    },
+  };
+}
 
 /**
  * Searches remarks by location, category, and keywords.
@@ -53,72 +147,14 @@ export async function searchRemarks({
   }
 
   const results = await db
-    .select({
-      remarkId: remarks.id,
-      remarkPoiId: remarks.poiId,
-      remarkTitle: remarks.title,
-      remarkTeaser: remarks.teaser,
-      remarkContent: remarks.content,
-      remarkLocalTip: remarks.localTip,
-      remarkDurationSeconds: remarks.durationSeconds,
-      remarkAudioUrl: remarks.audioUrl,
-      remarkCreatedAt: remarks.createdAt,
-      poiId: pois.id,
-      poiOsmId: pois.osmId,
-      poiName: pois.name,
-      poiCategoryId: pois.categoryId,
-      poiLatitude: pois.latitude,
-      poiLongitude: pois.longitude,
-      poiAddress: pois.address,
-      poiWikipediaUrl: pois.wikipediaUrl,
-      poiImageUrl: pois.imageUrl,
-      poiOsmTags: pois.osmTags,
-      poiCreatedAt: pois.createdAt,
-      categoryId: categories.id,
-      categoryName: categories.name,
-      categorySlug: categories.slug,
-      categoryIcon: categories.icon,
-      categoryColor: categories.color,
-    })
+    .select(remarkPoiSelect())
     .from(remarks)
     .innerJoin(pois, eq(remarks.poiId, pois.id))
     .leftJoin(categories, eq(pois.categoryId, categories.id))
     .where(and(...conditions))
     .limit(limit);
 
-  const mappedResults = results.map((row): RemarkWithPoi => ({
-    id: row.remarkId,
-    poiId: row.remarkPoiId!,
-    title: row.remarkTitle,
-    teaser: row.remarkTeaser,
-    content: row.remarkContent,
-    localTip: row.remarkLocalTip,
-    durationSeconds: row.remarkDurationSeconds ?? 45,
-    audioUrl: row.remarkAudioUrl,
-    createdAt: row.remarkCreatedAt ?? new Date(),
-    poi: {
-      id: row.poiId,
-      osmId: row.poiOsmId,
-      name: row.poiName,
-      categoryId: row.poiCategoryId!,
-      latitude: row.poiLatitude,
-      longitude: row.poiLongitude,
-      address: row.poiAddress,
-      wikipediaUrl: row.poiWikipediaUrl,
-      imageUrl: row.poiImageUrl,
-      osmTags: row.poiOsmTags,
-      createdAt: row.poiCreatedAt ?? new Date(),
-      category: row.categoryId
-        ? {
-            id: row.categoryId,
-            name: row.categoryName!,
-            slug: row.categorySlug! as CategorySlug,
-            icon: row.categoryIcon!,
-            color: row.categoryColor!,
-          }
-        : undefined,
-    },
-  }));
+  const mappedResults = results.map(mapRowToRemarkWithPoi);
 
   if (keywords.length === 0) {
     return mappedResults;
@@ -140,6 +176,45 @@ export async function searchRemarks({
       searchableText.includes(keyword.toLowerCase())
     );
   });
+}
+
+/**
+ * Searches remarks by place name using ILIKE matching on POI and remark names.
+ *
+ * Args:
+ *     placeName: The name to search for.
+ *     category: Optional category slug to filter by.
+ *     limit: Maximum number of results.
+ *
+ * Returns:
+ *     Array of remarks matching the name with their POIs.
+ */
+export async function searchRemarksByName(
+  placeName: string,
+  category?: CategorySlug,
+  limit: number = 20
+): Promise<RemarkWithPoi[]> {
+  const conditions = [
+    or(
+      ilike(pois.name, `%${placeName}%`),
+      ilike(remarks.title, `%${placeName}%`)
+    ),
+  ];
+
+  if (category) {
+    conditions.push(eq(categories.slug, category));
+  }
+
+  const results = await db
+    .select(remarkPoiSelect())
+    .from(remarks)
+    .innerJoin(pois, eq(remarks.poiId, pois.id))
+    .leftJoin(categories, eq(pois.categoryId, categories.id))
+    .where(and(...conditions))
+    .limit(limit);
+
+  console.log(`[search-db] Name search: "${placeName}", results: ${results.length}`);
+  return results.map(mapRowToRemarkWithPoi);
 }
 
 /**

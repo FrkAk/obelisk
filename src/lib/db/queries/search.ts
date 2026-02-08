@@ -218,6 +218,78 @@ export async function searchRemarksByName(
 }
 
 /**
+ * Searches POIs by name without requiring remarks.
+ *
+ * Args:
+ *     placeName: The name to search for.
+ *     category: Optional category slug to filter by.
+ *     limit: Maximum number of results.
+ *
+ * Returns:
+ *     Array of POIs matching the name with their categories.
+ */
+export async function searchPoisByName(
+  placeName: string,
+  category?: CategorySlug,
+  limit: number = 20
+): Promise<(Poi & { category?: Category })[]> {
+  const conditions = [ilike(pois.name, `%${placeName}%`)];
+
+  if (category) {
+    conditions.push(eq(categories.slug, category));
+  }
+
+  const results = await db
+    .select({
+      poiId: pois.id,
+      poiOsmId: pois.osmId,
+      poiName: pois.name,
+      poiCategoryId: pois.categoryId,
+      poiLatitude: pois.latitude,
+      poiLongitude: pois.longitude,
+      poiAddress: pois.address,
+      poiWikipediaUrl: pois.wikipediaUrl,
+      poiImageUrl: pois.imageUrl,
+      poiOsmTags: pois.osmTags,
+      poiCreatedAt: pois.createdAt,
+      categoryId: categories.id,
+      categoryName: categories.name,
+      categorySlug: categories.slug,
+      categoryIcon: categories.icon,
+      categoryColor: categories.color,
+    })
+    .from(pois)
+    .leftJoin(categories, eq(pois.categoryId, categories.id))
+    .where(and(...conditions))
+    .limit(limit);
+
+  console.log(`[search-db] POI name search: "${placeName}", results: ${results.length}`);
+
+  return results.map((row) => ({
+    id: row.poiId,
+    osmId: row.poiOsmId,
+    name: row.poiName,
+    categoryId: row.poiCategoryId!,
+    latitude: row.poiLatitude,
+    longitude: row.poiLongitude,
+    address: row.poiAddress,
+    wikipediaUrl: row.poiWikipediaUrl,
+    imageUrl: row.poiImageUrl,
+    osmTags: row.poiOsmTags,
+    createdAt: row.poiCreatedAt ?? new Date(),
+    category: row.categoryId
+      ? {
+          id: row.categoryId,
+          name: row.categoryName!,
+          slug: row.categorySlug! as CategorySlug,
+          icon: row.categoryIcon!,
+          color: row.categoryColor!,
+        }
+      : undefined,
+  }));
+}
+
+/**
  * Gets a random remark from a specific category within range.
  *
  * Args:

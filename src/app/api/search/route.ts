@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { searchRemarks, getRandomRemark, searchRemarksByName } from "@/lib/db/queries/search";
+import { searchRemarks, getRandomRemark, searchRemarksByName, searchPoisByName } from "@/lib/db/queries/search";
 import { parseQueryIntent } from "@/lib/search/queryParser";
 import { searchNominatim, searchNominatimByName } from "@/lib/search/nominatim";
-import { enrichPOIs, searchByAmenityOverpass } from "@/lib/search/overpass";
-import { generateText } from "@/lib/ai/ollama";
+import { searchByAmenityOverpass } from "@/lib/search/overpass";
+import { generateText, SEARCH_MODEL } from "@/lib/ai/ollama";
 import { haversineDistance } from "@/lib/geo/distance";
 import type {
   SearchResult,
@@ -205,7 +205,7 @@ ${externalResults.length > 0 ? `Top place: ${externalResults[0].poi.name} (${ext
 Respond conversationally. If there are Obelisk stories, mention them as highlights. Be concise.`;
 
   try {
-    const response = await generateText(prompt, undefined, {
+    const response = await generateText(prompt, SEARCH_MODEL, {
       temperature: 0.7,
       num_predict: 100,
     });
@@ -249,6 +249,31 @@ async function searchNameMode(
     console.error("External name search error:", error);
   }
   const externalTime = Date.now() - externalStart;
+
+  let dbPois: ExternalPOI[] = [];
+  try {
+    const dbResults = await searchPoisByName(placeName, intent.category, limit);
+    const existingOsmIds = new Set(externalPois.map((p) => p.osmId));
+    const existingRemarkPoiIds = new Set(remarksRaw.map((r) => r.poi.id));
+
+    dbPois = dbResults
+      .filter((poi) => !existingRemarkPoiIds.has(poi.id) && (!poi.osmId || !existingOsmIds.has(poi.osmId)))
+      .map((poi) => ({
+        id: poi.id,
+        osmId: poi.osmId ?? 0,
+        osmType: "node",
+        name: poi.name,
+        category: poi.category?.slug ?? "hidden",
+        latitude: poi.latitude,
+        longitude: poi.longitude,
+        address: poi.address ?? undefined,
+        source: "obelisk-db" as const,
+      }));
+  } catch (error) {
+    console.error("DB POI search error:", error);
+  }
+
+  externalPois = [...externalPois, ...dbPois];
 
   console.log(`[search] Name mode: placeName="${placeName}", obelisk: ${remarksRaw.length}, external: ${externalPois.length}`);
 
@@ -308,10 +333,6 @@ async function searchKeywordMode(
       externalPois = await searchByAmenityOverpass(amenityTypes, searchCtx.center, searchCtx.radius);
     } else {
       externalPois = await searchNominatim(intent, searchCtx.center, searchCtx.radius, limit, searchCtx.bounds);
-    }
-
-    if (externalPois.length > 0 && externalPois.length <= 10) {
-      externalPois = await enrichPOIs(externalPois);
     }
   } catch (error) {
     console.error("External search error:", error);

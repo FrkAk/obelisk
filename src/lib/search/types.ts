@@ -84,7 +84,7 @@ export interface ExternalPOI {
   hasWifi?: boolean;
   hasOutdoorSeating?: boolean;
   imageUrl?: string;
-  source: "nominatim" | "overpass";
+  source: "nominatim" | "overpass" | "obelisk-db";
 }
 
 export interface ObeliskResult {

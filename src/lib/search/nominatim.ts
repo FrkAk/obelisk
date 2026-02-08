@@ -24,7 +24,7 @@ const CATEGORY_TO_OSM_TYPE: Record<string, string[]> = {
   nightlife: ["nightclub", "bar", "pub"],
   sports: ["stadium", "sports_centre", "swimming_pool", "fitness_centre"],
   health: ["hospital", "pharmacy", "clinic", "doctors"],
-  transport: ["bus_station", "station", "parking"],
+  transport: ["station", "subway", "bus_station", "tram_stop", "parking"],
   education: ["university", "school", "college", "library"],
   services: ["bank", "post_office", "police", "fire_station"],
 };
@@ -79,6 +79,22 @@ function mapOsmToCategory(osmClass: string, osmType: string): string {
 function buildSearchQuery(intent: ParsedIntent): string {
   const keywords: string[] = [...intent.keywords];
 
+  const KEYWORD_SYNONYMS: Record<string, string> = {
+    metro: "subway",
+    underground: "subway",
+    "u-bahn": "subway",
+    "s-bahn": "train station",
+    tram: "tram_stop",
+    bus: "bus_station",
+  };
+
+  for (let i = 0; i < keywords.length; i++) {
+    const synonym = KEYWORD_SYNONYMS[keywords[i].toLowerCase()];
+    if (synonym) {
+      keywords[i] = synonym;
+    }
+  }
+
   if (intent.category && CATEGORY_TO_OSM_TYPE[intent.category]) {
     const types = CATEGORY_TO_OSM_TYPE[intent.category];
     const hasOsmType = keywords.some((kw) =>
@@ -90,13 +106,19 @@ function buildSearchQuery(intent: ParsedIntent): string {
     }
   }
 
-  const osmFriendlyTerms = ["cafe", "restaurant", "bar", "pub", "museum", "park", "gallery", "church", "theatre", "cinema"];
+  const osmFriendlyTerms = ["cafe", "restaurant", "bar", "pub", "museum", "park", "gallery", "church", "theatre", "cinema", "subway", "station", "hospital", "pharmacy", "school", "university", "swimming pool", "tennis", "swimming", "pool", "fitness", "gym"];
   const priorityKeyword = keywords.find((kw) =>
     osmFriendlyTerms.includes(kw.toLowerCase())
   );
 
   if (priorityKeyword) {
     return priorityKeyword;
+  }
+
+  const STOPWORDS = new Set(["the", "a", "an", "in", "on", "at", "to", "for", "of", "and", "or", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might", "can", "shall", "need", "near", "nearby", "nearest", "close", "find", "show", "get", "want", "good", "best", "nice", "great"]);
+  const firstKeyword = keywords[0];
+  if (firstKeyword && firstKeyword.length > 2 && !STOPWORDS.has(firstKeyword.toLowerCase())) {
+    return firstKeyword;
   }
 
   if (intent.category && CATEGORY_TO_OSM_TYPE[intent.category]) {
@@ -130,7 +152,7 @@ export async function searchNominatim(
 
   let finalQuery = query;
   if (intent.cuisineTypes?.[0]) {
-    finalQuery = intent.cuisineTypes[0];
+    finalQuery = intent.cuisineTypes[0] + " " + query;
     console.log(`[nominatim] Cuisine query: "${finalQuery}"`);
   }
 
@@ -199,6 +221,27 @@ export async function searchNominatim(
  * Returns:
  *     Array of external POI results.
  */
+function deduplicateByName(pois: ExternalPOI[]): ExternalPOI[] {
+  const grouped = new Map<string, ExternalPOI[]>();
+  for (const poi of pois) {
+    const key = poi.name.toLowerCase();
+    const existing = grouped.get(key) ?? [];
+    existing.push(poi);
+    grouped.set(key, existing);
+  }
+
+  const result: ExternalPOI[] = [];
+  for (const group of grouped.values()) {
+    if (group.length === 1) {
+      result.push(group[0]);
+    } else {
+      const nonTransport = group.find((p) => p.category !== "transport");
+      result.push(nonTransport ?? group[0]);
+    }
+  }
+  return result;
+}
+
 export async function searchNominatimByName(
   placeName: string,
   location: SearchLocation,
@@ -209,12 +252,9 @@ export async function searchNominatimByName(
     ? `${viewportBounds.west},${viewportBounds.north},${viewportBounds.east},${viewportBounds.south}`
     : MUNICH_VIEWBOX;
 
-  let results = await fetchNominatim(placeName, viewbox, "1", limit);
+  const results = await fetchNominatim(placeName, viewbox, "0", limit, "de");
 
-  if (results.length === 0) {
-    console.log(`[nominatim] Phase 1 empty, falling back to unbounded DE search`);
-    results = await fetchNominatim(placeName, MUNICH_VIEWBOX, "0", limit, "de");
-  }
+  const MAX_DISTANCE_KM = 50;
 
   const mapped = results
     .filter((r) => r.name)
@@ -234,10 +274,13 @@ export async function searchNominatimByName(
       ),
       address: formatAddress(result.address),
       source: "nominatim" as const,
-    }));
+    }))
+    .filter((poi) => (poi.distance ?? 0) <= MAX_DISTANCE_KM * 1000);
 
-  console.log(`[nominatim] Name search: "${placeName}", results: ${mapped.length}`);
-  return mapped;
+  const deduped = deduplicateByName(mapped);
+
+  console.log(`[nominatim] Name search: "${placeName}", results: ${deduped.length}`);
+  return deduped;
 }
 
 async function fetchNominatim(

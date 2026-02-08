@@ -34,6 +34,15 @@ Query: "Zara"
 Query: "lunch for 5, outdoor, under €15"
 {"mode":"keyword","placeName":null,"category":"food","cuisineTypes":[],"filters":{"outdoor":true,"budget":15,"partySize":5},"keywords":["lunch","restaurant"],"type":"complex"}
 
+Query: "beer"
+{"mode":"keyword","placeName":null,"category":"food","cuisineTypes":[],"filters":{},"keywords":["beer","biergarten","bar"],"type":"simple"}
+
+Query: "swimming pool"
+{"mode":"keyword","placeName":null,"category":"sports","cuisineTypes":[],"filters":{},"keywords":["swimming pool","swimming"],"type":"simple"}
+
+Query: "tennis"
+{"mode":"keyword","placeName":null,"category":"sports","cuisineTypes":[],"filters":{},"keywords":["tennis"],"type":"simple"}
+
 Now parse this query:
 Query: "{{QUERY}}"`;
 
@@ -67,6 +76,38 @@ export async function parseQueryIntent(query: string): Promise<ParsedIntent> {
       filters: {},
       keywords: [query.toLowerCase().trim()],
     };
+  }
+
+  const FAST_PATH_MAP: Record<string, ParsedIntent> = {
+    pizza: { type: "simple", mode: "keyword", category: "food", filters: {}, keywords: ["pizza", "restaurant"], cuisineTypes: ["pizza"] },
+    beer: { type: "simple", mode: "keyword", category: "food", filters: {}, keywords: ["beer", "biergarten", "bar"] },
+    coffee: { type: "simple", mode: "keyword", category: "food", filters: {}, keywords: ["cafe", "coffee"] },
+    cafe: { type: "simple", mode: "keyword", category: "food", filters: {}, keywords: ["cafe", "coffee"] },
+    café: { type: "simple", mode: "keyword", category: "food", filters: {}, keywords: ["cafe", "coffee"] },
+    museum: { type: "simple", mode: "keyword", category: "art", filters: {}, keywords: ["museum"] },
+    park: { type: "simple", mode: "keyword", category: "nature", filters: {}, keywords: ["park"] },
+    restaurant: { type: "simple", mode: "keyword", category: "food", filters: {}, keywords: ["restaurant"] },
+    bar: { type: "simple", mode: "keyword", category: "nightlife", filters: {}, keywords: ["bar", "pub"] },
+    pub: { type: "simple", mode: "keyword", category: "nightlife", filters: {}, keywords: ["bar", "pub"] },
+    church: { type: "simple", mode: "keyword", category: "architecture", filters: {}, keywords: ["church"] },
+    metro: { type: "simple", mode: "keyword", category: "transport", filters: {}, keywords: ["subway"] },
+    subway: { type: "simple", mode: "keyword", category: "transport", filters: {}, keywords: ["subway"] },
+    cinema: { type: "simple", mode: "keyword", category: "culture", filters: {}, keywords: ["cinema"] },
+    movie: { type: "simple", mode: "keyword", category: "culture", filters: {}, keywords: ["cinema"] },
+    kino: { type: "simple", mode: "keyword", category: "culture", filters: {}, keywords: ["cinema"] },
+    "swimming pool": { type: "simple", mode: "keyword", category: "sports", filters: {}, keywords: ["swimming pool", "swimming"] },
+    pool: { type: "simple", mode: "keyword", category: "sports", filters: {}, keywords: ["swimming pool", "swimming"] },
+    schwimmbad: { type: "simple", mode: "keyword", category: "sports", filters: {}, keywords: ["swimming pool", "swimming"] },
+    tennis: { type: "simple", mode: "keyword", category: "sports", filters: {}, keywords: ["tennis", "sports_centre"] },
+    gym: { type: "simple", mode: "keyword", category: "sports", filters: {}, keywords: ["fitness_centre", "gym"] },
+    fitness: { type: "simple", mode: "keyword", category: "sports", filters: {}, keywords: ["fitness_centre", "gym"] },
+  };
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const fastPathResult = FAST_PATH_MAP[normalizedQuery];
+  if (fastPathResult) {
+    console.log(`[queryParser] Fast-path: "${query}"`);
+    return fastPathResult;
   }
 
   try {

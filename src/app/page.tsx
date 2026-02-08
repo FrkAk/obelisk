@@ -62,6 +62,7 @@ export default function Home() {
   const [lastSearchQuery, setLastSearchQuery] = useState<string | null>(null);
   const [hasMapMovedSinceSearch, setHasMapMovedSinceSearch] = useState(false);
   const [previousSheetMode, setPreviousSheetMode] = useState<SheetMode>(null);
+  const [flyToLocation, setFlyToLocation] = useState<{ latitude: number; longitude: number; ts: number } | null>(null);
 
   const lastSearchQueryRef = useRef<string | null>(null);
   const regenerateCooldownsRef = useRef<Map<string, number>>(new Map());
@@ -267,10 +268,20 @@ export default function Home() {
       setSelectedRemark(result.remark);
       setSelectedPoi(null);
       setSheetMode("story");
+      setFlyToLocation({
+        latitude: result.remark.poi.latitude,
+        longitude: result.remark.poi.longitude,
+        ts: Date.now(),
+      });
     } else {
       setSelectedPoi(result.poi);
       setSelectedRemark(result.nearbyRemark ?? null);
       setSheetMode(result.nearbyRemark ? "story" : "poi");
+      setFlyToLocation({
+        latitude: result.poi.latitude,
+        longitude: result.poi.longitude,
+        ts: Date.now(),
+      });
     }
   }, [sheetMode]);
 
@@ -376,6 +387,7 @@ export default function Home() {
         selectedRemarkId={selectedRemark?.id}
         isLoading={isLoading}
         userLocation={hasRealLocation ? location : null}
+        flyToLocation={flyToLocation}
       />
 
       <div className="absolute top-safe-area left-4 right-4 z-20 pt-4">

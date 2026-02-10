@@ -6,7 +6,8 @@ import { pois, remarks, categories } from "@/lib/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import type { ExternalPOI } from "@/lib/search/types";
-import type { CategorySlug, Remark, Poi } from "@/types";
+import type { CategorySlug } from "@/types";
+import type { RemarkWithPoi } from "@/lib/db/queries/search";
 
 const bodySchema = z.object({
   name: z.string(),
@@ -14,8 +15,6 @@ const bodySchema = z.object({
   longitude: z.number(),
   category: z.string().optional(),
 });
-
-type RemarkWithPoi = Remark & { poi: Poi };
 
 const OSM_CATEGORY_MAPPING: Record<string, string> = {
   restaurant: "food",
@@ -281,7 +280,7 @@ async function findInDatabase(
     .from(remarks)
     .innerJoin(pois, eq(remarks.poiId, pois.id))
     .leftJoin(categories, eq(pois.categoryId, categories.id))
-    .where(eq(remarks.poiId, matchingPoi.id))
+    .where(and(eq(remarks.poiId, matchingPoi.id), eq(remarks.isCurrent, true)))
     .limit(1);
 
   let remark: RemarkWithPoi | null = null;

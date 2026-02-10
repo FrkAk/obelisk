@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { pois, remarks, categories } from "@/lib/db/schema";
 import { eq, isNull, and, gte, lte } from "drizzle-orm";
 import { generateStory } from "@/lib/ai/storyGenerator";
+import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { z } from "zod";
 
@@ -113,15 +114,33 @@ export async function POST(request: NextRequest) {
 
     for (const poi of poisWithoutRemarks) {
       try {
-        const story = await generateStory({
-          name: poi.name,
+        const storyCtx: StoryPoiContext = {
+          poi: {
+            id: poi.id,
+            osmId: null,
+            name: poi.name,
+            categoryId: null,
+            regionId: null,
+            latitude: poi.latitude,
+            longitude: poi.longitude,
+            address: poi.address,
+            locale: "de-DE",
+            osmType: null,
+            osmTags: poi.osmTags,
+            wikipediaUrl: poi.wikipediaUrl,
+            imageUrl: null,
+            embedding: null,
+            searchVector: null,
+            createdAt: null,
+            updatedAt: null,
+          },
+          categorySlug: poi.categorySlug ?? "hidden",
           categoryName: poi.categoryName || "Hidden Gems",
-          address: poi.address,
-          latitude: poi.latitude,
-          longitude: poi.longitude,
-          wikipediaUrl: poi.wikipediaUrl,
-          osmTags: poi.osmTags,
-        });
+          profile: null,
+          tags: [],
+        };
+
+        const story = await generateStory(storyCtx);
 
         const [insertedRemark] = await db
           .insert(remarks)
@@ -132,6 +151,8 @@ export async function POST(request: NextRequest) {
             content: story.content,
             localTip: story.localTip,
             durationSeconds: story.durationSeconds,
+            version: 1,
+            isCurrent: true,
           })
           .returning();
 
@@ -167,7 +188,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error generating remarks:", error);
     return NextResponse.json(
-      { error: "Failed to generate stories", details: error instanceof Error ? error.message : "Unknown error" },
+      {
+        error: "Failed to generate stories",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }

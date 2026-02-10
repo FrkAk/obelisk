@@ -4,13 +4,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { pois, remarks, categories } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { generateEnhancedStory } from "@/lib/ai/storyGenerator";
+import { generateStory } from "@/lib/ai/storyGenerator";
+import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { scrapeWebsite } from "@/lib/web/scraper";
 import { enrichPOIWithWebSearch } from "@/lib/web/webSearch";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
-import type { CategorySlug, Remark, Poi } from "@/types";
+import type { CategorySlug } from "@/types";
+import { getCurrentRemarkForPoi } from "@/lib/db/queries/remarks";
 
 const log = createLogger("generate-for-poi");
 
@@ -36,8 +38,6 @@ const externalPoiSchema = z.object({
 const bodySchema = z.object({
   poi: externalPoiSchema,
 });
-
-type RemarkWithPoi = Remark & { poi: Poi };
 
 const CATEGORY_MAPPING: Record<string, CategorySlug> = {
   food: "food",
@@ -136,24 +136,32 @@ export async function POST(request: NextRequest) {
 
     const { poi: externalPoi } = parseResult.data;
 
-    log.info(`Request for: "${externalPoi.name}" (osmId: ${externalPoi.osmId}, website: ${externalPoi.website || "none"})`);
+    log.info(
+      `Request for: "${externalPoi.name}" (osmId: ${externalPoi.osmId}, website: ${externalPoi.website || "none"})`
+    );
 
     const existingPoi = await findPoiByOsmId(externalPoi.osmId);
 
     if (existingPoi) {
-      log.info(`Found existing POI in DB: "${existingPoi.name}" (id: ${existingPoi.id})`);
+      log.info(
+        `Found existing POI in DB: "${existingPoi.name}" (id: ${existingPoi.id})`
+      );
 
-      const existingRemark = await findRemarkForPoi(existingPoi.id);
+      const existingRemark = await getCurrentRemarkForPoi(existingPoi.id);
 
       if (existingRemark) {
-        log.success(`Returning cached remark: "${existingRemark.title}" for "${existingRemark.poi.name}"`);
+        log.success(
+          `Returning cached remark: "${existingRemark.title}" for "${existingRemark.poi.name}"`
+        );
         return NextResponse.json({
           remark: existingRemark,
           cached: true,
         });
       }
 
-      log.info(`No remark exists, generating new one for: "${existingPoi.name}"`);
+      log.info(
+        `No remark exists, generating new one for: "${existingPoi.name}"`
+      );
       return await generateAndSaveRemark(existingPoi, externalPoi.website);
     }
 
@@ -162,11 +170,12 @@ export async function POST(request: NextRequest) {
     return await generateAndSaveRemark(newPoi, externalPoi.website);
   } catch (error) {
     log.error("Error:", error);
-    const errorMessage = error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : JSON.stringify(error) || "Unknown error";
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : JSON.stringify(error) || "Unknown error";
     return NextResponse.json(
       { error: "Failed to generate story", details: errorMessage },
       { status: 500 }
@@ -201,81 +210,11 @@ async function findPoiByOsmId(osmId: number) {
   return results[0] || null;
 }
 
-async function findRemarkForPoi(poiId: string): Promise<RemarkWithPoi | null> {
-  const results = await db
-    .select({
-      remarkId: remarks.id,
-      remarkPoiId: remarks.poiId,
-      remarkTitle: remarks.title,
-      remarkTeaser: remarks.teaser,
-      remarkContent: remarks.content,
-      remarkLocalTip: remarks.localTip,
-      remarkDurationSeconds: remarks.durationSeconds,
-      remarkAudioUrl: remarks.audioUrl,
-      remarkCreatedAt: remarks.createdAt,
-      poiId: pois.id,
-      poiOsmId: pois.osmId,
-      poiName: pois.name,
-      poiCategoryId: pois.categoryId,
-      poiLatitude: pois.latitude,
-      poiLongitude: pois.longitude,
-      poiAddress: pois.address,
-      poiWikipediaUrl: pois.wikipediaUrl,
-      poiImageUrl: pois.imageUrl,
-      poiOsmTags: pois.osmTags,
-      poiCreatedAt: pois.createdAt,
-      categoryId: categories.id,
-      categoryName: categories.name,
-      categorySlug: categories.slug,
-      categoryIcon: categories.icon,
-      categoryColor: categories.color,
-    })
-    .from(remarks)
-    .innerJoin(pois, eq(remarks.poiId, pois.id))
-    .leftJoin(categories, eq(pois.categoryId, categories.id))
-    .where(eq(remarks.poiId, poiId))
-    .limit(1);
-
-  const row = results[0];
-  if (!row) return null;
-
-  return {
-    id: row.remarkId,
-    poiId: row.remarkPoiId!,
-    title: row.remarkTitle,
-    teaser: row.remarkTeaser,
-    content: row.remarkContent,
-    localTip: row.remarkLocalTip,
-    durationSeconds: row.remarkDurationSeconds ?? 45,
-    audioUrl: row.remarkAudioUrl,
-    createdAt: row.remarkCreatedAt ?? new Date(),
-    poi: {
-      id: row.poiId,
-      osmId: row.poiOsmId,
-      name: row.poiName,
-      categoryId: row.poiCategoryId!,
-      latitude: row.poiLatitude,
-      longitude: row.poiLongitude,
-      address: row.poiAddress,
-      wikipediaUrl: row.poiWikipediaUrl,
-      imageUrl: row.poiImageUrl,
-      osmTags: row.poiOsmTags,
-      createdAt: row.poiCreatedAt ?? new Date(),
-      category: row.categoryId
-        ? {
-            id: row.categoryId,
-            name: row.categoryName!,
-            slug: row.categorySlug! as CategorySlug,
-            icon: row.categoryIcon!,
-            color: row.categoryColor!,
-          }
-        : undefined,
-    },
-  };
-}
-
-async function createPoiFromExternal(externalPoi: z.infer<typeof externalPoiSchema>) {
-  const categorySlug = CATEGORY_MAPPING[externalPoi.category.toLowerCase()] || "hidden";
+async function createPoiFromExternal(
+  externalPoi: z.infer<typeof externalPoiSchema>
+) {
+  const categorySlug =
+    CATEGORY_MAPPING[externalPoi.category.toLowerCase()] || "hidden";
 
   const allCategories = await db.select().from(categories);
   const category = allCategories.find((c) => c.slug === categorySlug);
@@ -306,10 +245,14 @@ async function createPoiFromExternal(externalPoi: z.infer<typeof externalPoiSche
   if (insertResult.length === 0) {
     const existingPoi = await findPoiByOsmId(externalPoi.osmId);
     if (existingPoi) {
-      log.warn(`Race condition handled — POI already exists: "${existingPoi.name}"`);
+      log.warn(
+        `Race condition handled — POI already exists: "${existingPoi.name}"`
+      );
       return existingPoi;
     }
-    throw new Error(`Failed to create or retrieve POI with osmId: ${externalPoi.osmId}`);
+    throw new Error(
+      `Failed to create or retrieve POI with osmId: ${externalPoi.osmId}`
+    );
   }
 
   const insertedPoi = insertResult[0];
@@ -357,7 +300,9 @@ async function generateAndSaveRemark(
     if (websiteContent.error) {
       log.warn(`Website scrape failed: ${websiteContent.error}`);
     } else {
-      log.success(`Scraped content — Title: "${websiteContent.title}", Desc: "${websiteContent.description?.slice(0, 100)}..."`);
+      log.success(
+        `Scraped content — Title: "${websiteContent.title}", Desc: "${websiteContent.description?.slice(0, 100)}..."`
+      );
     }
   } else {
     log.info(`No website URL provided for: "${poi.name}"`);
@@ -372,21 +317,41 @@ async function generateAndSaveRemark(
   });
 
   log.info(`Web search query: "${webSearchContext.query}"`);
-  log.info(`Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`);
+  log.info(
+    `Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`
+  );
 
-  log.info(`Generating story for: "${poi.name}" with category: "${categoryName}"`);
+  log.info(
+    `Generating story for: "${poi.name}" with category: "${categoryName}"`
+  );
 
-  const story = await generateEnhancedStory({
-    name: poi.name,
+  const storyCtx: StoryPoiContext = {
+    poi: {
+      id: poi.id,
+      osmId: poi.osmId,
+      name: poi.name,
+      categoryId: poi.categoryId,
+      regionId: null,
+      latitude: poi.latitude,
+      longitude: poi.longitude,
+      address: poi.address,
+      locale: "de-DE",
+      osmType: null,
+      osmTags: poi.osmTags,
+      wikipediaUrl: poi.wikipediaUrl,
+      imageUrl: poi.imageUrl,
+      embedding: null,
+      searchVector: null,
+      createdAt: poi.createdAt,
+      updatedAt: null,
+    },
+    categorySlug: poi.categorySlug ?? "hidden",
     categoryName,
-    address: poi.address,
-    latitude: poi.latitude,
-    longitude: poi.longitude,
-    wikipediaUrl: poi.wikipediaUrl,
-    osmTags: poi.osmTags,
-    websiteContent,
-    webSearchContext,
-  });
+    profile: null,
+    tags: [],
+  };
+
+  const story = await generateStory(storyCtx);
 
   log.success(`Generated story — Title: "${story.title}"`);
 
@@ -399,10 +364,12 @@ async function generateAndSaveRemark(
       content: story.content,
       localTip: story.localTip,
       durationSeconds: story.durationSeconds,
+      version: 1,
+      isCurrent: true,
     })
     .returning();
 
-  const remarkWithPoi: RemarkWithPoi = {
+  const remarkWithPoi = {
     id: insertedRemark.id,
     poiId: poi.id,
     title: insertedRemark.title,
@@ -412,6 +379,11 @@ async function generateAndSaveRemark(
     durationSeconds: insertedRemark.durationSeconds ?? 45,
     audioUrl: insertedRemark.audioUrl,
     createdAt: insertedRemark.createdAt ?? new Date(),
+    locale: insertedRemark.locale,
+    version: insertedRemark.version,
+    isCurrent: insertedRemark.isCurrent,
+    modelId: insertedRemark.modelId,
+    confidence: insertedRemark.confidence,
     poi: {
       id: poi.id,
       osmId: poi.osmId,

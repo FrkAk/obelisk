@@ -1,31 +1,27 @@
 "use server";
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db/client";
-import { pois, remarks, categories } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { generateEnhancedStory } from "@/lib/ai/storyGenerator";
+import { getRemarkById, versionBumpRemark } from "@/lib/db/queries/remarks";
+import { generateStory } from "@/lib/ai/storyGenerator";
+import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { scrapeWebsite } from "@/lib/web/scraper";
 import { enrichPOIWithWebSearch } from "@/lib/web/webSearch";
 import { z } from "zod";
-import type { CategorySlug, Remark, Poi } from "@/types";
 
 const bodySchema = z.object({
   remarkId: z.string().uuid(),
 });
 
-type RemarkWithPoi = Remark & { poi: Poi };
-
 /**
- * Regenerates a story for an existing remark.
- * Deletes the old remark and creates a new one with fresh AI-generated content.
+ * Regenerates a story for an existing remark using version-bumping.
+ * Old remark is kept (is_current=false), new version inserted.
  *
  * Args:
  *     remarkId: The ID of the remark to regenerate.
  *
  * Returns:
- *     The newly generated remark.
+ *     The newly generated remark with version bumped.
  */
 export async function POST(request: NextRequest) {
   console.log("[regenerate] === API CALLED ===");
@@ -45,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[regenerate] Regenerating remark: ${remarkId}`);
 
-    const existingRemark = await getRemarkWithPoi(remarkId);
+    const existingRemark = await getRemarkById(remarkId);
     if (!existingRemark) {
       return NextResponse.json(
         { error: "Remark not found" },
@@ -61,7 +57,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const websiteUrl = existingRemark.poi.osmTags?.website ||
+    const websiteUrl =
+      existingRemark.poi.osmTags?.website ||
       existingRemark.poi.osmTags?.["contact:website"];
 
     let websiteContent = null;
@@ -69,7 +66,9 @@ export async function POST(request: NextRequest) {
       console.log(`[regenerate] Scraping website: ${websiteUrl}`);
       websiteContent = await scrapeWebsite(websiteUrl);
       if (websiteContent.error) {
-        console.log(`[regenerate] Website scrape failed: ${websiteContent.error}`);
+        console.log(
+          `[regenerate] Website scrape failed: ${websiteContent.error}`
+        );
       }
     }
 
@@ -82,37 +81,54 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(`[regenerate] Web search query: "${webSearchContext.query}"`);
-    console.log(`[regenerate] Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`);
+    console.log(
+      `[regenerate] Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`
+    );
 
-    console.log(`[regenerate] Generating new story for: "${existingRemark.poi.name}"`);
+    console.log(
+      `[regenerate] Generating new story for: "${existingRemark.poi.name}"`
+    );
 
-    const story = await generateEnhancedStory({
-      name: existingRemark.poi.name,
+    const storyCtx: StoryPoiContext = {
+      poi: {
+        id: existingRemark.poi.id,
+        osmId: existingRemark.poi.osmId,
+        name: existingRemark.poi.name,
+        categoryId: existingRemark.poi.categoryId,
+        regionId: null,
+        latitude: existingRemark.poi.latitude,
+        longitude: existingRemark.poi.longitude,
+        address: existingRemark.poi.address,
+        locale: "de-DE",
+        osmType: null,
+        osmTags: existingRemark.poi.osmTags,
+        wikipediaUrl: existingRemark.poi.wikipediaUrl,
+        imageUrl: existingRemark.poi.imageUrl,
+        embedding: null,
+        searchVector: null,
+        createdAt: existingRemark.poi.createdAt,
+        updatedAt: null,
+      },
+      categorySlug: existingRemark.poi.category?.slug ?? "hidden",
       categoryName,
-      address: existingRemark.poi.address,
-      wikipediaUrl: existingRemark.poi.wikipediaUrl,
-      osmTags: existingRemark.poi.osmTags,
-      websiteContent,
-      webSearchContext,
-    });
+      profile: null,
+      tags: [],
+    };
+
+    const story = await generateStory(storyCtx);
 
     console.log(`[regenerate] Generated new story - Title: "${story.title}"`);
 
-    await db.delete(remarks).where(eq(remarks.id, remarkId));
+    const newRemark = await versionBumpRemark(remarkId, {
+      poiId: existingRemark.poi.id,
+      title: story.title.slice(0, 100),
+      teaser: story.teaser.slice(0, 100),
+      content: story.content,
+      localTip: story.localTip,
+      durationSeconds: story.durationSeconds,
+    });
 
-    const [newRemark] = await db
-      .insert(remarks)
-      .values({
-        poiId: existingRemark.poi.id,
-        title: story.title.slice(0, 100),
-        teaser: story.teaser.slice(0, 100),
-        content: story.content,
-        localTip: story.localTip,
-        durationSeconds: story.durationSeconds,
-      })
-      .returning();
-
-    const remarkWithPoi: RemarkWithPoi = {
+    const remarkWithPoi = {
       id: newRemark.id,
       poiId: existingRemark.poi.id,
       title: newRemark.title,
@@ -122,6 +138,11 @@ export async function POST(request: NextRequest) {
       durationSeconds: newRemark.durationSeconds ?? 45,
       audioUrl: newRemark.audioUrl,
       createdAt: newRemark.createdAt ?? new Date(),
+      locale: newRemark.locale,
+      version: newRemark.version,
+      isCurrent: newRemark.isCurrent,
+      modelId: newRemark.modelId,
+      confidence: newRemark.confidence,
       poi: existingRemark.poi,
     };
 
@@ -131,81 +152,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error regenerating story:", error);
     return NextResponse.json(
-      { error: "Failed to regenerate story", details: error instanceof Error ? error.message : "Unknown error" },
+      {
+        error: "Failed to regenerate story",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }
-}
-
-async function getRemarkWithPoi(remarkId: string): Promise<RemarkWithPoi | null> {
-  const results = await db
-    .select({
-      remarkId: remarks.id,
-      remarkPoiId: remarks.poiId,
-      remarkTitle: remarks.title,
-      remarkTeaser: remarks.teaser,
-      remarkContent: remarks.content,
-      remarkLocalTip: remarks.localTip,
-      remarkDurationSeconds: remarks.durationSeconds,
-      remarkAudioUrl: remarks.audioUrl,
-      remarkCreatedAt: remarks.createdAt,
-      poiId: pois.id,
-      poiOsmId: pois.osmId,
-      poiName: pois.name,
-      poiCategoryId: pois.categoryId,
-      poiLatitude: pois.latitude,
-      poiLongitude: pois.longitude,
-      poiAddress: pois.address,
-      poiWikipediaUrl: pois.wikipediaUrl,
-      poiImageUrl: pois.imageUrl,
-      poiOsmTags: pois.osmTags,
-      poiCreatedAt: pois.createdAt,
-      categoryId: categories.id,
-      categoryName: categories.name,
-      categorySlug: categories.slug,
-      categoryIcon: categories.icon,
-      categoryColor: categories.color,
-    })
-    .from(remarks)
-    .innerJoin(pois, eq(remarks.poiId, pois.id))
-    .leftJoin(categories, eq(pois.categoryId, categories.id))
-    .where(eq(remarks.id, remarkId))
-    .limit(1);
-
-  const row = results[0];
-  if (!row) return null;
-
-  return {
-    id: row.remarkId,
-    poiId: row.remarkPoiId!,
-    title: row.remarkTitle,
-    teaser: row.remarkTeaser,
-    content: row.remarkContent,
-    localTip: row.remarkLocalTip,
-    durationSeconds: row.remarkDurationSeconds ?? 45,
-    audioUrl: row.remarkAudioUrl,
-    createdAt: row.remarkCreatedAt ?? new Date(),
-    poi: {
-      id: row.poiId,
-      osmId: row.poiOsmId,
-      name: row.poiName,
-      categoryId: row.poiCategoryId!,
-      latitude: row.poiLatitude,
-      longitude: row.poiLongitude,
-      address: row.poiAddress,
-      wikipediaUrl: row.poiWikipediaUrl,
-      imageUrl: row.poiImageUrl,
-      osmTags: row.poiOsmTags,
-      createdAt: row.poiCreatedAt ?? new Date(),
-      category: row.categoryId
-        ? {
-            id: row.categoryId,
-            name: row.categoryName!,
-            slug: row.categorySlug! as CategorySlug,
-            icon: row.categoryIcon!,
-            color: row.categoryColor!,
-          }
-        : undefined,
-    },
-  };
 }

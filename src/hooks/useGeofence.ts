@@ -3,13 +3,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useGeolocation } from "./useGeolocation";
 import { haversineDistance } from "@/lib/geo/distance";
-import type { Remark, Poi, GeofenceConfig } from "@/types";
+import type { Remark, Poi, GeofenceConfig, Category } from "@/types";
 import { DEFAULT_GEOFENCE_CONFIG } from "@/types";
 
+type PoiWithCat = Poi & { category?: Category };
+
 interface GeofenceState {
-  triggeredRemark: (Remark & { poi: Poi }) | null;
-  preloadedRemarks: (Remark & { poi: Poi })[];
-  queuedRemarks: (Remark & { poi: Poi })[];
+  triggeredRemark: (Remark & { poi: PoiWithCat }) | null;
+  preloadedRemarks: (Remark & { poi: PoiWithCat })[];
+  queuedRemarks: (Remark & { poi: PoiWithCat })[];
 }
 
 interface NotificationHistory {
@@ -18,7 +20,7 @@ interface NotificationHistory {
 }
 
 export function useGeofence(
-  remarks: (Remark & { poi: Poi })[],
+  remarks: (Remark & { poi: PoiWithCat })[],
   config: GeofenceConfig = DEFAULT_GEOFENCE_CONFIG
 ) {
   const { location } = useGeolocation();

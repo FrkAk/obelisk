@@ -1,4 +1,4 @@
-import type { CategorySlug, Remark, Poi } from "@/types";
+import type { CategorySlug, Remark, Poi, Category } from "@/types";
 
 export type SearchQueryType =
   | "simple"
@@ -50,7 +50,7 @@ export interface SearchResult {
   hasStory: boolean;
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
-  remark?: Remark & { poi: Poi };
+  remark?: Remark & { poi: Poi & { category?: Category } };
   source: "typesense" | "semantic" | "obelisk-db";
 }
 
@@ -142,7 +142,7 @@ export interface ExternalPOI {
 
 export interface ObeliskResult {
   type: "remark";
-  remark: Remark & { poi: Poi };
+  remark: Remark & { poi: Poi & { category?: Category } };
   distance?: number;
   score: number;
 }
@@ -150,7 +150,7 @@ export interface ObeliskResult {
 export interface ExternalResult {
   type: "external";
   poi: ExternalPOI;
-  nearbyRemark?: Remark & { poi: Poi };
+  nearbyRemark?: Remark & { poi: Poi & { category?: Category } };
   distance?: number;
   score: number;
 }

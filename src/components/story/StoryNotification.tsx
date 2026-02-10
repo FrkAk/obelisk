@@ -1,12 +1,12 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { Remark, Poi, CategorySlug } from "@/types";
+import type { Remark, Poi, CategorySlug, Category } from "@/types";
 import { CATEGORY_COLORS } from "@/types";
 import { springTransitions, notificationVariants } from "@/lib/ui/animations";
 
 interface StoryNotificationProps {
-  remark: Remark & { poi: Poi };
+  remark: Remark & { poi: Poi & { category?: Category } };
   onTap: () => void;
   onDismiss: () => void;
 }

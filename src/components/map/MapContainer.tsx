@@ -6,13 +6,15 @@ import { MapView, type MapBounds } from "./MapView";
 import { POIPin } from "./POIPin";
 import { ClusterPin } from "./ClusterPin";
 import { UserLocationMarker } from "./UserLocationMarker";
-import type { Remark, Poi, GeoLocation, CategorySlug } from "@/types";
+import type { Remark, Poi, GeoLocation, CategorySlug, Category } from "@/types";
 import { CATEGORY_COLORS } from "@/types";
 import type { ViewportBounds } from "@/lib/search/types";
 
+type PoiWithCat = Poi & { category?: Category };
+
 interface MapContainerProps {
-  remarks: (Remark & { poi: Poi })[];
-  onPinClick: (remark: Remark & { poi: Poi }) => void;
+  remarks: (Remark & { poi: PoiWithCat })[];
+  onPinClick: (remark: Remark & { poi: PoiWithCat }) => void;
   onViewportChange?: (center: { latitude: number; longitude: number }) => void;
   onViewportUpdate?: (update: { center: { latitude: number; longitude: number }; bounds: ViewportBounds; zoom: number }) => void;
   onPoiClick?: (poi: { name: string; latitude: number; longitude: number; category?: string }) => void;
@@ -22,7 +24,7 @@ interface MapContainerProps {
   flyToLocation?: { latitude: number; longitude: number; ts: number } | null;
 }
 
-type RemarkProperties = { remark: Remark & { poi: Poi } };
+type RemarkProperties = { remark: Remark & { poi: PoiWithCat } };
 type ClusterFeature = Supercluster.ClusterFeature<RemarkProperties>;
 type PointFeature = Supercluster.PointFeature<RemarkProperties>;
 
@@ -156,7 +158,7 @@ export function MapContainer({
         {userLocation && <UserLocationMarker location={userLocation} />}
         {clusters.map((cluster) => {
           const [longitude, latitude] = cluster.geometry.coordinates;
-          const props = cluster.properties as { cluster?: boolean; cluster_id?: number; point_count?: number; remark?: Remark & { poi: Poi } };
+          const props = cluster.properties as { cluster?: boolean; cluster_id?: number; point_count?: number; remark?: Remark & { poi: PoiWithCat } };
 
           if (props.cluster && props.cluster_id !== undefined) {
             const clusterData = cluster as ClusterFeature;

@@ -2,10 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useGeolocation } from "./useGeolocation";
-import type { Remark, Poi } from "@/types";
+import type { Remark, Poi, Category } from "@/types";
 
 interface NearbyRemarksResponse {
-  remarks: (Remark & { poi: Poi })[];
+  remarks: (Remark & { poi: Poi & { category?: Category } })[];
   total: number;
 }
 

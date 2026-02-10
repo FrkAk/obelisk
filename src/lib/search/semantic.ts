@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { haversineDistance } from "@/lib/geo/distance";
 import { EMBED_MODEL } from "@/lib/ai/ollama";
 
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
 
 interface EmbedResponse {
   embeddings: number[][];
@@ -27,7 +27,7 @@ interface SemanticSearchResult {
  *     text: The text to embed.
  *
  * Returns:
- *     A 1024-dimensional embedding vector.
+ *     A 768-dimensional embedding vector.
  *
  * Raises:
  *     Error: When the Ollama API call fails.

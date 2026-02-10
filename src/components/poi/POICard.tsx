@@ -6,12 +6,12 @@ import ReactMarkdown from "react-markdown";
 import { GlassPill, ShimmerText } from "@/components/ui";
 import { springTransitions } from "@/lib/ui/animations";
 import type { ExternalPOI } from "@/lib/search/types";
-import type { Remark, Poi, CategorySlug } from "@/types";
+import type { Remark, Poi, CategorySlug, Category } from "@/types";
 import { CATEGORY_COLORS } from "@/types";
 
 interface POICardProps {
   poi: ExternalPOI;
-  remark?: (Remark & { poi: Poi }) | null;
+  remark?: (Remark & { poi: Poi & { category?: Category } }) | null;
   onNavigate?: () => void;
   onGenerateStory?: () => void;
   onRegenerate?: () => void;

@@ -19,6 +19,7 @@ export DATABASE_URL := postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
 export OLLAMA_URL := http://localhost:11434
 export OLLAMA_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_SEARCH_MODEL ?= gemma3:4b-it-qat
+export OLLAMA_EMBED_MODEL ?= mxbai-embed-large
 export TYPESENSE_API_KEY ?= obelisk_typesense_dev
 export SEED_RADIUS ?= 1000
 
@@ -123,7 +124,7 @@ setup:
 	@echo "$(CYAN)[3/6]$(RESET) Ensuring Ollama models..."
 	ollama pull $(OLLAMA_MODEL)
 	ollama pull $(OLLAMA_SEARCH_MODEL)
-	ollama pull mxbai-embed-large
+	ollama pull $(OLLAMA_EMBED_MODEL)
 	@echo ""
 	@echo "$(CYAN)[4/6]$(RESET) Seeding POIs..."
 	$(COMPOSE) exec app bun scripts/seed-pois.ts

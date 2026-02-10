@@ -2,9 +2,9 @@ import { db } from "../src/lib/db/client";
 import { pois } from "../src/lib/db/schema";
 import { isNull } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+import { EMBED_MODEL } from "../src/lib/ai/ollama";
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-const EMBED_MODEL = "mxbai-embed-large";
 const BATCH_SIZE = 10;
 
 interface EmbedResponse {

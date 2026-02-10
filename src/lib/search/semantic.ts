@@ -1,9 +1,9 @@
 import { db } from "@/lib/db/client";
 import { sql } from "drizzle-orm";
 import { haversineDistance } from "@/lib/geo/distance";
+import { EMBED_MODEL } from "@/lib/ai/ollama";
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-const EMBED_MODEL = "mxbai-embed-large";
 
 interface EmbedResponse {
   embeddings: number[][];

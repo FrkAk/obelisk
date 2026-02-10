@@ -24,6 +24,7 @@ interface OllamaGenerateResponse {
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
 export const SEARCH_MODEL = process.env.OLLAMA_SEARCH_MODEL || "gemma3:4b";
+export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "mxbai-embed-large";
 
 /**
  * Generates text using Ollama.

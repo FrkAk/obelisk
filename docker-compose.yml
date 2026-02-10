@@ -15,8 +15,6 @@ services:
       OLLAMA_URL: http://localhost:11434
       TYPESENSE_URL: http://localhost:8108
       TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-obelisk_typesense_dev}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:4b-it-qat}
-      OLLAMA_SEARCH_MODEL: ${OLLAMA_SEARCH_MODEL:-gemma3:4b-it-qat}
       SEARXNG_URL: http://localhost:8080
     depends_on:
       postgres:

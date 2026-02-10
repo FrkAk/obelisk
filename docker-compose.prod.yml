@@ -4,6 +4,8 @@ services:
       context: .
       target: prod
     network_mode: "host"
+    env_file:
+      - .env.local
     environment:
       DATABASE_URL: postgresql://obelisk:${DB_PASSWORD}@localhost:5432/obelisk
       OLLAMA_URL: http://localhost:11434

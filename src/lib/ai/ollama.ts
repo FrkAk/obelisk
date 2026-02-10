@@ -21,10 +21,10 @@ interface OllamaGenerateResponse {
   done: boolean;
 }
 
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
-export const SEARCH_MODEL = process.env.OLLAMA_SEARCH_MODEL || "gemma3:4b";
-export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "mxbai-embed-large";
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
+const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "gemma3:4b-it-qat";
+export const SEARCH_MODEL = process.env.OLLAMA_SEARCH_MODEL || "gemma3:4b-it-qat";
+export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "embeddinggemma:300m";
 
 /**
  * Generates text using Ollama.

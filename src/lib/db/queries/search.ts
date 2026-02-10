@@ -1,16 +1,7 @@
 import { db } from "../client";
 import { remarks, pois, categories } from "../schema";
-import { eq, and, gte, lte, ilike, or } from "drizzle-orm";
+import { eq, and, gte, lte, ilike, or, sql } from "drizzle-orm";
 import type { CategorySlug, Remark, Poi, Category } from "@/types";
-
-interface SearchRemarksParams {
-  latitude: number;
-  longitude: number;
-  radiusMeters?: number;
-  category?: CategorySlug;
-  keywords?: string[];
-  limit?: number;
-}
 
 export type RemarkWithPoi = Remark & {
   poi: Poi & { category?: Category };
@@ -111,22 +102,25 @@ function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
 }
 
 /**
- * Searches remarks by location, category, and keywords.
+ * Searches remarks and POI names for text matches within a geo bounding box.
  *
  * Args:
- *     params: Search parameters including location, category filter, and keywords.
+ *     query: The text to search for.
+ *     latitude: Center latitude.
+ *     longitude: Center longitude.
+ *     radiusMeters: Search radius in meters.
+ *     limit: Maximum number of results.
  *
  * Returns:
- *     Array of remarks matching the search criteria with their POIs.
+ *     Array of remarks with their associated POIs matching the query.
  */
-export async function searchRemarks({
-  latitude,
-  longitude,
-  radiusMeters = 1000,
-  category,
-  keywords = [],
-  limit = 50,
-}: SearchRemarksParams): Promise<RemarkWithPoi[]> {
+export async function searchRemarksByText(
+  query: string,
+  latitude: number,
+  longitude: number,
+  radiusMeters: number,
+  limit: number = 20
+): Promise<RemarkWithPoi[]> {
   const latDelta = radiusMeters / 111320;
   const lonDelta = radiusMeters / (111320 * Math.cos(latitude * (Math.PI / 180)));
 
@@ -135,171 +129,42 @@ export async function searchRemarks({
   const minLon = longitude - lonDelta;
   const maxLon = longitude + lonDelta;
 
-  const conditions = [
-    gte(pois.latitude, minLat),
-    lte(pois.latitude, maxLat),
-    gte(pois.longitude, minLon),
-    lte(pois.longitude, maxLon),
-  ];
-
-  if (category) {
-    conditions.push(eq(categories.slug, category));
-  }
+  const pattern = `%${query}%`;
 
   const results = await db
     .select(remarkPoiSelect())
     .from(remarks)
     .innerJoin(pois, eq(remarks.poiId, pois.id))
     .leftJoin(categories, eq(pois.categoryId, categories.id))
-    .where(and(...conditions))
+    .where(
+      and(
+        gte(pois.latitude, minLat),
+        lte(pois.latitude, maxLat),
+        gte(pois.longitude, minLon),
+        lte(pois.longitude, maxLon),
+        or(
+          ilike(remarks.title, pattern),
+          ilike(remarks.content, pattern),
+          ilike(pois.name, pattern)
+        )
+      )
+    )
     .limit(limit);
 
-  const mappedResults = results.map(mapRowToRemarkWithPoi);
-
-  if (keywords.length === 0) {
-    return mappedResults;
-  }
-
-  return mappedResults.filter((remark) => {
-    const searchableText = [
-      remark.title,
-      remark.teaser,
-      remark.content,
-      remark.poi?.name,
-      remark.poi?.address,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    return keywords.some((keyword) =>
-      searchableText.includes(keyword.toLowerCase())
-    );
-  });
-}
-
-/**
- * Searches remarks by place name using ILIKE matching on POI and remark names.
- *
- * Args:
- *     placeName: The name to search for.
- *     category: Optional category slug to filter by.
- *     limit: Maximum number of results.
- *
- * Returns:
- *     Array of remarks matching the name with their POIs.
- */
-export async function searchRemarksByName(
-  placeName: string,
-  category?: CategorySlug,
-  limit: number = 20
-): Promise<RemarkWithPoi[]> {
-  const conditions = [
-    or(
-      ilike(pois.name, `%${placeName}%`),
-      ilike(remarks.title, `%${placeName}%`)
-    ),
-  ];
-
-  if (category) {
-    conditions.push(eq(categories.slug, category));
-  }
-
-  const results = await db
-    .select(remarkPoiSelect())
-    .from(remarks)
-    .innerJoin(pois, eq(remarks.poiId, pois.id))
-    .leftJoin(categories, eq(pois.categoryId, categories.id))
-    .where(and(...conditions))
-    .limit(limit);
-
-  console.log(`[search-db] Name search: "${placeName}", results: ${results.length}`);
   return results.map(mapRowToRemarkWithPoi);
 }
 
 /**
- * Searches POIs by name without requiring remarks.
- *
- * Args:
- *     placeName: The name to search for.
- *     category: Optional category slug to filter by.
- *     limit: Maximum number of results.
- *
- * Returns:
- *     Array of POIs matching the name with their categories.
- */
-export async function searchPoisByName(
-  placeName: string,
-  category?: CategorySlug,
-  limit: number = 20
-): Promise<(Poi & { category?: Category })[]> {
-  const conditions = [ilike(pois.name, `%${placeName}%`)];
-
-  if (category) {
-    conditions.push(eq(categories.slug, category));
-  }
-
-  const results = await db
-    .select({
-      poiId: pois.id,
-      poiOsmId: pois.osmId,
-      poiName: pois.name,
-      poiCategoryId: pois.categoryId,
-      poiLatitude: pois.latitude,
-      poiLongitude: pois.longitude,
-      poiAddress: pois.address,
-      poiWikipediaUrl: pois.wikipediaUrl,
-      poiImageUrl: pois.imageUrl,
-      poiOsmTags: pois.osmTags,
-      poiCreatedAt: pois.createdAt,
-      categoryId: categories.id,
-      categoryName: categories.name,
-      categorySlug: categories.slug,
-      categoryIcon: categories.icon,
-      categoryColor: categories.color,
-    })
-    .from(pois)
-    .leftJoin(categories, eq(pois.categoryId, categories.id))
-    .where(and(...conditions))
-    .limit(limit);
-
-  console.log(`[search-db] POI name search: "${placeName}", results: ${results.length}`);
-
-  return results.map((row) => ({
-    id: row.poiId,
-    osmId: row.poiOsmId,
-    name: row.poiName,
-    categoryId: row.poiCategoryId!,
-    latitude: row.poiLatitude,
-    longitude: row.poiLongitude,
-    address: row.poiAddress,
-    wikipediaUrl: row.poiWikipediaUrl,
-    imageUrl: row.poiImageUrl,
-    osmTags: row.poiOsmTags,
-    createdAt: row.poiCreatedAt ?? new Date(),
-    category: row.categoryId
-      ? {
-          id: row.categoryId,
-          name: row.categoryName!,
-          slug: row.categorySlug! as CategorySlug,
-          icon: row.categoryIcon!,
-          color: row.categoryColor!,
-        }
-      : undefined,
-  }));
-}
-
-/**
- * Gets a random remark from a specific category within range.
+ * Gets a random remark within a geo bounding box, optionally filtered by category.
  *
  * Args:
  *     latitude: Center latitude.
  *     longitude: Center longitude.
- *     radiusMeters: Search radius.
- *     category: Optional category to filter by.
+ *     radiusMeters: Search radius in meters.
+ *     category: Optional category slug to filter by.
  *
  * Returns:
- *     A random remark or undefined if none found.
+ *     A random remark with its POI, or undefined if none found.
  */
 export async function getRandomRemark(
   latitude: number,
@@ -307,16 +172,30 @@ export async function getRandomRemark(
   radiusMeters: number = 2000,
   category?: CategorySlug
 ): Promise<RemarkWithPoi | undefined> {
-  const results = await searchRemarks({
-    latitude,
-    longitude,
-    radiusMeters,
-    category,
-    limit: 100,
-  });
+  const latDelta = radiusMeters / 111320;
+  const lonDelta = radiusMeters / (111320 * Math.cos(latitude * (Math.PI / 180)));
+
+  const conditions = [
+    gte(pois.latitude, latitude - latDelta),
+    lte(pois.latitude, latitude + latDelta),
+    gte(pois.longitude, longitude - lonDelta),
+    lte(pois.longitude, longitude + lonDelta),
+  ];
+
+  if (category) {
+    conditions.push(eq(categories.slug, category));
+  }
+
+  const results = await db
+    .select(remarkPoiSelect())
+    .from(remarks)
+    .innerJoin(pois, eq(remarks.poiId, pois.id))
+    .leftJoin(categories, eq(pois.categoryId, categories.id))
+    .where(and(...conditions))
+    .orderBy(sql`RANDOM()`)
+    .limit(1);
 
   if (results.length === 0) return undefined;
 
-  const randomIndex = Math.floor(Math.random() * results.length);
-  return results[randomIndex];
+  return mapRowToRemarkWithPoi(results[0]);
 }

@@ -1,5 +1,4 @@
-.PHONY: help setup run run-local stop logs rebuild destroy
-
+.PHONY: help setup run run-local stop logs rebuild destroy seed-pois enrich-pois sync-search generate-embeddings search-setup
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -18,8 +17,10 @@ endif
 
 export DATABASE_URL := postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
 export OLLAMA_URL := http://localhost:11434
-export OLLAMA_MODEL ?= gemma3:27b
-export OLLAMA_SEARCH_MODEL ?= gemma3:4b
+export OLLAMA_MODEL ?= gemma3:4b-it-qat
+export OLLAMA_SEARCH_MODEL ?= gemma3:4b-it-qat
+export TYPESENSE_API_KEY ?= obelisk_typesense_dev
+export SEED_RADIUS ?= 1000
 
 help:
 	@echo ""
@@ -33,6 +34,13 @@ help:
 	@echo "  $(CYAN)logs$(RESET)       View database logs"
 	@echo "  $(CYAN)rebuild$(RESET)    Clean rebuild (deps + next cache)"
 	@echo "  $(CYAN)destroy$(RESET)    Stop and remove all data"
+	@echo ""
+	@echo "$(GREEN)Search Pipeline:$(RESET)"
+	@echo "  $(CYAN)seed-pois$(RESET)           Seed POIs from Overpass API"
+	@echo "  $(CYAN)enrich-pois$(RESET)         Enrich POIs with web data + LLM"
+	@echo "  $(CYAN)sync-search$(RESET)         Sync POIs to Typesense"
+	@echo "  $(CYAN)generate-embeddings$(RESET)  Generate vector embeddings"
+	@echo "  $(CYAN)search-setup$(RESET)        Run full search pipeline"
 	@echo ""
 
 ifeq ($(ARCH),aarch64)
@@ -103,22 +111,24 @@ else
 setup:
 	@echo "$(GREEN)Setting up Obelisk on $(PLATFORM)...$(RESET)"
 	@echo ""
-	@echo "$(CYAN)[1/5]$(RESET) Building and starting services..."
+	@echo "$(CYAN)[1/6]$(RESET) Building and starting services..."
 	$(COMPOSE) up -d --build
 	@echo "Waiting for services..."
 	@sleep 8
 	@echo ""
-	@echo "$(CYAN)[2/5]$(RESET) Running migrations..."
+	@echo "$(CYAN)[2/6]$(RESET) Enabling extensions and running migrations..."
+	$(COMPOSE) exec -T postgres psql -U obelisk -d obelisk -f /dev/stdin < drizzle/0001_enable_extensions.sql
 	$(COMPOSE) exec app bun run drizzle-kit push
 	@echo ""
-	@echo "$(CYAN)[3/5]$(RESET) Ensuring Ollama models..."
-	$(COMPOSE) exec ollama ollama pull $(OLLAMA_MODEL)
-	$(COMPOSE) exec ollama ollama pull $(OLLAMA_SEARCH_MODEL)
+	@echo "$(CYAN)[3/6]$(RESET) Ensuring Ollama models..."
+	ollama pull $(OLLAMA_MODEL)
+	ollama pull $(OLLAMA_SEARCH_MODEL)
+	ollama pull mxbai-embed-large
 	@echo ""
-	@echo "$(CYAN)[4/5]$(RESET) Seeding POIs..."
+	@echo "$(CYAN)[4/6]$(RESET) Seeding POIs..."
 	$(COMPOSE) exec app bun scripts/seed-pois.ts
 	@echo ""
-	@echo "$(CYAN)[5/5]$(RESET) Generating stories..."
+	@echo "$(CYAN)[5/6]$(RESET) Generating stories..."
 	-$(COMPOSE) exec app bun scripts/generate-stories.ts || true
 	@echo ""
 	@echo "$(GREEN)Setup complete!$(RESET) Run 'make run' to start"
@@ -165,3 +175,35 @@ destroy:
 	$(COMPOSE) down -v --remove-orphans
 	rm -rf .next node_modules
 	@echo "Done. Run 'make setup' to start fresh."
+
+ifeq ($(ARCH),aarch64)
+
+seed-pois:
+	bun scripts/seed-pois.ts
+
+enrich-pois:
+	bun scripts/enrich-pois.ts
+
+sync-search:
+	bun scripts/sync-typesense.ts
+
+generate-embeddings:
+	bun scripts/generate-embeddings.ts
+
+else
+
+seed-pois:
+	$(COMPOSE) exec app bun scripts/seed-pois.ts
+
+enrich-pois:
+	$(COMPOSE) exec app bun scripts/enrich-pois.ts
+
+sync-search:
+	$(COMPOSE) exec app bun scripts/sync-typesense.ts
+
+generate-embeddings:
+	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
+
+endif
+
+search-setup: seed-pois enrich-pois sync-search generate-embeddings

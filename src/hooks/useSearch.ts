@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type {
   SearchResult,
   SearchResponse,
@@ -9,7 +9,7 @@ import type {
 } from "@/lib/search/types";
 import type { CategorySlug } from "@/types";
 
-export type SearchStage = "idle" | "parsing" | "searching" | "generating";
+export type SearchStage = "idle" | "parsing" | "searching";
 
 interface UseSearchOptions {
   radius?: number;
@@ -18,7 +18,6 @@ interface UseSearchOptions {
 
 interface UseSearchReturn {
   results: SearchResult[];
-  conversationalResponse: string | null;
   intent: ParsedIntent | null;
   isLoading: boolean;
   searchStage: SearchStage;
@@ -34,19 +33,18 @@ interface UseSearchReturn {
 }
 
 /**
- * Hook for performing intelligent searches across Obelisk and external POIs.
+ * Hook for performing searches across Obelisk POIs and external sources.
  *
  * Args:
  *     options: Search options including radius and result limit.
  *
  * Returns:
- *     Search state and functions for performing searches.
+ *     Search state and functions for performing and clearing searches.
  */
 export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
   const { radius = 1000, limit = 20 } = options;
 
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [conversationalResponse, setConversationalResponse] = useState<string | null>(null);
   const [intent, setIntent] = useState<ParsedIntent | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchStage, setSearchStage] = useState<SearchStage>("idle");
@@ -81,8 +79,6 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
           }),
         });
 
-        setSearchStage("generating");
-
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.error || `Search failed: ${response.statusText}`);
@@ -91,14 +87,12 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
         const data: SearchResponse = await response.json();
 
         setResults(data.results);
-        setConversationalResponse(data.conversationalResponse);
         setIntent(data.intent);
         setTiming(data.timing);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Search failed";
         setError(message);
         setResults([]);
-        setConversationalResponse(null);
         setIntent(null);
       } finally {
         setIsLoading(false);
@@ -110,7 +104,6 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
 
   const clear = useCallback(() => {
     setResults([]);
-    setConversationalResponse(null);
     setIntent(null);
     setError(null);
     setTiming(null);
@@ -119,7 +112,6 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
 
   return {
     results,
-    conversationalResponse,
     intent,
     isLoading,
     searchStage,
@@ -128,4 +120,49 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
     search,
     clear,
   };
+}
+
+/**
+ * Hook for autocomplete suggestions with debounced fetching.
+ *
+ * Returns:
+ *     Autocomplete state and functions for fetching and clearing suggestions.
+ */
+export function useAutocomplete() {
+  const [suggestions, setSuggestions] = useState<Array<{ name: string; category: string }>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchSuggestions = useCallback(
+    (prefix: string, location?: { latitude: number; longitude: number }) => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (prefix.length < 2) {
+        setSuggestions([]);
+        return;
+      }
+
+      timerRef.current = setTimeout(async () => {
+        setIsLoading(true);
+        try {
+          const params = new URLSearchParams({ q: prefix });
+          if (location) {
+            params.set("lat", location.latitude.toString());
+            params.set("lon", location.longitude.toString());
+          }
+          const response = await fetch(`/api/search/autocomplete?${params}`);
+          const data = await response.json();
+          setSuggestions(data.suggestions || []);
+        } catch {
+          setSuggestions([]);
+        } finally {
+          setIsLoading(false);
+        }
+      }, 150);
+    },
+    []
+  );
+
+  const clear = useCallback(() => setSuggestions([]), []);
+
+  return { suggestions, isLoading, fetchSuggestions, clear };
 }

@@ -78,7 +78,6 @@ export default function Home() {
   const { triggeredRemark, dismissNotification } = useGeofence(remarks);
   const {
     results: searchResults,
-    conversationalResponse,
     isLoading: isSearching,
     searchStage,
     search,
@@ -264,25 +263,36 @@ export default function Home() {
 
   const handleSearchResultTap = useCallback((result: SearchResult) => {
     setPreviousSheetMode(sheetMode);
-    if (result.type === "remark") {
+
+    if (result.remark) {
       setSelectedRemark(result.remark);
       setSelectedPoi(null);
       setSheetMode("story");
-      setFlyToLocation({
-        latitude: result.remark.poi.latitude,
-        longitude: result.remark.poi.longitude,
-        ts: Date.now(),
-      });
     } else {
-      setSelectedPoi(result.poi);
-      setSelectedRemark(result.nearbyRemark ?? null);
-      setSheetMode(result.nearbyRemark ? "story" : "poi");
-      setFlyToLocation({
-        latitude: result.poi.latitude,
-        longitude: result.poi.longitude,
-        ts: Date.now(),
-      });
+      const externalPoi: ExternalPOI = {
+        id: result.id,
+        osmId: 0,
+        osmType: "node",
+        name: result.name,
+        category: result.category,
+        latitude: result.latitude,
+        longitude: result.longitude,
+        address: result.address,
+        cuisine: result.cuisine,
+        hasWifi: result.hasWifi,
+        hasOutdoorSeating: result.hasOutdoorSeating,
+        source: "overpass",
+      };
+      setSelectedPoi(externalPoi);
+      setSelectedRemark(null);
+      setSheetMode("poi");
     }
+
+    setFlyToLocation({
+      latitude: result.latitude,
+      longitude: result.longitude,
+      ts: Date.now(),
+    });
   }, [sheetMode]);
 
   const handleGenerateStoryForPoi = useCallback(async () => {
@@ -458,10 +468,8 @@ export default function Home() {
         {sheetMode === "search" && (
           <SearchResults
             results={searchResults}
-            conversationalResponse={conversationalResponse ?? undefined}
             isLoading={isSearching}
             onResultTap={handleSearchResultTap}
-            generatingPoiId={generatingPoiId}
           />
         )}
       </BottomSheet>

@@ -137,6 +137,47 @@ When user searches "museum with wifi" or "quiet library" → category is "art"/"
 
 ---
 
+### Problem 13: LLM generates incorrect/useless keywords for non-fast-path queries
+
+**What happens:** Any query not in the 24-entry `FAST_PATH_MAP` is parsed by the LLM (gemma3:4b). The LLM frequently returns keywords that are not OSM-searchable, misclassifies modes, or produces entirely wrong structured output — making the downstream `buildSearchQuery` produce queries that Nominatim can't match.
+
+**Root causes:**
+
+**13a. Query parser uses JSON output format instead of labeled text**
+
+`src/lib/search/queryParser.ts:15-16` — The prompt demands JSON output (`{"mode":"...","keywords":[...],...}`), which adds unnecessary parsing complexity. The story generator (`src/lib/ai/storyGenerator.ts:282-286`) already proves that a labeled text format (`TITLE: ...\nTEASER: ...`) with regex extraction is more reliable with gemma3. The query parser should use the same pattern (e.g., `MODE: keyword\nKEYWORDS: pizza, restaurant\nCATEGORY: food`) instead of requiring valid JSON. The current JSON approach means:
+- Any stray text or formatting wraps the JSON and breaks `JSON.parse`, triggering `fallbackParse`
+- The model wastes tokens on JSON syntax (braces, quotes, commas) instead of focusing on semantic accuracy
+- `extractJsonFromResponse` needs three increasingly desperate regex fallbacks to find the JSON object
+
+**13b. Prompt has insufficient examples for edge cases**
+
+`src/lib/search/queryParser.ts:5-47` — The prompt contains only ~10 examples. Common query patterns that the LLM gets wrong:
+- German-language queries: "Apotheke" (pharmacy), "Krankenhaus" (hospital) — LLM doesn't map to English OSM types
+- Slang and colloquial terms: "döner", "simit", "currywurst" — LLM doesn't know these should map to `restaurant`
+- Multi-intent queries: "coffee and cake near Marienplatz" — LLM picks one intent and drops the rest
+- Negations: "not too expensive restaurant" — LLM ignores the negation
+
+**13c. Keywords don't align with OSM taxonomy, making `buildSearchQuery` ineffective**
+
+`src/lib/search/nominatim.ts:79-129` — `buildSearchQuery` tries to find an OSM-friendly term in the keywords array (line 109-116). If the LLM generates keywords like `["food", "eat", "lunch"]` instead of `["restaurant"]`, none match the `osmFriendlyTerms` list. The function falls back to the first keyword (`"food"`), which Nominatim can't meaningfully resolve to POIs.
+
+| Query | LLM keywords (actual) | Ideal keywords | buildSearchQuery output | Works? |
+|-------|-----------------------|----------------|------------------------|--------|
+| Apotheke | ["apotheke"] | ["pharmacy"] | "apotheke" | No — Nominatim needs "pharmacy" |
+| Döner | ["döner", "food"] | ["döner", "restaurant"] | "döner" | Partial — no fallback to "restaurant" |
+| hospital nearby | ["hospital", "nearby"] | ["hospital"] | "hospital" | Yes (lucky) |
+| where to eat sushi | ["eat", "sushi", "food"] | ["restaurant", "sushi"] | "sushi" | Partial |
+| Spielplatz | ["spielplatz"] | ["playground"] | "spielplatz" | No — needs English OSM term |
+
+**13d. `fallbackParse` is too naive when LLM fails**
+
+`src/lib/search/queryParser.ts:169-185` — When JSON extraction fails, `fallbackParse` simply splits the query into words and uses those as keywords. No category inference, no synonym expansion, no OSM mapping. A query like "I need a hospital" produces keywords `["need", "hospital"]` with no category set.
+
+**Impact:** This is the entry point for the entire search pipeline. Wrong keywords cascade through `buildSearchQuery` → Nominatim query → results. Combined with Problem 1 (cuisine override) and Problem 3 (scoring), even queries that partially work return irrelevant results.
+
+---
+
 ## P2 — Performance Issues
 
 ### Problem 5: Parse latency 1.3-5.6s for non-fast-path queries
@@ -209,6 +250,7 @@ Three try/catch blocks in `route.ts` (lines 248, 272, 338) log errors to console
 | 2 | **P0** | Viewbox bias in name search | "Odeonplatz" → 0 results |
 | 3 | **P1** | No relevance filtering, scoring favors metadata | Wrong places suggested |
 | 4 | **P1** | Wifi/outdoor filter ignores category | "museum with wifi" finds restaurants |
+| 13 | **P1** | LLM generates wrong keywords | "Apotheke" → unsearchable, wrong search path |
 | 5 | **P2** | LLM parse latency 1.3-5.6s | Slow search for common queries |
 | 6 | **P2** | Conversational response on every search | Extra latency, even for 0 results |
 | 7 | **P3** | DB covers only 2km center | No DB results outside center |
@@ -226,7 +268,7 @@ Three try/catch blocks in `route.ts` (lines 248, 272, 338) log errors to console
 |------|--------|
 | `src/lib/search/nominatim.ts` | #1 (cuisine override), #1 (bounded=1), #2 (viewbox), #9 (filter inversion), #10 (no dedup) |
 | `src/app/api/search/route.ts` | #3 (scoring), #4 (wifi/outdoor), #6 (conv. response), #11 (error swallowing) |
-| `src/lib/search/queryParser.ts` | #3d (misclassification), #5 (parse latency) |
+| `src/lib/search/queryParser.ts` | #3d (misclassification), #5 (parse latency), #13 (wrong keywords, bad fallback) |
 | `scripts/seed-pois.ts` | #7 (2km coverage), #8 (sparse remarks) |
 | `src/lib/db/schema.ts` | #12 (missing index) |
 | `src/lib/search/overpass.ts` | Available but underused for structured POI search |

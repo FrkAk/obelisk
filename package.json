@@ -22,6 +22,7 @@
     "react-map-gl": "^7.1.7",
     "react-markdown": "^10.1.0",
     "supercluster": "^8.0.1",
+    "typesense": "^3.0.1",
     "zod": "^3.24.0"
   },
   "devDependencies": {

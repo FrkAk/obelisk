@@ -9,6 +9,17 @@ export type SearchQueryType =
 
 export type SearchMode = "name" | "keyword" | "conversational";
 
+export interface ParsedIntent {
+  type?: SearchQueryType;
+  mode?: SearchMode;
+  category?: CategorySlug;
+  keywords: string[];
+  placeName?: string;
+  cuisineTypes?: string[];
+  filters: SearchFilters;
+  isDiscovery?: boolean;
+}
+
 export interface SearchFilters {
   outdoor?: boolean;
   budget?: number;
@@ -18,19 +29,60 @@ export interface SearchFilters {
   quiet?: boolean;
 }
 
-export interface ParsedIntent {
-  type: SearchQueryType;
-  mode: SearchMode;
-  category?: CategorySlug;
-  filters: SearchFilters;
-  keywords: string[];
-  placeName?: string;
-  cuisineTypes?: string[];
-}
-
 export interface SearchLocation {
   latitude: number;
   longitude: number;
+}
+
+export interface SearchResult {
+  id: string;
+  name: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  distance?: number;
+  score: number;
+  address?: string;
+  description?: string;
+  cuisine?: string;
+  amenityType?: string;
+  hasStory: boolean;
+  hasOutdoorSeating?: boolean;
+  hasWifi?: boolean;
+  remark?: Remark & { poi: Poi };
+  source: "typesense" | "semantic" | "obelisk-db";
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  intent: ParsedIntent;
+  timing: {
+    parseMs: number;
+    typesenseMs: number;
+    semanticMs: number;
+    obeliskMs: number;
+    totalMs: number;
+  };
+}
+
+export interface SearchRequest {
+  query: string;
+  location: SearchLocation;
+  radius?: number;
+  limit?: number;
+}
+
+export interface ViewportBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+export interface ViewportContext {
+  center: SearchLocation;
+  bounds: ViewportBounds;
+  zoom: number;
 }
 
 export interface NominatimResult {
@@ -100,39 +152,4 @@ export interface ExternalResult {
   nearbyRemark?: Remark & { poi: Poi };
   distance?: number;
   score: number;
-}
-
-export type SearchResult = ObeliskResult | ExternalResult;
-
-export interface SearchResponse {
-  results: SearchResult[];
-  conversationalResponse: string;
-  intent: ParsedIntent;
-  timing: {
-    parseMs: number;
-    obeliskMs: number;
-    externalMs: number;
-    totalMs: number;
-  };
-}
-
-export interface ViewportBounds {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-}
-
-export interface ViewportContext {
-  center: SearchLocation;
-  bounds: ViewportBounds;
-  zoom: number;
-}
-
-export interface SearchRequest {
-  query: string;
-  location: SearchLocation;
-  viewport?: ViewportContext;
-  radius?: number;
-  limit?: number;
 }

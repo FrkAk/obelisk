@@ -13,7 +13,7 @@ import {
   viewpointProfiles,
   enrichmentLog,
 } from "../src/lib/db/schema";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import {
   buildEnrichmentQuery,
   getEnrichmentPasses,

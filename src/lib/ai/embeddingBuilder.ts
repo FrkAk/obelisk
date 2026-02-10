@@ -15,7 +15,7 @@ import type {
   ContactInfo,
 } from "@/types";
 
-type ProfileUnion =
+export type ProfileUnion =
   | FoodProfile
   | HistoryProfile
   | ArchitectureProfile

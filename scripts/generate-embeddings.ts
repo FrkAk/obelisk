@@ -22,6 +22,7 @@ import {
 import { eq, isNull, sql } from "drizzle-orm";
 import { EMBED_MODEL, checkOllamaHealth } from "../src/lib/ai/ollama";
 import { buildEmbeddingText, profileCompleteness } from "../src/lib/ai/embeddingBuilder";
+import type { ProfileUnion } from "../src/lib/ai/embeddingBuilder";
 import type {
   Poi,
   Tag,
@@ -225,7 +226,7 @@ async function generateEmbeddings() {
 
         const text = buildEmbeddingText({
           poi,
-          profile: profile as any,
+          profile: profile as ProfileUnion,
           tags: poiTags,
           cuisines: poiCuisineList,
           dishes: poiDishList,
@@ -243,7 +244,7 @@ async function generateEmbeddings() {
               WHERE id = ${poi.id}`,
         );
 
-        const completeness = profileCompleteness(profile as any);
+        const completeness = profileCompleteness(profile as ProfileUnion);
         await db.insert(enrichmentLog).values({
           poiId: poi.id,
           source: "llm_embed",

@@ -5,7 +5,6 @@ import {
   contactInfo,
   dishes,
   poiDishes,
-  cuisines,
   enrichmentLog,
 } from "../src/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";

@@ -23,7 +23,7 @@ import {
 import { eq, isNull, sql } from "drizzle-orm";
 import { checkOllamaHealth } from "../src/lib/ai/ollama";
 import { generateStory } from "../src/lib/ai/storyGenerator";
-import type { StoryPoiContext } from "../src/lib/ai/storyGenerator";
+import type { StoryPoiContext, ProfileUnion } from "../src/lib/ai/storyGenerator";
 import type {
   Poi,
   Tag,
@@ -208,7 +208,7 @@ async function main() {
         poi,
         categorySlug,
         categoryName,
-        profile: profile as any,
+        profile: profile as ProfileUnion,
         tags: poiTagList,
         cuisines: cuisineList,
         dishes: dishList,

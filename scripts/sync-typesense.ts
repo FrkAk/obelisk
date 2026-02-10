@@ -3,7 +3,6 @@ import {
   pois,
   categories,
   remarks,
-  contactInfo,
   foodProfiles,
   poiTranslations,
 } from "../src/lib/db/schema";

@@ -1,4 +1,4 @@
-.PHONY: help setup run run-local stop logs rebuild destroy seed-pois enrich-pois sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup run run-local stop logs rebuild destroy seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -15,13 +15,19 @@ else
   PLATFORM := PC
 endif
 
-export DATABASE_URL := postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
-export OLLAMA_URL := http://localhost:11434
+# Load .env.local if it exists
+ifneq (,$(wildcard .env.local))
+  include .env.local
+  export
+endif
+
+export DATABASE_URL ?= postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
+export OLLAMA_URL ?= http://127.0.0.1:11434
 export OLLAMA_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_SEARCH_MODEL ?= gemma3:4b-it-qat
-export OLLAMA_EMBED_MODEL ?= mxbai-embed-large
+export OLLAMA_EMBED_MODEL ?= embeddinggemma:300m
 export TYPESENSE_API_KEY ?= obelisk_typesense_dev
-export SEED_RADIUS ?= 1000
+export SEED_RADIUS ?= 300
 
 help:
 	@printf "\n"
@@ -36,8 +42,14 @@ help:
 	@printf "  $(CYAN)rebuild$(RESET)    Clean rebuild (deps + next cache)\n"
 	@printf "  $(CYAN)destroy$(RESET)    Stop and remove all data\n"
 	@printf "\n"
-	@printf "$(GREEN)Search Pipeline:$(RESET)\n"
+	@printf "$(GREEN)Seeding:$(RESET)\n"
+	@printf "  $(CYAN)seed-regions$(RESET)        Seed regions (Germany -> Munich)\n"
+	@printf "  $(CYAN)seed-cuisines$(RESET)       Seed cuisine taxonomy\n"
+	@printf "  $(CYAN)seed-tags$(RESET)           Seed tags across all groups\n"
 	@printf "  $(CYAN)seed-pois$(RESET)           Seed POIs from Overpass API\n"
+	@printf "  $(CYAN)seed-all$(RESET)            Run all seed scripts in order\n"
+	@printf "\n"
+	@printf "$(GREEN)Search Pipeline:$(RESET)\n"
 	@printf "  $(CYAN)enrich-pois$(RESET)         Enrich POIs with web data + LLM\n"
 	@printf "  $(CYAN)sync-search$(RESET)         Sync POIs to Typesense\n"
 	@printf "  $(CYAN)generate-embeddings$(RESET)  Generate vector embeddings\n"
@@ -53,26 +65,40 @@ ifeq ($(ARCH),aarch64)
 setup:
 	@printf "$(GREEN)Setting up Obelisk on $(PLATFORM)...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[1/6]$(RESET) Installing dependencies...\n"
+	@printf "$(CYAN)[1/10]$(RESET) Installing dependencies...\n"
 	bun install
 	@printf "\n"
-	@printf "$(CYAN)[2/6]$(RESET) Starting PostgreSQL...\n"
+	@printf "$(CYAN)[2/10]$(RESET) Starting PostgreSQL...\n"
 	$(COMPOSE) up -d
 	@printf "Waiting for database...\n"
 	@sleep 8
 	@printf "\n"
-	@printf "$(CYAN)[3/6]$(RESET) Running migrations...\n"
+	@printf "$(CYAN)[3/10]$(RESET) Enabling extensions and running migrations...\n"
+	psql -U obelisk -h localhost -d obelisk -f drizzle/0001_enable_extensions.sql
 	bun run drizzle-kit push
 	@printf "\n"
-	@printf "$(CYAN)[4/6]$(RESET) Ensuring Ollama models...\n"
+	@printf "$(CYAN)[4/10]$(RESET) Ensuring Ollama models...\n"
 	ollama pull $(OLLAMA_MODEL)
 	ollama pull $(OLLAMA_SEARCH_MODEL)
+	ollama pull $(OLLAMA_EMBED_MODEL)
 	@printf "\n"
-	@printf "$(CYAN)[5/6]$(RESET) Seeding POIs...\n"
+	@printf "$(CYAN)[5/10]$(RESET) Seeding regions...\n"
+	bun scripts/seed-regions.ts
+	@printf "\n"
+	@printf "$(CYAN)[6/10]$(RESET) Seeding cuisines...\n"
+	bun scripts/seed-cuisines.ts
+	@printf "\n"
+	@printf "$(CYAN)[7/10]$(RESET) Seeding tags...\n"
+	bun scripts/seed-tags.ts
+	@printf "\n"
+	@printf "$(CYAN)[8/10]$(RESET) Seeding POIs...\n"
 	bun scripts/seed-pois.ts
 	@printf "\n"
-	@printf "$(CYAN)[6/6]$(RESET) Generating stories...\n"
-	-bun scripts/generate-stories.ts || true
+	@printf "$(CYAN)[9/10]$(RESET) Syncing search index...\n"
+	bun scripts/sync-typesense.ts
+	@printf "\n"
+	@printf "$(CYAN)[10/10]$(RESET) Generating vector embeddings...\n"
+	bun scripts/generate-embeddings.ts
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
@@ -116,25 +142,43 @@ else
 setup:
 	@printf "$(GREEN)Setting up Obelisk on $(PLATFORM)...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[1/6]$(RESET) Building and starting services...\n"
+	@printf "$(CYAN)[1/11]$(RESET) Building and starting services...\n"
 	$(COMPOSE) up -d --build
 	@printf "Waiting for services...\n"
 	@sleep 8
 	@printf "\n"
-	@printf "$(CYAN)[2/6]$(RESET) Enabling extensions and running migrations...\n"
+	@printf "$(CYAN)[2/11]$(RESET) Enabling extensions and running migrations...\n"
 	$(COMPOSE) exec -T postgres psql -U obelisk -d obelisk -f /dev/stdin < drizzle/0001_enable_extensions.sql
 	$(COMPOSE) exec app bun run drizzle-kit push
 	@printf "\n"
-	@printf "$(CYAN)[3/6]$(RESET) Ensuring Ollama models...\n"
+	@printf "$(CYAN)[3/11]$(RESET) Ensuring Ollama models...\n"
 	ollama pull $(OLLAMA_MODEL)
 	ollama pull $(OLLAMA_SEARCH_MODEL)
 	ollama pull $(OLLAMA_EMBED_MODEL)
 	@printf "\n"
-	@printf "$(CYAN)[4/6]$(RESET) Seeding POIs...\n"
+	@printf "$(CYAN)[4/11]$(RESET) Seeding regions...\n"
+	$(COMPOSE) exec app bun scripts/seed-regions.ts
+	@printf "\n"
+	@printf "$(CYAN)[5/11]$(RESET) Seeding cuisines...\n"
+	$(COMPOSE) exec app bun scripts/seed-cuisines.ts
+	@printf "\n"
+	@printf "$(CYAN)[6/11]$(RESET) Seeding tags...\n"
+	$(COMPOSE) exec app bun scripts/seed-tags.ts
+	@printf "\n"
+	@printf "$(CYAN)[7/11]$(RESET) Seeding POIs...\n"
 	$(COMPOSE) exec app bun scripts/seed-pois.ts
 	@printf "\n"
-	@printf "$(CYAN)[5/6]$(RESET) Generating stories...\n"
-	-$(COMPOSE) exec app bun scripts/generate-stories.ts || true
+	@printf "$(CYAN)[8/11]$(RESET) Enrich POIs...\n"
+	$(COMPOSE) exec app bun scripts/enrich-pois.ts
+	@printf "\n"
+	@printf "$(CYAN)[9/11]$(RESET) Generating stories...\n"
+	$(COMPOSE) exec app bun scripts/generate-stories.ts || true
+	@printf "\n"
+	@printf "$(CYAN)[10/11]$(RESET) Syncing search index...\n"
+	$(COMPOSE) exec app bun scripts/sync-typesense.ts
+	@printf "\n"
+	@printf "$(CYAN)[11/11]$(RESET) Generating vector embeddings...\n"
+	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
@@ -183,8 +227,19 @@ destroy:
 
 ifeq ($(ARCH),aarch64)
 
+seed-regions:
+	bun scripts/seed-regions.ts
+
+seed-cuisines:
+	bun scripts/seed-cuisines.ts
+
+seed-tags:
+	bun scripts/seed-tags.ts
+
 seed-pois:
 	bun scripts/seed-pois.ts
+
+seed-all: seed-regions seed-cuisines seed-tags seed-pois
 
 enrich-pois:
 	bun scripts/enrich-pois.ts
@@ -209,8 +264,19 @@ db-restore:
 
 else
 
+seed-regions:
+	$(COMPOSE) exec app bun scripts/seed-regions.ts
+
+seed-cuisines:
+	$(COMPOSE) exec app bun scripts/seed-cuisines.ts
+
+seed-tags:
+	$(COMPOSE) exec app bun scripts/seed-tags.ts
+
 seed-pois:
 	$(COMPOSE) exec app bun scripts/seed-pois.ts
+
+seed-all: seed-regions seed-cuisines seed-tags seed-pois
 
 enrich-pois:
 	$(COMPOSE) exec app bun scripts/enrich-pois.ts

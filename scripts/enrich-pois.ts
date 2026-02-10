@@ -1,229 +1,399 @@
 import { db } from "../src/lib/db/client";
-import { pois } from "../src/lib/db/schema";
-import { categories } from "../src/lib/db/schema";
-import { eq, isNull, sql } from "drizzle-orm";
-import { buildSearchQuery } from "../src/lib/web/webSearch";
-import { searxngSearch } from "../src/lib/web/searxng";
-import { scrapeWebsite } from "../src/lib/web/scraper";
-import { generateText } from "../src/lib/ai/ollama";
+import {
+  pois,
+  categories,
+  contactInfo,
+  foodProfiles,
+  historyProfiles,
+  architectureProfiles,
+  natureProfiles,
+  artCultureProfiles,
+  nightlifeProfiles,
+  shoppingProfiles,
+  viewpointProfiles,
+  enrichmentLog,
+} from "../src/lib/db/schema";
+import { eq, and, isNull, sql } from "drizzle-orm";
+import {
+  buildEnrichmentQuery,
+  getEnrichmentPasses,
+  webSearch,
+  scrapeTopResults,
+} from "../src/lib/web/webSearch";
+import { scrapeForEnrichment } from "../src/lib/web/scraper";
+import { extractProfileByCategory } from "../src/lib/enrichment/extractors";
+import { createLogger } from "../src/lib/logger";
 
-const BATCH_SIZE = 10;
-const BATCH_DELAY_MS = 1000;
-const MAX_SCRAPE_URLS = 3;
+const log = createLogger("enrich-pois");
 
-interface EnrichmentData {
-  description: string | null;
-  reviewSummary: string | null;
-  attributes: Record<string, unknown>;
-  webContext: Record<string, unknown>;
-}
+const BATCH_SIZE = 5;
+const BATCH_DELAY_MS = 2000;
+const MAX_SCRAPE_PER_PASS = 2;
 
-/**
- * Builds a category-specific LLM prompt for POI enrichment.
- *
- * Args:
- *     poi: POI data with name, category info, and scraped web content.
- *     scrapedText: Combined text from scraped web pages.
- *
- * Returns:
- *     Formatted prompt string for the LLM.
- */
-function buildEnrichmentPrompt(
-  poi: { name: string; categorySlug: string; address: string | null; osmCuisine: string | null },
-  scrapedText: string
-): string {
-  const categoryHints: Record<string, string> = {
-    food: "Focus on cuisine type, price range, atmosphere, and what dishes they are known for.",
-    history: "Focus on historical era, significance, key events, and architectural details.",
-    art: "Focus on collections, notable works, exhibitions, and visiting tips.",
-    architecture: "Focus on architectural style, era, architect, and design significance.",
-    nature: "Focus on landscape, wildlife, trails, and best seasons to visit.",
-    culture: "Focus on performances, events, cultural significance, and community role.",
-    views: "Focus on what can be seen, best times, photography tips, and accessibility.",
-    hidden: "Focus on why this place is special, local knowledge, and unique features.",
-    nightlife: "Focus on music, atmosphere, drink specialties, and crowd type.",
-    shopping: "Focus on product types, price range, uniqueness, and specialties.",
-    sports: "Focus on facilities, events, teams, and public access.",
-    health: "Focus on specialties, services offered, and reputation.",
-    transport: "Focus on connections, frequency, and historical significance.",
-    education: "Focus on programs, reputation, notable alumni, and campus features.",
-    services: "Focus on services offered and accessibility.",
+// ---------------------------------------------------------------------------
+// Profile table mapping
+// ---------------------------------------------------------------------------
+
+type ProfileTable =
+  | typeof foodProfiles
+  | typeof historyProfiles
+  | typeof architectureProfiles
+  | typeof natureProfiles
+  | typeof artCultureProfiles
+  | typeof nightlifeProfiles
+  | typeof shoppingProfiles
+  | typeof viewpointProfiles;
+
+function getProfileTable(categorySlug: string): ProfileTable | null {
+  const map: Record<string, ProfileTable> = {
+    food: foodProfiles,
+    history: historyProfiles,
+    architecture: architectureProfiles,
+    nature: natureProfiles,
+    art: artCultureProfiles,
+    culture: artCultureProfiles,
+    nightlife: nightlifeProfiles,
+    shopping: shoppingProfiles,
+    views: viewpointProfiles,
   };
-
-  const hint = categoryHints[poi.categorySlug] || "Describe what makes this place interesting.";
-
-  return `You are a knowledgeable local guide for Munich, Germany. Based on the following web research about "${poi.name}"${poi.address ? ` at ${poi.address}` : ""}${poi.osmCuisine ? ` (cuisine: ${poi.osmCuisine})` : ""}, provide a structured summary.
-
-${hint}
-
-WEB RESEARCH:
-${scrapedText || "No web research available."}
-
-Respond ONLY in this exact format (one item per line, no extra text):
-DESCRIPTION: A 2-3 sentence description of this place highlighting what makes it noteworthy.
-REVIEW_SUMMARY: What visitors typically say about this place in 1-2 sentences.
-PRICE_RANGE: one of: budget, moderate, upscale, luxury, free, unknown
-ATMOSPHERE: comma-separated adjectives (e.g., cozy, lively, romantic, family-friendly)
-SPECIALTIES: What this place is known for in 1 sentence.`;
+  return map[categorySlug] ?? null;
 }
 
-/**
- * Parses the labeled text response from the LLM into structured data.
- *
- * Args:
- *     response: Raw LLM response text in labeled format.
- *
- * Returns:
- *     Structured enrichment data with description, review summary, and attributes.
- */
-function parseEnrichmentResponse(response: string): EnrichmentData {
-  const lines = response.split("\n").filter((l) => l.trim());
-  const parsed: Record<string, string> = {};
+// ---------------------------------------------------------------------------
+// Snake_case to camelCase mapping for profile fields
+// ---------------------------------------------------------------------------
 
-  for (const line of lines) {
-    const colonIdx = line.indexOf(": ");
-    if (colonIdx === -1) continue;
-    const key = line.slice(0, colonIdx).trim().toUpperCase();
-    const value = line.slice(colonIdx + 2).trim();
-    if (key && value) {
-      parsed[key] = value;
+function snakeToCamel(s: string): string {
+  return s.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+}
+
+function mapExtractedToProfileFields(
+  extracted: Record<string, unknown>,
+): Record<string, unknown> {
+  const mapped: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(extracted)) {
+    mapped[snakeToCamel(key)] = value;
+  }
+  return mapped;
+}
+
+// ---------------------------------------------------------------------------
+// Enrichment log helpers
+// ---------------------------------------------------------------------------
+
+async function hasRecentEnrichment(
+  poiId: string,
+  source: string,
+  hoursAgo: number = 24,
+): Promise<boolean> {
+  const cutoff = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
+  const rows = await db
+    .select({ id: enrichmentLog.id })
+    .from(enrichmentLog)
+    .where(
+      and(
+        eq(enrichmentLog.poiId, poiId),
+        eq(enrichmentLog.source, source),
+        sql`${enrichmentLog.createdAt} > ${cutoff.toISOString()}`,
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+async function logEnrichment(
+  poiId: string,
+  source: string,
+  status: string,
+  fieldsUpdated: string[],
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  await db.insert(enrichmentLog).values({
+    poiId,
+    source,
+    status,
+    fieldsUpdated,
+    metadata,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Extract city from address
+// ---------------------------------------------------------------------------
+
+function extractCity(address?: string | null): string {
+  if (!address) return "Munich";
+  const parts = address.split(",").map((p) => p.trim());
+  if (parts.length >= 2) {
+    const cityPart = parts[parts.length - 2];
+    return cityPart.replace(/^\d{4,5}\s*/, "").trim() || "Munich";
+  }
+  return "Munich";
+}
+
+// ---------------------------------------------------------------------------
+// Build update set that only fills NULL columns
+// ---------------------------------------------------------------------------
+
+async function buildNullOnlyUpdate(
+  profileTable: ProfileTable,
+  poiId: string,
+  extracted: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const existingRows = await db
+    .select()
+    .from(profileTable)
+    .where(eq(profileTable.poiId, poiId))
+    .limit(1);
+
+  if (existingRows.length === 0) {
+    return extracted;
+  }
+
+  const existing = existingRows[0] as Record<string, unknown>;
+  const update: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(extracted)) {
+    if (key === "poiId") continue;
+    if (existing[key] === null || existing[key] === undefined) {
+      update[key] = value;
     }
   }
 
-  const attributes: Record<string, unknown> = {};
-  if (parsed.PRICE_RANGE && parsed.PRICE_RANGE !== "unknown") {
-    attributes.priceRange = parsed.PRICE_RANGE;
-  }
-  if (parsed.ATMOSPHERE) {
-    attributes.atmosphere = parsed.ATMOSPHERE.split(",").map((a) => a.trim()).filter(Boolean);
-  }
-  if (parsed.SPECIALTIES) {
-    attributes.specialties = parsed.SPECIALTIES;
-  }
-
-  return {
-    description: parsed.DESCRIPTION || null,
-    reviewSummary: parsed.REVIEW_SUMMARY || null,
-    attributes: Object.keys(attributes).length > 0 ? attributes : {},
-    webContext: {},
-  };
+  return update;
 }
 
-/**
- * Enriches a single POI with web search results and LLM-generated summary.
- *
- * Args:
- *     poi: POI record from the database.
- *     categorySlug: The category slug for context-aware enrichment.
- */
+// ---------------------------------------------------------------------------
+// Main enrichment for a single POI
+// ---------------------------------------------------------------------------
+
 async function enrichSinglePoi(
-  poi: { id: string; name: string; address: string | null; osmCuisine: string | null },
-  categorySlug: string
-): Promise<void> {
-  const searchQuery = buildSearchQuery({
-    name: poi.name,
-    category: categorySlug,
-    address: poi.address,
-  });
+  poi: {
+    id: string;
+    name: string;
+    address: string | null;
+    categorySlug: string;
+    website: string | null;
+  },
+): Promise<{ fieldsUpdated: string[]; status: string }> {
+  const { id, name, address, categorySlug, website } = poi;
+  const city = extractCity(address);
+  const profileTable = getProfileTable(categorySlug);
 
-  const searchResults = await searxngSearch(searchQuery, 5);
+  if (!profileTable) {
+    return { fieldsUpdated: [], status: "skipped" };
+  }
 
-  let scrapedText = "";
-  const webSources: Array<{ url: string; title: string | null }> = [];
+  let allScrapedText = "";
+  const sources: Array<{ url: string; title: string | null; pass: string }> = [];
 
-  const urlsToScrape = searchResults.slice(0, MAX_SCRAPE_URLS);
-  for (const result of urlsToScrape) {
+  if (website && !(await hasRecentEnrichment(id, "web_scrape"))) {
     try {
-      const content = await scrapeWebsite(result.url);
+      const content = await scrapeForEnrichment(website);
       if (!content.error && content.mainContent) {
-        scrapedText += `\n--- ${result.title} ---\n${content.mainContent}\n`;
-        webSources.push({ url: result.url, title: content.title });
+        allScrapedText += `\n--- ${name} Official Website ---\n${content.mainContent}\n`;
+        sources.push({ url: website, title: content.title, pass: "website" });
       }
     } catch {
-      continue;
+      log.warn(`Failed to scrape website for ${name}`);
     }
   }
 
-  if (!scrapedText && searchResults.length > 0) {
-    scrapedText = searchResults.map((r) => `${r.title}: ${r.content}`).join("\n");
+  const passes = getEnrichmentPasses(categorySlug);
+
+  for (const pass of passes) {
+    if (await hasRecentEnrichment(id, `web_search_${pass}`)) {
+      continue;
+    }
+
+    const query = buildEnrichmentQuery(name, city, categorySlug, pass);
+    const results = await webSearch(query, 3);
+
+    if (results.length > 0) {
+      const scraped = await scrapeTopResults(results, MAX_SCRAPE_PER_PASS);
+      for (const s of scraped) {
+        if (s.content) {
+          allScrapedText += `\n--- ${s.title || s.url} ---\n${s.content}\n`;
+          sources.push({ url: s.url, title: s.title, pass });
+        }
+      }
+    }
+
+    if (results.length > 0 && allScrapedText.length === 0) {
+      allScrapedText += results
+        .map((r) => `${r.title}: ${r.snippet}`)
+        .join("\n");
+    }
   }
 
-  const prompt = buildEnrichmentPrompt(
-    { name: poi.name, categorySlug, address: poi.address, osmCuisine: poi.osmCuisine },
-    scrapedText
+  if (!allScrapedText.trim()) {
+    await logEnrichment(id, "web_search", "failed", [], {
+      reason: "no_content_scraped",
+      passes,
+    });
+    return { fieldsUpdated: [], status: "failed" };
+  }
+
+  const extracted = await extractProfileByCategory(
+    categorySlug,
+    allScrapedText,
+    name,
   );
 
-  const llmResponse = await generateText(prompt, undefined, { temperature: 0.3, num_predict: 512 });
-  const enrichment = parseEnrichmentResponse(llmResponse);
+  if (!extracted || Object.keys(extracted).length === 0) {
+    await logEnrichment(id, "llm_enrich", "failed", [], {
+      reason: "extraction_empty",
+      textLength: allScrapedText.length,
+    });
+    return { fieldsUpdated: [], status: "failed" };
+  }
 
-  await db
-    .update(pois)
-    .set({
-      description: enrichment.description,
-      reviewSummary: enrichment.reviewSummary,
-      attributes: enrichment.attributes,
-      webContext: { sources: webSources, searchQuery },
-      enrichedAt: new Date(),
-    })
-    .where(eq(pois.id, poi.id));
+  const camelCased = mapExtractedToProfileFields(extracted);
+
+  const signatureDishes =
+    "signatureDishes" in camelCased
+      ? (camelCased.signatureDishes as string[])
+      : undefined;
+  const musicGenres =
+    "musicGenres" in camelCased
+      ? (camelCased.musicGenres as string[])
+      : undefined;
+  delete camelCased.signatureDishes;
+  delete camelCased.musicGenres;
+
+  const updateSet = await buildNullOnlyUpdate(profileTable, id, camelCased);
+
+  const fieldsUpdated: string[] = Object.keys(updateSet);
+
+  if (fieldsUpdated.length > 0) {
+    const existingRows = await db
+      .select()
+      .from(profileTable)
+      .where(eq(profileTable.poiId, id))
+      .limit(1);
+
+    if (existingRows.length === 0) {
+      await db.insert(profileTable).values({
+        poiId: id,
+        ...updateSet,
+      } as typeof profileTable.$inferInsert);
+    } else {
+      await db
+        .update(profileTable)
+        .set(updateSet as Partial<typeof profileTable.$inferInsert>)
+        .where(eq(profileTable.poiId, id));
+    }
+  }
+
+  const allFieldsUpdated = [
+    ...fieldsUpdated.map((f) => `${categorySlug}_profiles.${f}`),
+  ];
+
+  if (signatureDishes && signatureDishes.length > 0) {
+    allFieldsUpdated.push("signature_dishes_noted");
+  }
+  if (musicGenres && musicGenres.length > 0) {
+    allFieldsUpdated.push("music_genres_noted");
+  }
+
+  await logEnrichment(id, "llm_enrich", "success", allFieldsUpdated, {
+    sources: sources.map((s) => ({ url: s.url, pass: s.pass })),
+    extractedFields: Object.keys(extracted),
+  });
+
+  return { fieldsUpdated: allFieldsUpdated, status: "success" };
 }
 
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
 async function main() {
-  console.log("Enriching POIs with web data and LLM summaries...");
-  console.log("");
-
-  const unenrichedPois = await db
-    .select({
-      id: pois.id,
-      name: pois.name,
-      address: pois.address,
-      osmCuisine: pois.osmCuisine,
-      categoryId: pois.categoryId,
-    })
-    .from(pois)
-    .where(isNull(pois.enrichedAt));
-
-  console.log(`Found ${unenrichedPois.length} POIs to enrich`);
+  log.info("Starting POI enrichment pipeline...");
 
   const allCategories = await db.select().from(categories);
   const categoryMap = new Map(allCategories.map((c) => [c.id, c.slug]));
 
+  const poisToEnrich = await db
+    .select({
+      id: pois.id,
+      name: pois.name,
+      address: pois.address,
+      categoryId: pois.categoryId,
+      website: contactInfo.website,
+    })
+    .from(pois)
+    .leftJoin(contactInfo, eq(pois.id, contactInfo.poiId))
+    .orderBy(pois.name);
+
+  log.info(`Found ${poisToEnrich.length} POIs to process`);
+
   let enriched = 0;
   let failed = 0;
+  let skipped = 0;
 
-  for (let i = 0; i < unenrichedPois.length; i += BATCH_SIZE) {
-    const batch = unenrichedPois.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < poisToEnrich.length; i += BATCH_SIZE) {
+    const batch = poisToEnrich.slice(i, i + BATCH_SIZE);
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(unenrichedPois.length / BATCH_SIZE);
-    console.log(`Batch ${batchNum}/${totalBatches}:`);
+    const totalBatches = Math.ceil(poisToEnrich.length / BATCH_SIZE);
+
+    log.info(`Batch ${batchNum}/${totalBatches}`);
 
     for (const poi of batch) {
-      const categorySlug = poi.categoryId ? (categoryMap.get(poi.categoryId) || "hidden") : "hidden";
+      const categorySlug = poi.categoryId
+        ? (categoryMap.get(poi.categoryId) ?? "hidden")
+        : "hidden";
+
+      if (await hasRecentEnrichment(poi.id, "llm_enrich")) {
+        skipped++;
+        continue;
+      }
+
       try {
-        await enrichSinglePoi(
-          { id: poi.id, name: poi.name, address: poi.address, osmCuisine: poi.osmCuisine },
-          categorySlug
-        );
-        enriched++;
-        console.log(`  [${enriched + failed}/${unenrichedPois.length}] ${poi.name}`);
+        const result = await enrichSinglePoi({
+          id: poi.id,
+          name: poi.name,
+          address: poi.address,
+          categorySlug,
+          website: poi.website,
+        });
+
+        if (result.status === "success") {
+          enriched++;
+          log.success(
+            `[${enriched + failed + skipped}/${poisToEnrich.length}] ${poi.name} (+${result.fieldsUpdated.length} fields)`,
+          );
+        } else if (result.status === "skipped") {
+          skipped++;
+        } else {
+          failed++;
+          log.warn(
+            `[${enriched + failed + skipped}/${poisToEnrich.length}] ${poi.name}: no data extracted`,
+          );
+        }
       } catch (error) {
         failed++;
-        const message = error instanceof Error ? error.message : "Unknown error";
-        console.log(`  [${enriched + failed}/${unenrichedPois.length}] FAILED ${poi.name}: ${message}`);
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        log.error(
+          `[${enriched + failed + skipped}/${poisToEnrich.length}] ${poi.name}: ${message}`,
+        );
       }
     }
 
-    if (i + BATCH_SIZE < unenrichedPois.length) {
+    if (i + BATCH_SIZE < poisToEnrich.length) {
       await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
     }
   }
 
-  console.log("");
-  console.log(`Enrichment complete: ${enriched} succeeded, ${failed} failed`);
-  process.exit(failed > 0 ? 1 : 0);
+  log.info("");
+  log.info(
+    `Enrichment complete: ${enriched} enriched, ${failed} failed, ${skipped} skipped`,
+  );
+  process.exit(failed > poisToEnrich.length / 2 ? 1 : 0);
 }
 
 main().catch((error) => {
-  console.error("Enrichment failed:", error);
+  log.error("Enrichment pipeline failed:", error);
   process.exit(1);
 });

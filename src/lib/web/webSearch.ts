@@ -115,6 +115,115 @@ export function buildSearchQuery(poi: {
   return `${name} ${location} interesting facts`.trim();
 }
 
+// ---------------------------------------------------------------------------
+// Enrichment-specific search queries
+// ---------------------------------------------------------------------------
+
+export type EnrichmentPass = "general" | "reviews" | "menu" | "awards" | "history" | "architecture" | "nature" | "art" | "nightlife" | "shopping" | "viewpoint";
+
+/**
+ * Builds enrichment-specific search queries for a POI by category and pass type.
+ *
+ * Args:
+ *     poiName: Name of the POI.
+ *     city: City name for location context.
+ *     categorySlug: The POI's category slug.
+ *     pass: The specific enrichment pass to build a query for.
+ *
+ * Returns:
+ *     Search query string optimized for the enrichment pass.
+ */
+export function buildEnrichmentQuery(
+  poiName: string,
+  city: string,
+  categorySlug: string,
+  pass: EnrichmentPass,
+): string {
+  const base = `${poiName} ${city}`.trim();
+
+  const passQueries: Record<string, Record<string, string>> = {
+    food: {
+      general: `${base} restaurant reviews menu`,
+      reviews: `${base} reviews atmosphere experience`,
+      menu: `${base} menu speisekarte`,
+      awards: `${base} michelin guide award`,
+    },
+    history: {
+      general: `${base} history wikipedia`,
+      history: `${base} historical significance key events`,
+      architecture: `${base} heritage UNESCO preservation`,
+    },
+    architecture: {
+      general: `${base} architecture architect style`,
+      architecture: `${base} interior tour highlights`,
+      history: `${base} construction history wikipedia`,
+    },
+    nature: {
+      general: `${base} trails activities visitors`,
+      nature: `${base} facilities playground amenities`,
+      reviews: `${base} visitor guide tips`,
+    },
+    art: {
+      general: `${base} exhibitions collection museum`,
+      art: `${base} notable works highlights`,
+      reviews: `${base} tickets tours visit guide`,
+    },
+    culture: {
+      general: `${base} cultural events performances program`,
+      reviews: `${base} tickets tours experience`,
+      art: `${base} notable performers history`,
+    },
+    nightlife: {
+      general: `${base} reviews nightlife bar club`,
+      nightlife: `${base} events DJ lineup music`,
+      reviews: `${base} drinks menu atmosphere`,
+    },
+    shopping: {
+      general: `${base} products reviews shop store`,
+      shopping: `${base} brands specialties`,
+      reviews: `${base} shopping experience visitor tips`,
+    },
+    views: {
+      general: `${base} viewpoint photos best time`,
+      viewpoint: `${base} panorama visible landmarks`,
+      reviews: `${base} visitor experience tips photography`,
+    },
+  };
+
+  const categoryQueries = passQueries[categorySlug];
+  if (categoryQueries && categoryQueries[pass]) {
+    return categoryQueries[pass];
+  }
+  if (categoryQueries?.general) {
+    return categoryQueries.general;
+  }
+  return `${base} interesting facts information`;
+}
+
+/**
+ * Returns the ordered list of enrichment passes for a given category.
+ *
+ * Args:
+ *     categorySlug: The POI's category slug.
+ *
+ * Returns:
+ *     Array of enrichment pass names to execute in order.
+ */
+export function getEnrichmentPasses(categorySlug: string): EnrichmentPass[] {
+  const passMap: Record<string, EnrichmentPass[]> = {
+    food: ["general", "reviews", "awards"],
+    history: ["general", "history"],
+    architecture: ["general", "architecture"],
+    nature: ["general", "nature"],
+    art: ["general", "art", "reviews"],
+    culture: ["general", "reviews"],
+    nightlife: ["general", "nightlife"],
+    shopping: ["general", "shopping"],
+    views: ["general", "viewpoint"],
+  };
+  return passMap[categorySlug] || ["general"];
+}
+
 /**
  * Performs web search using Ollama Cloud API.
  *

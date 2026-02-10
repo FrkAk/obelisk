@@ -1,18 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useGeolocation } from "./useGeolocation";
 import { haversineDistance } from "@/lib/geo/distance";
 import type { Remark, Poi, GeofenceConfig, Category } from "@/types";
 import { DEFAULT_GEOFENCE_CONFIG } from "@/types";
 
 type PoiWithCat = Poi & { category?: Category };
-
-interface GeofenceState {
-  triggeredRemark: (Remark & { poi: PoiWithCat }) | null;
-  preloadedRemarks: (Remark & { poi: PoiWithCat })[];
-  queuedRemarks: (Remark & { poi: PoiWithCat })[];
-}
 
 interface NotificationHistory {
   remarkId: string;
@@ -24,17 +18,45 @@ export function useGeofence(
   config: GeofenceConfig = DEFAULT_GEOFENCE_CONFIG
 ) {
   const { location } = useGeolocation();
-  const [state, setState] = useState<GeofenceState>({
-    triggeredRemark: null,
-    preloadedRemarks: [],
-    queuedRemarks: [],
-  });
+  const [triggeredRemark, setTriggeredRemark] = useState<
+    (Remark & { poi: PoiWithCat }) | null
+  >(null);
 
   const notificationHistoryRef = useRef<NotificationHistory[]>([]);
-  const sessionStartRef = useRef<number>(Date.now());
+  const sessionStartRef = useRef<number>(0);
   const lastTriggerTimeRef = useRef<number>(0);
   const dismissedRemarksRef = useRef<Set<string>>(new Set());
   const triggeredRemarkIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    sessionStartRef.current = Date.now();
+  }, []);
+
+  const remarksWithDistance = useMemo(() => {
+    if (!location || remarks.length === 0) return [];
+    return remarks.map((remark) => ({
+      ...remark,
+      distance: haversineDistance(
+        location.latitude,
+        location.longitude,
+        remark.poi.latitude,
+        remark.poi.longitude
+      ),
+    }));
+  }, [location, remarks]);
+
+  const preloadedRemarks = useMemo(
+    () =>
+      remarksWithDistance
+        .filter((r) => r.distance <= config.preloadRadius)
+        .sort((a, b) => a.distance - b.distance),
+    [remarksWithDistance, config.preloadRadius]
+  );
+
+  const queuedRemarks = useMemo(
+    () => preloadedRemarks.filter((r) => r.distance <= config.queueRadius),
+    [preloadedRemarks, config.queueRadius]
+  );
 
   const cleanupOldHistory = useCallback(() => {
     const now = Date.now();
@@ -90,29 +112,11 @@ export function useGeofence(
       dismissedRemarksRef.current.add(triggeredRemarkIdRef.current);
     }
     triggeredRemarkIdRef.current = null;
-    setState((prev) => ({ ...prev, triggeredRemark: null }));
+    setTriggeredRemark(null);
   }, []);
 
   useEffect(() => {
-    if (!location || remarks.length === 0) return;
-
-    const remarksWithDistance = remarks.map((remark) => ({
-      ...remark,
-      distance: haversineDistance(
-        location.latitude,
-        location.longitude,
-        remark.poi.latitude,
-        remark.poi.longitude
-      ),
-    }));
-
-    const preloaded = remarksWithDistance
-      .filter((r) => r.distance <= config.preloadRadius)
-      .sort((a, b) => a.distance - b.distance);
-
-    const queued = preloaded.filter((r) => r.distance <= config.queueRadius);
-
-    const triggerCandidates = queued.filter(
+    const triggerCandidates = queuedRemarks.filter(
       (r) => r.distance <= config.triggerRadius && canTriggerNotification(r.id)
     );
 
@@ -120,38 +124,19 @@ export function useGeofence(
       const closest = triggerCandidates[0];
       recordNotification(closest.id);
       triggeredRemarkIdRef.current = closest.id;
-      setState({
-        triggeredRemark: closest,
-        preloadedRemarks: preloaded,
-        queuedRemarks: queued,
-      });
-    } else {
-      setState((prev) => {
-        if (
-          prev.preloadedRemarks.length === preloaded.length &&
-          prev.queuedRemarks.length === queued.length
-        ) {
-          return prev;
-        }
-        return {
-          ...prev,
-          preloadedRemarks: preloaded,
-          queuedRemarks: queued,
-        };
-      });
+      queueMicrotask(() => setTriggeredRemark(closest));
     }
   }, [
-    location,
-    remarks,
-    config.preloadRadius,
-    config.queueRadius,
+    queuedRemarks,
     config.triggerRadius,
     canTriggerNotification,
     recordNotification,
   ]);
 
   return {
-    ...state,
+    triggeredRemark,
+    preloadedRemarks,
+    queuedRemarks,
     dismissNotification,
     location,
   };

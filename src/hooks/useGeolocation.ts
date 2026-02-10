@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { GeoLocation } from "@/types";
 import { MUNICH_CENTER } from "@/types";
 
@@ -26,11 +26,23 @@ const defaultOptions: UseGeolocationOptions = {
 export function useGeolocation(options: UseGeolocationOptions = {}) {
   const mergedOptions = { ...defaultOptions, ...options };
 
-  const [state, setState] = useState<GeolocationState>({
-    location: null,
-    error: null,
-    isLoading: true,
-    isPermissionDenied: false,
+  const [state, setState] = useState<GeolocationState>(() => {
+    const supported =
+      typeof navigator !== "undefined" && "geolocation" in navigator;
+    return {
+      location: null,
+      error: supported
+        ? null
+        : ({
+            code: 2,
+            message: "Geolocation not supported",
+            PERMISSION_DENIED: 1,
+            POSITION_UNAVAILABLE: 2,
+            TIMEOUT: 3,
+          } as GeolocationPositionError),
+      isLoading: supported,
+      isPermissionDenied: false,
+    };
   });
 
   const updateLocation = useCallback((position: GeolocationPosition) => {
@@ -58,19 +70,12 @@ export function useGeolocation(options: UseGeolocationOptions = {}) {
     }));
   }, []);
 
+  const [geolocationSupported] = useState(
+    () => typeof navigator !== "undefined" && "geolocation" in navigator
+  );
+
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: {
-          code: 2,
-          message: "Geolocation not supported",
-          PERMISSION_DENIED: 1,
-          POSITION_UNAVAILABLE: 2,
-          TIMEOUT: 3,
-        } as GeolocationPositionError,
-      }));
+    if (!geolocationSupported) {
       return;
     }
 
@@ -95,19 +100,23 @@ export function useGeolocation(options: UseGeolocationOptions = {}) {
   }, [
     updateLocation,
     handleError,
+    geolocationSupported,
     mergedOptions.enableHighAccuracy,
     mergedOptions.maximumAge,
     mergedOptions.timeout,
   ]);
 
-  const fallbackLocation: GeoLocation = {
-    latitude: MUNICH_CENTER.latitude,
-    longitude: MUNICH_CENTER.longitude,
-    accuracy: null,
-    heading: null,
-    speed: null,
-    timestamp: Date.now(),
-  };
+  const fallbackLocation = useMemo<GeoLocation>(
+    () => ({
+      latitude: MUNICH_CENTER.latitude,
+      longitude: MUNICH_CENTER.longitude,
+      accuracy: null,
+      heading: null,
+      speed: null,
+      timestamp: 0,
+    }),
+    []
+  );
 
   return {
     ...state,

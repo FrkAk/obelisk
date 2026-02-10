@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Supercluster from "supercluster";
 import { MapView, type MapBounds } from "./MapView";
 import { POIPin } from "./POIPin";
@@ -70,9 +70,12 @@ export function MapContainer({
       minZoom: 0,
     });
     sc.load(points);
-    superclusterRef.current = sc;
     return sc;
   }, [points]);
+
+  useEffect(() => {
+    superclusterRef.current = supercluster;
+  }, [supercluster]);
 
   const clusters = useMemo(() => {
     if (!viewState.bounds) return [];

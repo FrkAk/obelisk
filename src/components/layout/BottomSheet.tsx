@@ -37,6 +37,14 @@ export function BottomSheet({
   const [containerHeight, setContainerHeight] = useState(0);
   const [currentSnap, setCurrentSnap] = useState(initialSnap);
   const [isDragging, setIsDragging] = useState(false);
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+
+  if (isOpen && !prevIsOpen) {
+    setCurrentSnap(initialSnap);
+  }
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+  }
 
   useEffect(() => {
     const updateHeight = () => {
@@ -46,12 +54,6 @@ export function BottomSheet({
     window.addEventListener("resize", updateHeight);
     return () => window.removeEventListener("resize", updateHeight);
   }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      setCurrentSnap(initialSnap);
-    }
-  }, [isOpen, initialSnap]);
 
   const handleDragStart = () => {
     setIsDragging(true);

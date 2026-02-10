@@ -901,3 +901,4 @@ Cooldown Rules:
 
 - Search: query parsing unreliable, results UI not responsive, POI card navigation from search broken
 - Mobile responsive: not yet tested on phone viewport
+- SearXNG: engines getting rate-limited/blocked (Brave 429, Wikipedia 403, Startpage CAPTCHA). Needs proper User-Agent config, request interval tuning, or disabling unreliable engines in `searxng/settings.yml`. Consider using Wikimedia API directly instead of through SearXNG

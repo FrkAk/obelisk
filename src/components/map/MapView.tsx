@@ -23,6 +23,7 @@ interface MapViewProps {
   initialCenter?: { latitude: number; longitude: number };
   initialZoom?: number;
   userLocation?: { latitude: number; longitude: number } | null;
+  flyToLocation?: { latitude: number; longitude: number; ts: number } | null;
 }
 
 const DEFAULT_LIGHT = "mapbox://styles/mapbox/streets-v12";
@@ -49,6 +50,7 @@ export function MapView({
   initialCenter = MUNICH_CENTER,
   initialZoom = 14,
   userLocation,
+  flyToLocation,
 }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
   const hasFlownToUser = useRef(false);
@@ -89,6 +91,18 @@ export function MapView({
     [onMoveEnd, onViewStateChange]
   );
 
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (flyToLocation && map) {
+      const currentZoom = map.getZoom();
+      map.flyTo({
+        center: [flyToLocation.longitude, flyToLocation.latitude],
+        zoom: Math.max(currentZoom, 15),
+        duration: 1500,
+      });
+    }
+  }, [flyToLocation]);
 
   useEffect(() => {
     const map = mapRef.current?.getMap();

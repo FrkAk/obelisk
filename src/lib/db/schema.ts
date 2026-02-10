@@ -1,5 +1,19 @@
 import { pgTable, uuid, varchar, text, bigint, jsonb, timestamp, integer, doublePrecision, index } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
+import { customType } from "drizzle-orm/pg-core";
+
+const vector = customType<{ data: number[]; driverParam: string }>({
+  dataType() {
+    return "vector(1024)";
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(",")}]`;
+  },
+  fromDriver(value: unknown): number[] {
+    const str = value as string;
+    return str.replace(/[\[\]]/g, "").split(",").map(Number);
+  },
+});
 
 export const categories = pgTable("categories", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -20,10 +34,20 @@ export const pois = pgTable("pois", {
   wikipediaUrl: text("wikipedia_url"),
   imageUrl: text("image_url"),
   osmTags: jsonb("osm_tags").$type<Record<string, string>>(),
+  description: text("description"),
+  osmAmenity: varchar("osm_amenity", { length: 100 }),
+  osmCuisine: varchar("osm_cuisine", { length: 255 }),
+  attributes: jsonb("attributes").$type<Record<string, unknown>>(),
+  reviewSummary: text("review_summary"),
+  embedding: vector("embedding"),
+  enrichedAt: timestamp("enriched_at", { withTimezone: true }),
+  webContext: jsonb("web_context").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => [
   index("idx_pois_category").on(table.categoryId),
   index("idx_pois_location").on(table.latitude, table.longitude),
+  index("idx_pois_osm_amenity").on(table.osmAmenity),
+  index("idx_pois_name_trgm").using("gin", sql`${table.name} gin_trgm_ops`),
 ]);
 
 export const remarks = pgTable("remarks", {

@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { searchRemarks, getRandomRemark } from "@/lib/db/queries/search";
 import { parseQueryIntent } from "@/lib/search/queryParser";
-import { searchNominatim } from "@/lib/search/nominatim";
-import { enrichPOIs, searchByAmenityOverpass } from "@/lib/search/overpass";
-import { generateText } from "@/lib/ai/ollama";
-import type {
-  SearchResult,
-  ObeliskResult,
-  ExternalResult,
-  ParsedIntent,
-  ExternalPOI,
-} from "@/lib/search/types";
-import type { Remark, Poi, Category } from "@/types";
+import { searchPOIs } from "@/lib/search/typesense";
+import { semanticSearch } from "@/lib/search/semantic";
+import { searchRemarksByText, getRandomRemark } from "@/lib/db/queries/search";
+import { rankResults } from "@/lib/search/ranking";
+import { haversineDistance } from "@/lib/geo/distance";
+import { createLogger } from "@/lib/logger";
+import type { SearchResult, SearchResponse } from "@/lib/search/types";
+import type { RemarkWithPoi } from "@/lib/db/queries/search";
+
+const log = createLogger("search");
 
 const requestSchema = z.object({
   query: z.string().min(1).max(500),
@@ -20,163 +18,80 @@ const requestSchema = z.object({
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
   }),
-  radius: z.number().min(100).max(5000).default(1000),
+  radius: z.number().min(100).max(50000).default(5000),
   limit: z.number().min(1).max(50).default(20),
 });
 
-type RemarkWithPoi = Remark & { poi: Poi & { category?: Category } };
-
-function calculateDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371e3;
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
+/**
+ * Converts a Typesense hit into a unified SearchResult.
+ *
+ * Args:
+ *     hit: A Typesense POI document with text score.
+ *     userLat: User's latitude for distance calculation.
+ *     userLon: User's longitude for distance calculation.
+ *
+ * Returns:
+ *     A SearchResult with source "typesense".
+ */
+function typesenseHitToSearchResult(
+  hit: Awaited<ReturnType<typeof searchPOIs>>[number],
+  userLat: number,
+  userLon: number
+): SearchResult {
+  return {
+    id: hit.poiId,
+    osmId: hit.osmId,
+    name: hit.name,
+    category: hit.category,
+    latitude: hit.location[0],
+    longitude: hit.location[1],
+    distance: haversineDistance(userLat, userLon, hit.location[0], hit.location[1]),
+    score: hit.textScore,
+    address: hit.address,
+    description: hit.description,
+    cuisine: hit.cuisine,
+    amenityType: hit.amenityType,
+    hasStory: hit.hasStory,
+    hasOutdoorSeating: hit.hasOutdoorSeating,
+    hasWifi: hit.hasWifi,
+    source: "typesense",
+  };
 }
 
-function scoreObeliskResult(
+/**
+ * Converts a remark-with-POI into a unified SearchResult.
+ *
+ * Args:
+ *     remark: A remark joined with its POI data.
+ *     userLat: User's latitude for distance calculation.
+ *     userLon: User's longitude for distance calculation.
+ *
+ * Returns:
+ *     A SearchResult with source "obelisk-db".
+ */
+function remarkToSearchResult(
   remark: RemarkWithPoi,
-  intent: ParsedIntent,
-  distance: number
-): number {
-  let score = 100;
-
-  const distancePenalty = Math.min(distance / 100, 20);
-  score -= distancePenalty;
-
-  if (intent.category && remark.poi.category?.slug === intent.category) {
-    score += 30;
-  }
-
-  if (intent.keywords.length > 0) {
-    const searchableText = [
-      remark.title,
-      remark.teaser,
-      remark.content,
-      remark.poi.name,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    const matchingKeywords = intent.keywords.filter((kw) =>
-      searchableText.includes(kw.toLowerCase())
-    );
-    score += matchingKeywords.length * 10;
-  }
-
-  score += 15;
-
-  return Math.max(0, score);
-}
-
-function scoreExternalResult(
-  poi: ExternalPOI,
-  intent: ParsedIntent,
-  distance: number
-): number {
-  let score = 50;
-
-  const distancePenalty = Math.min(distance / 100, 20);
-  score -= distancePenalty;
-
-  if (intent.category && poi.category === intent.category) {
-    score += 20;
-  }
-
-  if (intent.filters.wifi && poi.hasWifi) {
-    score += 15;
-  }
-  if (intent.filters.outdoor && poi.hasOutdoorSeating) {
-    score += 15;
-  }
-  if (poi.openingHours) {
-    score += 5;
-  }
-  if (poi.website) {
-    score += 3;
-  }
-  if (poi.phone) {
-    score += 2;
-  }
-
-  return Math.max(0, score);
-}
-
-function findNearbyRemark(
-  poi: ExternalPOI,
-  remarks: RemarkWithPoi[]
-): RemarkWithPoi | undefined {
-  const maxDistance = 100;
-
-  return remarks.find((remark) => {
-    const distance = calculateDistance(
-      poi.latitude,
-      poi.longitude,
-      remark.poi.latitude,
-      remark.poi.longitude
-    );
-    return distance <= maxDistance;
-  });
-}
-
-async function generateConversationalResponse(
-  results: SearchResult[],
-  query: string,
-  _intent: ParsedIntent
-): Promise<string> {
-  if (results.length === 0) {
-    return "I couldn't find anything matching your search in this area. Try expanding your search radius or using different keywords.";
-  }
-
-  const obeliskResults = results.filter(
-    (r): r is ObeliskResult => r.type === "remark"
-  );
-  const externalResults = results.filter(
-    (r): r is ExternalResult => r.type === "external"
-  );
-
-  const prompt = `Generate a brief, friendly response (2-3 sentences max) for a location search app.
-
-User searched: "${query}"
-Found: ${obeliskResults.length} stories and ${externalResults.length} places
-
-${obeliskResults.length > 0 ? `Top story: "${obeliskResults[0].remark.title}" about ${obeliskResults[0].remark.poi.name}` : ""}
-${externalResults.length > 0 ? `Top place: ${externalResults[0].poi.name} (${externalResults[0].poi.category})` : ""}
-
-Respond conversationally. If there are Obelisk stories, mention them as highlights. Be concise.`;
-
-  try {
-    const response = await generateText(prompt, undefined, {
-      temperature: 0.7,
-      num_predict: 100,
-    });
-    return response.trim();
-  } catch {
-    if (obeliskResults.length > 0) {
-      return `I found ${obeliskResults.length} stories nearby, including "${obeliskResults[0].remark.title}". ${externalResults.length > 0 ? `Plus ${externalResults.length} other places worth checking out.` : ""}`;
-    }
-    return `I found ${externalResults.length} places matching your search nearby.`;
-  }
+  userLat: number,
+  userLon: number
+): SearchResult {
+  return {
+    id: remark.poi.id,
+    osmId: remark.poi.osmId ?? undefined,
+    name: remark.poi.name,
+    category: remark.poi.category?.slug ?? "hidden",
+    latitude: remark.poi.latitude,
+    longitude: remark.poi.longitude,
+    distance: haversineDistance(userLat, userLon, remark.poi.latitude, remark.poi.longitude),
+    score: 0,
+    address: remark.poi.address ?? undefined,
+    hasStory: true,
+    remark,
+    source: "obelisk-db",
+  };
 }
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  let parseTime = 0;
-  let obeliskTime = 0;
-  let externalTime = 0;
 
   try {
     const body = await request.json();
@@ -193,9 +108,9 @@ export async function POST(request: NextRequest) {
 
     const parseStart = Date.now();
     const intent = await parseQueryIntent(query);
-    parseTime = Date.now() - parseStart;
+    const parseMs = Date.now() - parseStart;
 
-    if (intent.type === "discovery") {
+    if (intent.type === "discovery" || intent.isDiscovery) {
       const randomRemark = await getRandomRemark(
         location.latitude,
         location.longitude,
@@ -204,123 +119,126 @@ export async function POST(request: NextRequest) {
       );
 
       if (randomRemark) {
-        const distance = calculateDistance(
-          location.latitude,
-          location.longitude,
-          randomRemark.poi.latitude,
-          randomRemark.poi.longitude
-        );
+        const result = remarkToSearchResult(randomRemark, location.latitude, location.longitude);
+        result.score = 100;
 
-        const result: ObeliskResult = {
-          type: "remark",
-          remark: randomRemark as RemarkWithPoi,
-          distance,
-          score: 100,
-        };
-
-        return NextResponse.json({
+        const response: SearchResponse = {
           results: [result],
-          conversationalResponse: `Here's a surprise for you: "${randomRemark.title}" - a ${randomRemark.poi.category?.name || "hidden"} story about ${randomRemark.poi.name}!`,
           intent,
           timing: {
-            parseMs: parseTime,
-            obeliskMs: Date.now() - parseStart - parseTime,
-            externalMs: 0,
+            parseMs,
+            typesenseMs: 0,
+            semanticMs: 0,
+            obeliskMs: Date.now() - parseStart - parseMs,
             totalMs: Date.now() - startTime,
           },
-        });
+        };
+
+        return NextResponse.json(response);
       }
     }
 
-    const obeliskStart = Date.now();
-    const remarksRaw = await searchRemarks({
-      latitude: location.latitude,
-      longitude: location.longitude,
-      radiusMeters: radius,
-      category: intent.category,
-      keywords: intent.keywords,
-      limit,
-    });
-    obeliskTime = Date.now() - obeliskStart;
+    log.info(`Query: "${query}", category: ${intent.category}`);
 
-    const remarks = remarksRaw as RemarkWithPoi[];
+    const radiusKm = radius / 1000;
+    const searchQuery = intent.keywords.length > 0 ? intent.keywords.join(" ") : query;
 
-    const externalStart = Date.now();
-    let externalPois: ExternalPOI[] = [];
+    const typesenseFilters: Parameters<typeof searchPOIs>[3] = {};
+    if (intent.category) typesenseFilters.category = intent.category;
+    if (intent.cuisineTypes?.[0]) typesenseFilters.cuisine = intent.cuisineTypes[0];
+    if (intent.filters.wifi) typesenseFilters.hasWifi = true;
+    if (intent.filters.outdoor) typesenseFilters.hasOutdoorSeating = true;
 
-    try {
-      if (intent.filters.wifi || intent.filters.outdoor) {
-        const amenityTypes =
-          intent.category === "food"
-            ? ["cafe", "restaurant"]
-            : ["cafe", "restaurant", "bar"];
-        externalPois = await searchByAmenityOverpass(amenityTypes, location, radius);
-      } else {
-        externalPois = await searchNominatim(intent, location, radius, limit);
-      }
+    const [typesenseSettled, semanticSettled, obeliskSettled] = await Promise.allSettled([
+      (async () => {
+        const tsStart = Date.now();
+        const hits = await searchPOIs(searchQuery, location, radiusKm, typesenseFilters, limit);
+        return {
+          results: hits.map((h) => typesenseHitToSearchResult(h, location.latitude, location.longitude)),
+          ms: Date.now() - tsStart,
+        };
+      })(),
+      (async () => {
+        const semStart = Date.now();
+        const hits = await semanticSearch(query, location.latitude, location.longitude, radius, limit);
+        return { results: hits, ms: Date.now() - semStart };
+      })(),
+      (async () => {
+        const obStart = Date.now();
+        const hits = await searchRemarksByText(query, location.latitude, location.longitude, radius, limit);
+        return {
+          results: hits.map((r) => remarkToSearchResult(r, location.latitude, location.longitude)),
+          ms: Date.now() - obStart,
+        };
+      })(),
+    ]);
 
-      if (externalPois.length > 0 && externalPois.length <= 10) {
-        externalPois = await enrichPOIs(externalPois);
-      }
-    } catch (error) {
-      console.error("External search error:", error);
+    const typesenseResults = typesenseSettled.status === "fulfilled" ? typesenseSettled.value.results : [];
+    const typesenseMs = typesenseSettled.status === "fulfilled" ? typesenseSettled.value.ms : 0;
+
+    const semanticResults = semanticSettled.status === "fulfilled" ? semanticSettled.value.results : [];
+    const semanticMs = semanticSettled.status === "fulfilled" ? semanticSettled.value.ms : 0;
+
+    const obeliskResults = obeliskSettled.status === "fulfilled" ? obeliskSettled.value.results : [];
+    const obeliskMs = obeliskSettled.status === "fulfilled" ? obeliskSettled.value.ms : 0;
+
+    if (typesenseSettled.status === "rejected") {
+      log.error("Typesense failed:", typesenseSettled.reason);
+    } else {
+      const top = typesenseResults[0];
+      log.info(`Typesense: ${typesenseResults.length} hits in ${typesenseMs}ms${top ? ` — top: "${top.name}" (score: ${top.score})` : ""}`);
     }
-    externalTime = Date.now() - externalStart;
+    if (semanticSettled.status === "rejected") {
+      log.error("Semantic failed:", semanticSettled.reason);
+    } else {
+      const top = semanticResults[0];
+      log.info(`Semantic: ${semanticResults.length} hits in ${semanticMs}ms${top ? ` — top: "${top.name}" (sim: ${top.similarity.toFixed(3)})` : ""}`);
+    }
+    if (obeliskSettled.status === "rejected") {
+      log.error("Obelisk DB failed:", obeliskSettled.reason);
+    } else {
+      const top = obeliskResults[0];
+      log.info(`Obelisk DB: ${obeliskResults.length} hits in ${obeliskMs}ms${top ? ` — top: "${top.name}"` : ""}`);
+    }
 
-    const obeliskResults: ObeliskResult[] = remarks.map((remark) => {
-      const distance = calculateDistance(
-        location.latitude,
-        location.longitude,
-        remark.poi.latitude,
-        remark.poi.longitude
-      );
-      return {
-        type: "remark" as const,
-        remark,
-        distance,
-        score: scoreObeliskResult(remark, intent, distance),
-      };
+    const ranked = rankResults({
+      typesenseResults,
+      semanticResults,
+      obeliskResults,
+      userLocation: location,
+      maxRadius: radius,
     });
 
-    const externalResults: ExternalResult[] = externalPois.map((poi) => {
-      const distance = poi.distance ?? calculateDistance(
-        location.latitude,
-        location.longitude,
-        poi.latitude,
-        poi.longitude
-      );
-      return {
-        type: "external" as const,
-        poi,
-        nearbyRemark: findNearbyRemark(poi, remarks),
-        distance,
-        score: scoreExternalResult(poi, intent, distance),
-      };
-    });
+    const finalResults = ranked.slice(0, limit);
 
-    const allResults: SearchResult[] = [...obeliskResults, ...externalResults]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-
-    const conversationalResponse = await generateConversationalResponse(
-      allResults,
-      query,
-      intent
+    const totalMs = Date.now() - startTime;
+    log.info(
+      `Results: ${finalResults.length} (ts:${typesenseResults.length}, sem:${semanticResults.length}, ob:${obeliskResults.length})`
     );
+    log.timing("total", totalMs);
 
-    return NextResponse.json({
-      results: allResults,
-      conversationalResponse,
+    const topN = finalResults.slice(0, 5);
+    for (let i = 0; i < topN.length; i++) {
+      const r = topN[i];
+      const dist = r.distance ? `${(r.distance / 1000).toFixed(1)}km` : "?";
+      log.info(`  #${i + 1} "${r.name}" — score: ${r.score.toFixed(4)}, src: ${r.source}, dist: ${dist}${r.hasStory ? " ★" : ""}`);
+    }
+
+    const response: SearchResponse = {
+      results: finalResults,
       intent,
       timing: {
-        parseMs: parseTime,
-        obeliskMs: obeliskTime,
-        externalMs: externalTime,
-        totalMs: Date.now() - startTime,
+        parseMs,
+        typesenseMs,
+        semanticMs,
+        obeliskMs,
+        totalMs,
       },
-    });
+    };
+
+    return NextResponse.json(response);
   } catch (error) {
-    console.error("Search error:", error);
+    log.error("Search error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

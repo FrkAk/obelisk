@@ -1,4 +1,7 @@
 import { scrapeWebsite, type WebsiteContent } from "./scraper";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("webSearch");
 
 export interface WebSearchResult {
   title: string;
@@ -126,7 +129,7 @@ export async function webSearch(query: string, maxResults: number = 5): Promise<
   const apiKey = process.env.OLLAMA_API_KEY;
 
   if (!apiKey) {
-    console.log("[webSearch] OLLAMA_API_KEY not configured, skipping web search");
+    log.warn("OLLAMA_API_KEY not configured, skipping web search");
     return [];
   }
 
@@ -145,14 +148,14 @@ export async function webSearch(query: string, maxResults: number = 5): Promise<
     });
 
     if (!response.ok) {
-      console.log(`[webSearch] API error: ${response.status} ${response.statusText}`);
+      log.error(`API error: ${response.status} ${response.statusText}`);
       return [];
     }
 
     const data: OllamaSearchResponse = await response.json();
 
     if (!data.results || !Array.isArray(data.results)) {
-      console.log("[webSearch] No results in response");
+      log.info("No results in response");
       return [];
     }
 
@@ -165,7 +168,7 @@ export async function webSearch(query: string, maxResults: number = 5): Promise<
       }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.log(`[webSearch] Request failed: ${message}`);
+    log.error(`Request failed: ${message}`);
     return [];
   }
 }
@@ -199,7 +202,7 @@ export async function scrapeTopResults(
         });
       }
     } catch {
-      console.log(`[webSearch] Failed to scrape ${result.url}`);
+      log.warn(`Failed to scrape ${result.url}`);
     }
   }
 
@@ -226,11 +229,11 @@ export async function enrichPOIWithWebSearch(
 ): Promise<WebSearchContext> {
   const query = buildSearchQuery(poi);
 
-  console.log(`[webSearch] Query: "${query}"`);
+  log.info(`Query: "${query}"`);
 
   const results = await webSearch(query);
 
-  console.log(`[webSearch] Results: ${results.length}`);
+  log.info(`Results: ${results.length}`);
 
   const context: WebSearchContext = {
     query,
@@ -240,7 +243,7 @@ export async function enrichPOIWithWebSearch(
   if (scrapeResults && results.length > 0) {
     const scrapedContent = await scrapeTopResults(results);
     context.scrapedContent = scrapedContent;
-    console.log(`[webSearch] Scraped: ${scrapedContent.length}`);
+    log.info(`Scraped: ${scrapedContent.length}`);
   }
 
   return context;

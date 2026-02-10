@@ -1,3 +1,7 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("ollama");
+
 interface OllamaGenerateRequest {
   model: string;
   prompt: string;
@@ -19,6 +23,8 @@ interface OllamaGenerateResponse {
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
+export const SEARCH_MODEL = process.env.OLLAMA_SEARCH_MODEL || "gemma3:4b";
+export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "mxbai-embed-large";
 
 /**
  * Generates text using Ollama.
@@ -89,11 +95,11 @@ export async function checkOllamaHealth(
     const modelPrefix = model.split(":")[0];
     const found = models.some((m: { name: string }) => m.name.startsWith(modelPrefix));
 
-    console.log(`[ollama] Health check - URL: ${OLLAMA_URL}, looking for: ${modelPrefix}, available: [${modelNames.join(", ")}], found: ${found}`);
+    log.info(`Health check — found: ${found ? modelNames.find((n: string) => n.startsWith(modelPrefix)) : "none"} (looking for: ${modelPrefix})`);
 
     return found;
   } catch (error) {
-    console.error("[ollama] Health check failed:", error);
+    log.error("Health check failed:", error);
     return false;
   }
 }

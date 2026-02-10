@@ -178,3 +178,14 @@ export const contentFadeVariants: Variants = {
     transition: { duration: 0.15 },
   },
 };
+
+export const searchResultVariants: Variants = {
+  hidden: { opacity: 0, y: 16, scale: 0.98 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { ...springTransitions.smooth, delay: Math.min(i, 10) * 0.04 },
+  }),
+  exit: { opacity: 0, y: -8, transition: { duration: 0.15 } },
+};

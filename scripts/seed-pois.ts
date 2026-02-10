@@ -1,11 +1,14 @@
 import { db } from "../src/lib/db/client";
 import { categories, pois } from "../src/lib/db/schema";
+import { sql } from "drizzle-orm";
 import type { CategorySlug } from "../src/types";
 
 const MUNICH_CENTER = {
   lat: 48.137154,
   lon: 11.576124,
 };
+
+const SEED_RADIUS = parseInt(process.env.SEED_RADIUS || "10000", 10);
 
 const CATEGORY_DATA: Array<{
   name: string;
@@ -21,6 +24,13 @@ const CATEGORY_DATA: Array<{
   { name: "Hidden Gems", slug: "hidden", icon: "diamond", color: "#FFD60A" },
   { name: "Views", slug: "views", icon: "eye", color: "#64D2FF" },
   { name: "Culture", slug: "culture", icon: "masks", color: "#5E5CE6" },
+  { name: "Shopping", slug: "shopping", icon: "bag", color: "#FF8A65" },
+  { name: "Nightlife", slug: "nightlife", icon: "moon", color: "#CE93D8" },
+  { name: "Sports", slug: "sports", icon: "ball", color: "#4CAF50" },
+  { name: "Health", slug: "health", icon: "cross", color: "#EF5350" },
+  { name: "Transport", slug: "transport", icon: "train", color: "#78909C" },
+  { name: "Education", slug: "education", icon: "book", color: "#FFAB40" },
+  { name: "Services", slug: "services", icon: "briefcase", color: "#A1887F" },
 ];
 
 interface OverpassElement {
@@ -36,28 +46,145 @@ interface OverpassResponse {
   elements: OverpassElement[];
 }
 
-async function fetchMunichPois(): Promise<OverpassElement[]> {
-  const overpassQuery = `
-    [out:json][timeout:90];
+interface QueryGroup {
+  label: string;
+  filters: string[];
+}
+
+const QUERY_GROUPS: QueryGroup[] = [
+  {
+    label: "Food & Drink",
+    filters: [
+      '["amenity"="restaurant"]["name"]',
+      '["amenity"="cafe"]["name"]',
+      '["amenity"="bar"]["name"]',
+      '["amenity"="pub"]["name"]',
+      '["amenity"="fast_food"]["name"]',
+      '["amenity"="biergarten"]["name"]',
+      '["amenity"="ice_cream"]["name"]',
+      '["amenity"="food_court"]["name"]',
+    ],
+  },
+  {
+    label: "Culture & Entertainment",
+    filters: [
+      '["amenity"="theatre"]["name"]',
+      '["amenity"="cinema"]["name"]',
+      '["tourism"="museum"]["name"]',
+      '["tourism"="gallery"]["name"]',
+      '["amenity"="library"]["name"]',
+      '["amenity"="community_centre"]["name"]',
+      '["amenity"="nightclub"]["name"]',
+    ],
+  },
+  {
+    label: "Services",
+    filters: [
+      '["amenity"="hospital"]["name"]',
+      '["amenity"="pharmacy"]["name"]',
+      '["amenity"="clinic"]["name"]',
+      '["amenity"="doctors"]["name"]',
+      '["amenity"="dentist"]["name"]',
+      '["amenity"="bank"]["name"]',
+      '["amenity"="post_office"]["name"]',
+      '["amenity"="police"]["name"]',
+      '["amenity"="fire_station"]["name"]',
+    ],
+  },
+  {
+    label: "Education",
+    filters: [
+      '["amenity"="university"]["name"]',
+      '["amenity"="school"]["name"]',
+      '["amenity"="college"]["name"]',
+      '["amenity"="kindergarten"]["name"]',
+    ],
+  },
+  {
+    label: "Tourism",
+    filters: [
+      '["tourism"="hotel"]["name"]',
+      '["tourism"="hostel"]["name"]',
+      '["tourism"="guest_house"]["name"]',
+      '["tourism"="attraction"]["name"]',
+      '["tourism"="artwork"]["name"]',
+      '["tourism"="viewpoint"]["name"]',
+      '["tourism"="information"]["name"]',
+    ],
+  },
+  {
+    label: "Historic",
+    filters: [
+      '["historic"]["name"]',
+    ],
+  },
+  {
+    label: "Leisure",
+    filters: [
+      '["leisure"="park"]["name"]',
+      '["leisure"="garden"]["name"]',
+      '["leisure"="nature_reserve"]["name"]',
+      '["leisure"="sports_centre"]["name"]',
+      '["leisure"="stadium"]["name"]',
+      '["leisure"="fitness_centre"]["name"]',
+      '["leisure"="swimming_pool"]["name"]',
+      '["leisure"="pitch"]["name"]',
+      '["leisure"="playground"]["name"]',
+    ],
+  },
+  {
+    label: "Shopping",
+    filters: [
+      '["shop"]["name"]',
+    ],
+  },
+  {
+    label: "Healthcare",
+    filters: [
+      '["healthcare"]["name"]',
+    ],
+  },
+  {
+    label: "Transport",
+    filters: [
+      '["amenity"="bus_station"]["name"]',
+      '["railway"="station"]["name"]',
+      '["railway"="tram_stop"]["name"]',
+    ],
+  },
+];
+
+/**
+ * Fetches POIs from Overpass API for a single query group.
+ *
+ * Args:
+ *     group: Query group containing label and OSM filters.
+ *
+ * Returns:
+ *     Array of Overpass elements matching the filters.
+ */
+async function fetchQueryGroup(group: QueryGroup): Promise<OverpassElement[]> {
+  const around = `around:${SEED_RADIUS},${MUNICH_CENTER.lat},${MUNICH_CENTER.lon}`;
+
+  const nodeQueries = group.filters.map((f) => `node${f}(${around});`).join("\n      ");
+  const wayQueries = group.filters.map((f) => `way${f}(${around});`).join("\n      ");
+
+  const query = `
+    [out:json][timeout:120];
     (
-      node["historic"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
-      node["tourism"="museum"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
-      node["amenity"="place_of_worship"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
-      node["amenity"="biergarten"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
-      node["amenity"="theatre"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
-      node["tourism"="viewpoint"]["name"](around:2000,${MUNICH_CENTER.lat},${MUNICH_CENTER.lon});
+      ${nodeQueries}
+      ${wayQueries}
     );
-    out body;
+    out body center;
   `;
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      console.log(`Attempt ${attempt}/3...`);
       const response = await fetch("https://overpass-api.de/api/interpreter", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `data=${encodeURIComponent(overpassQuery)}`,
-        signal: AbortSignal.timeout(120000),
+        body: `data=${encodeURIComponent(query)}`,
+        signal: AbortSignal.timeout(180000),
       });
 
       if (!response.ok) {
@@ -67,19 +194,255 @@ async function fetchMunichPois(): Promise<OverpassElement[]> {
       const data: OverpassResponse = await response.json();
       return data.elements;
     } catch (error) {
-      console.log(`Attempt ${attempt} failed:`, error instanceof Error ? error.message : error);
-      if (attempt === 3) {
-        console.log("Using fallback POI data...");
-        return getFallbackPois();
-      }
-      await new Promise((r) => setTimeout(r, 5000));
+      console.log(`  Attempt ${attempt}/3 failed:`, error instanceof Error ? error.message : error);
+      if (attempt === 3) return [];
+      await new Promise((r) => setTimeout(r, 5000 * attempt));
     }
   }
-  return getFallbackPois();
+  return [];
 }
 
-function getFallbackPois(): OverpassElement[] {
-  return [
+/**
+ * Fetches all Munich POIs by querying Overpass in groups to avoid timeouts.
+ *
+ * Returns:
+ *     Combined array of all Overpass elements across all query groups.
+ */
+async function fetchAllPois(): Promise<OverpassElement[]> {
+  const allElements: OverpassElement[] = [];
+  const seenIds = new Set<number>();
+
+  for (const group of QUERY_GROUPS) {
+    console.log(`Fetching ${group.label}...`);
+    const elements = await fetchQueryGroup(group);
+    let newCount = 0;
+
+    for (const el of elements) {
+      if (!seenIds.has(el.id)) {
+        seenIds.add(el.id);
+        allElements.push(el);
+        newCount++;
+      }
+    }
+
+    console.log(`  Found ${elements.length} elements (${newCount} new, ${elements.length - newCount} duplicates)`);
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  return allElements;
+}
+
+/**
+ * Determines the category slug based on OSM tags.
+ *
+ * Args:
+ *     tags: OSM tag key-value pairs.
+ *
+ * Returns:
+ *     The most appropriate category slug for the given tags.
+ */
+function determineCategorySlug(tags: Record<string, string>): CategorySlug {
+  if (tags.historic) return "history";
+  if (tags.tourism === "museum" || tags.tourism === "gallery") return "art";
+  if (tags.tourism === "viewpoint") return "views";
+  if (tags.tourism === "artwork") return "art";
+  if (tags.tourism === "attraction") return "culture";
+
+  const foodAmenities = ["restaurant", "cafe", "fast_food", "biergarten", "ice_cream", "food_court"];
+  if (foodAmenities.includes(tags.amenity)) return "food";
+
+  const nightlifeAmenities = ["bar", "pub", "nightclub"];
+  if (nightlifeAmenities.includes(tags.amenity)) return "nightlife";
+
+  const healthAmenities = ["hospital", "pharmacy", "clinic", "doctors", "dentist"];
+  if (healthAmenities.includes(tags.amenity) || tags.healthcare) return "health";
+
+  const educationAmenities = ["university", "school", "college", "kindergarten", "library"];
+  if (educationAmenities.includes(tags.amenity)) return "education";
+
+  const serviceAmenities = ["police", "fire_station", "bank", "post_office"];
+  if (serviceAmenities.includes(tags.amenity)) return "services";
+
+  if (tags.shop) return "shopping";
+
+  const natureLeiure = ["park", "garden", "nature_reserve"];
+  if (natureLeiure.includes(tags.leisure) || tags.natural) return "nature";
+
+  const sportsLeisure = ["sports_centre", "stadium", "fitness_centre", "swimming_pool", "pitch"];
+  if (sportsLeisure.includes(tags.leisure)) return "sports";
+
+  if (tags.amenity === "theatre" || tags.amenity === "cinema" || tags.amenity === "community_centre") return "culture";
+
+  if (tags.amenity === "bus_station" || tags.railway) return "transport";
+
+  if (tags.tourism === "hotel" || tags.tourism === "hostel" || tags.tourism === "guest_house") return "services";
+
+  if (tags.architect || tags.building === "church" || tags.amenity === "place_of_worship") return "architecture";
+
+  return "hidden";
+}
+
+/**
+ * Extracts the primary amenity type from OSM tags.
+ *
+ * Args:
+ *     tags: OSM tag key-value pairs.
+ *
+ * Returns:
+ *     The primary amenity type string or null.
+ */
+function extractAmenityType(tags: Record<string, string>): string | null {
+  return tags.amenity || tags.tourism || tags.shop || tags.leisure || tags.historic || tags.healthcare || tags.railway || null;
+}
+
+/**
+ * Converts an Overpass element to a POI database row.
+ *
+ * Args:
+ *     el: Overpass element with coordinates and tags.
+ *     categoryMap: Map from category slug to category UUID.
+ *
+ * Returns:
+ *     POI data object ready for database insertion, or null if invalid.
+ */
+function elementToPoi(
+  el: OverpassElement,
+  categoryMap: Map<CategorySlug, string>
+): Record<string, unknown> | null {
+  const tags = el.tags;
+  if (!tags?.name) return null;
+
+  const lat = el.lat ?? el.center?.lat;
+  const lon = el.lon ?? el.center?.lon;
+  if (!lat || !lon) return null;
+
+  const categorySlug = determineCategorySlug(tags);
+  const categoryId = categoryMap.get(categorySlug);
+
+  return {
+    osmId: el.id,
+    name: tags.name,
+    categoryId: categoryId ?? null,
+    latitude: lat,
+    longitude: lon,
+    address: tags["addr:street"]
+      ? `${tags["addr:street"]} ${tags["addr:housenumber"] ?? ""}, Munich`
+      : null,
+    wikipediaUrl: tags.wikipedia
+      ? `https://en.wikipedia.org/wiki/${tags.wikipedia.split(":")[1]}`
+      : null,
+    imageUrl: tags.image ?? null,
+    osmTags: tags,
+    osmAmenity: extractAmenityType(tags),
+    osmCuisine: tags.cuisine ?? null,
+  };
+}
+
+/**
+ * Inserts POIs into the database in batches, upserting on OSM ID conflict.
+ *
+ * Args:
+ *     poiData: Array of POI data objects to insert.
+ *
+ * Returns:
+ *     Total number of upserted rows.
+ */
+async function batchInsertPois(poiData: Array<Record<string, unknown>>): Promise<number> {
+  const BATCH_SIZE = 100;
+  let total = 0;
+
+  for (let i = 0; i < poiData.length; i += BATCH_SIZE) {
+    const batch = poiData.slice(i, i + BATCH_SIZE);
+    const result = await db
+      .insert(pois)
+      .values(batch as typeof pois.$inferInsert[])
+      .onConflictDoUpdate({
+        target: pois.osmId,
+        set: {
+          name: sql`EXCLUDED.name`,
+          categoryId: sql`EXCLUDED.category_id`,
+          latitude: sql`EXCLUDED.latitude`,
+          longitude: sql`EXCLUDED.longitude`,
+          address: sql`EXCLUDED.address`,
+          wikipediaUrl: sql`EXCLUDED.wikipedia_url`,
+          imageUrl: sql`EXCLUDED.image_url`,
+          osmTags: sql`EXCLUDED.osm_tags`,
+          osmAmenity: sql`EXCLUDED.osm_amenity`,
+          osmCuisine: sql`EXCLUDED.osm_cuisine`,
+        },
+      })
+      .returning({ id: pois.id });
+
+    total += result.length;
+    console.log(`  Batch ${Math.floor(i / BATCH_SIZE) + 1}: upserted ${result.length} POIs`);
+  }
+
+  return total;
+}
+
+async function main() {
+  console.log(`Seeding Obelisk POIs (radius: ${SEED_RADIUS}m)`);
+  console.log("");
+
+  console.log("Seeding categories...");
+  const insertedCategories = await db
+    .insert(categories)
+    .values(CATEGORY_DATA)
+    .onConflictDoNothing()
+    .returning();
+
+  const categoryMap = new Map<CategorySlug, string>();
+  const allCategories = insertedCategories.length > 0
+    ? insertedCategories
+    : await db.select().from(categories);
+
+  for (const cat of allCategories) {
+    categoryMap.set(cat.slug as CategorySlug, cat.id);
+  }
+  console.log(`Categories ready: ${categoryMap.size}`);
+  console.log("");
+
+  console.log("Fetching Munich POIs from Overpass API...");
+  const elements = await fetchAllPois();
+  console.log(`Total unique elements: ${elements.length}`);
+  console.log("");
+
+  const poiData = elements
+    .map((el) => elementToPoi(el, categoryMap))
+    .filter((poi): poi is NonNullable<typeof poi> => poi !== null);
+
+  console.log(`Prepared ${poiData.length} POIs for insertion`);
+
+  if (poiData.length > 0) {
+    const total = await batchInsertPois(poiData);
+    console.log(`Upserted ${total} POIs total`);
+  }
+
+  if (poiData.length === 0) {
+    console.log("No POIs found from Overpass, inserting fallback data...");
+    const fallback = getFallbackPois(categoryMap);
+    if (fallback.length > 0) {
+      const total = await batchInsertPois(fallback);
+      console.log(`Inserted ${total} fallback POIs`);
+    }
+  }
+
+  console.log("");
+  console.log("Seeding complete!");
+  process.exit(0);
+}
+
+/**
+ * Returns hardcoded fallback POIs when Overpass API is unavailable.
+ *
+ * Args:
+ *     categoryMap: Map from category slug to category UUID.
+ *
+ * Returns:
+ *     Array of fallback POI data objects.
+ */
+function getFallbackPois(categoryMap: Map<CategorySlug, string>): Array<Record<string, unknown>> {
+  const fallbackElements: OverpassElement[] = [
     { type: "node", id: 1, lat: 48.1374, lon: 11.5755, tags: { name: "Marienplatz", historic: "square" } },
     { type: "node", id: 2, lat: 48.1386, lon: 11.5730, tags: { name: "Frauenkirche", amenity: "place_of_worship", building: "church" } },
     { type: "node", id: 3, lat: 48.1351, lon: 11.5820, tags: { name: "Viktualienmarkt", amenity: "marketplace" } },
@@ -106,87 +469,10 @@ function getFallbackPois(): OverpassElement[] {
     { type: "node", id: 24, lat: 48.1377, lon: 11.5892, tags: { name: "Maximilianeum", historic: "building" } },
     { type: "node", id: 25, lat: 48.1420, lon: 11.5770, tags: { name: "Odeonsplatz", historic: "square" } },
   ];
-}
 
-function determineCategorySlug(tags: Record<string, string>): CategorySlug {
-  if (tags.historic) return "history";
-  if (tags.tourism === "museum") return "art";
-  if (tags.tourism === "viewpoint") return "views";
-  if (tags.amenity === "biergarten" || tags.amenity === "restaurant") return "food";
-  if (tags.leisure === "park" || tags.natural) return "nature";
-  if (tags.amenity === "theatre") return "culture";
-  if (tags.architect || tags.building === "church") return "architecture";
-  return "hidden";
-}
-
-async function main() {
-  console.log("Seeding categories...");
-
-  const insertedCategories = await db
-    .insert(categories)
-    .values(CATEGORY_DATA)
-    .onConflictDoNothing()
-    .returning();
-
-  const categoryMap = new Map<CategorySlug, string>();
-  const allCategories = insertedCategories.length > 0
-    ? insertedCategories
-    : await db.select().from(categories);
-
-  for (const cat of allCategories) {
-    categoryMap.set(cat.slug as CategorySlug, cat.id);
-  }
-
-  console.log(`Categories ready: ${categoryMap.size}`);
-
-  console.log("Fetching Munich POIs from Overpass API...");
-  const elements = await fetchMunichPois();
-  console.log(`Found ${elements.length} elements from Overpass`);
-
-  const poiData = elements
-    .filter((el) => el.tags?.name)
-    .map((el) => {
-      const lat = el.lat ?? el.center?.lat;
-      const lon = el.lon ?? el.center?.lon;
-
-      if (!lat || !lon) return null;
-
-      const tags = el.tags || {};
-      const categorySlug = determineCategorySlug(tags);
-      const categoryId = categoryMap.get(categorySlug);
-
-      return {
-        osmId: el.id,
-        name: tags.name!,
-        categoryId: categoryId ?? null,
-        latitude: lat,
-        longitude: lon,
-        address: tags["addr:street"]
-          ? `${tags["addr:street"]} ${tags["addr:housenumber"] ?? ""}, Munich`
-          : null,
-        wikipediaUrl: tags.wikipedia
-          ? `https://en.wikipedia.org/wiki/${tags.wikipedia.split(":")[1]}`
-          : null,
-        imageUrl: tags.image ?? null,
-        osmTags: tags,
-      };
-    })
+  return fallbackElements
+    .map((el) => elementToPoi(el, categoryMap))
     .filter((poi): poi is NonNullable<typeof poi> => poi !== null);
-
-  console.log(`Prepared ${poiData.length} POIs for insertion`);
-
-  if (poiData.length > 0) {
-    const inserted = await db
-      .insert(pois)
-      .values(poiData)
-      .onConflictDoNothing()
-      .returning();
-
-    console.log(`Inserted ${inserted.length} new POIs`);
-  }
-
-  console.log("Seeding complete!");
-  process.exit(0);
 }
 
 main().catch((error) => {

@@ -3,8 +3,7 @@ services:
     build:
       context: .
       target: dev
-    ports:
-      - "3000:3000"
+    network_mode: "host"
     volumes:
       - .:/app
       - /app/node_modules
@@ -12,17 +11,20 @@ services:
     env_file:
       - .env.local
     environment:
-      DATABASE_URL: postgresql://obelisk:obelisk_dev@postgres:5432/obelisk
-      OLLAMA_URL: http://ollama:11434
+      DATABASE_URL: postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
+      OLLAMA_URL: http://localhost:11434
+      TYPESENSE_URL: http://localhost:8108
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-obelisk_typesense_dev}
+      SEARXNG_URL: http://localhost:8080
     depends_on:
       postgres:
         condition: service_healthy
-      ollama:
-        condition: service_started
+      typesense:
+        condition: service_healthy
     command: bun run dev
 
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     environment:
       POSTGRES_DB: obelisk
       POSTGRES_USER: obelisk
@@ -37,20 +39,35 @@ services:
       timeout: 5s
       retries: 5
 
-  ollama:
-    image: ollama/ollama:latest
+  typesense:
+    image: typesense/typesense:30.1
     ports:
-      - "11434:11434"
+      - "8108:8108"
     volumes:
-      - ollama_models:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+      - typesense_data:/data
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-obelisk_typesense_dev}
+      TYPESENSE_SNAPSHOT_INTERVAL_SECONDS: "3600"
+      GLOG_minloglevel: "1"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8108' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./searxng:/etc/searxng
+      - searxng_data:/data
+    environment:
+      SEARXNG_BASE_URL: http://localhost:8080
 
 volumes:
   postgres_data:
-  ollama_models:
+  typesense_data:
+  searxng_data:

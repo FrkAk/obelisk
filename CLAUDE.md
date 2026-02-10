@@ -132,6 +132,12 @@ obelisk/
 
 ---
 
+## Package Manager
+
+Always use `bun` / `bunx` instead of `npm` / `pnpm` / `npx`.
+
+---
+
 ## Commands
 
 ### Make (primary interface)
@@ -168,7 +174,9 @@ obelisk/
 | `NEXT_PUBLIC_MAPBOX_STYLE_DARK` | Mapbox style URL for dark mode |
 | `DATABASE_URL` | PostgreSQL connection string (default: `postgresql://obelisk:obelisk_dev@localhost:5432/obelisk`) |
 | `OLLAMA_URL` | Ollama API endpoint (default: `http://localhost:11434`) |
-| `OLLAMA_MODEL` | LLM model name (default: `gemma3:27b`) |
+| `OLLAMA_MODEL` | Story generation model (default: `gemma3:27b`) |
+| `OLLAMA_SEARCH_MODEL` | Search/query parsing model (default: `gemma3:4b`) |
+| `OLLAMA_EMBED_MODEL` | Embedding model for semantic search (default: `mxbai-embed-large`) |
 
 ---
 

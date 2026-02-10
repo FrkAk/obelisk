@@ -9,13 +9,17 @@ import { POICard } from "@/components/poi/POICard";
 import { useGeofence } from "@/hooks/useGeofence";
 import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
 import { useSearch } from "@/hooks/useSearch";
+import { AnimatePresence, motion } from "framer-motion";
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Remark, Poi } from "@/types";
-import type { ObeliskResult, SearchResult, ExternalResult, ExternalPOI } from "@/lib/search/types";
+import type { SearchResult, ExternalPOI, ViewportBounds } from "@/lib/search/types";
+import { haversineDistance } from "@/lib/geo/distance";
+import { springTransitions } from "@/lib/ui/animations";
 
 type SheetMode = "story" | "search" | "poi" | null;
 
 function remarkPoiToExternalPOI(poi: Poi): ExternalPOI {
+  const tags = (poi.osmTags ?? {}) as Record<string, string>;
   return {
     id: poi.id,
     osmId: poi.osmId ?? 0,
@@ -24,6 +28,14 @@ function remarkPoiToExternalPOI(poi: Poi): ExternalPOI {
     category: poi.category?.slug ?? "history",
     latitude: poi.latitude,
     longitude: poi.longitude,
+    address: poi.address ?? undefined,
+    openingHours: tags.opening_hours ?? undefined,
+    phone: tags.phone ?? tags["contact:phone"] ?? undefined,
+    website: tags.website ?? tags["contact:website"] ?? undefined,
+    cuisine: tags.cuisine ?? undefined,
+    hasWifi: tags.internet_access === "wlan" || tags.internet_access === "yes",
+    hasOutdoorSeating: tags.outdoor_seating === "yes",
+    imageUrl: poi.imageUrl ?? undefined,
     source: "overpass",
   };
 }
@@ -38,12 +50,21 @@ export default function Home() {
   const [selectedPoi, setSelectedPoi] = useState<ExternalPOI | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
-  const [viewportCenter, setViewportCenter] = useState<ViewportCenter | null>(null);
+  const [viewportState, setViewportState] = useState<{
+    center: ViewportCenter | null;
+    bounds: ViewportBounds | null;
+    zoom: number;
+  }>({ center: null, bounds: null, zoom: 14 });
   const [generatingPoiId, setGeneratingPoiId] = useState<string | null>(null);
   const [isLookingUpPoi, setIsLookingUpPoi] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [lastSearchQuery, setLastSearchQuery] = useState<string | null>(null);
+  const [hasMapMovedSinceSearch, setHasMapMovedSinceSearch] = useState(false);
+  const [previousSheetMode, setPreviousSheetMode] = useState<SheetMode>(null);
+  const [flyToLocation, setFlyToLocation] = useState<{ latitude: number; longitude: number; ts: number } | null>(null);
 
+  const lastSearchQueryRef = useRef<string | null>(null);
   const regenerateCooldownsRef = useRef<Map<string, number>>(new Map());
   const cooldownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -52,12 +73,11 @@ export default function Home() {
   const viewportDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const { remarks, isLoading, location, hasRealLocation } = useNearbyRemarks({
-    externalLocation: viewportCenter,
+    externalLocation: viewportState.center,
   });
   const { triggeredRemark, dismissNotification } = useGeofence(remarks);
   const {
     results: searchResults,
-    conversationalResponse,
     isLoading: isSearching,
     searchStage,
     search,
@@ -136,6 +156,7 @@ export default function Home() {
     setSheetMode(null);
     setSelectedRemark(null);
     setSelectedPoi(null);
+    setPreviousSheetMode(null);
   }, []);
 
   const handleViewportChange = useCallback(
@@ -144,8 +165,22 @@ export default function Home() {
         clearTimeout(viewportDebounceRef.current);
       }
       viewportDebounceRef.current = setTimeout(() => {
-        setViewportCenter(center);
+        setViewportState((prev) => ({ ...prev, center }));
+        if (lastSearchQueryRef.current) {
+          setHasMapMovedSinceSearch(true);
+        }
       }, 300);
+    },
+    []
+  );
+
+  const handleViewportUpdate = useCallback(
+    (update: { center: { latitude: number; longitude: number }; bounds: ViewportBounds; zoom: number }) => {
+      setViewportState({
+        center: update.center,
+        bounds: update.bounds,
+        zoom: update.zoom,
+      });
     },
     []
   );
@@ -198,63 +233,67 @@ export default function Home() {
 
   const handleSearch = useCallback(
     (query: string) => {
-      const searchLocation = viewportCenter ?? (location ? { latitude: location.latitude, longitude: location.longitude } : null);
+      const searchLocation = viewportState.center ?? (location ? { latitude: location.latitude, longitude: location.longitude } : null);
       if (!searchLocation) return;
-      search(query, searchLocation);
+      const viewport = viewportState.bounds ? {
+        center: searchLocation,
+        bounds: viewportState.bounds,
+        zoom: viewportState.zoom,
+      } : undefined;
+      search(query, searchLocation, undefined, viewport);
+      setLastSearchQuery(query);
+      lastSearchQueryRef.current = query;
+      setHasMapMovedSinceSearch(false);
       setSheetMode("search");
       setSheetOpen(true);
     },
-    [viewportCenter, location, search]
+    [viewportState, location, search]
   );
 
   const handleSearchClear = useCallback(() => {
     clearSearch();
+    setLastSearchQuery(null);
+    setHasMapMovedSinceSearch(false);
+    lastSearchQueryRef.current = null;
     if (sheetMode === "search") {
       setSheetOpen(false);
       setSheetMode(null);
     }
   }, [clearSearch, sheetMode]);
 
-  const handleSelectStory = useCallback((result: ObeliskResult) => {
-    setSelectedRemark(result.remark);
-    setSheetMode("story");
-  }, []);
+  const handleSearchResultTap = useCallback((result: SearchResult) => {
+    setPreviousSheetMode(sheetMode);
 
-  const handleNavigate = useCallback((result: SearchResult) => {
-    const lat = result.type === "remark" ? result.remark.poi.latitude : result.poi.latitude;
-    const lng = result.type === "remark" ? result.remark.poi.longitude : result.poi.longitude;
-    const name = result.type === "remark" ? result.remark.poi.name : result.poi.name;
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&destination_place_id=${encodeURIComponent(name)}`,
-      "_blank"
-    );
-  }, []);
-
-  const handleGenerateStory = useCallback(async (result: ExternalResult) => {
-    setGeneratingPoiId(result.poi.id);
-
-    try {
-      const response = await fetch("/api/remarks/generate-for-poi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ poi: result.poi }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error("Failed to generate story:", error);
-        return;
-      }
-
-      const data = await response.json();
-      setSelectedRemark(data.remark);
+    if (result.remark) {
+      setSelectedRemark(result.remark);
+      setSelectedPoi(null);
       setSheetMode("story");
-    } catch (error) {
-      console.error("Error generating story:", error);
-    } finally {
-      setGeneratingPoiId(null);
+    } else {
+      const externalPoi: ExternalPOI = {
+        id: result.id,
+        osmId: result.osmId ?? 0,
+        osmType: "node",
+        name: result.name,
+        category: result.category,
+        latitude: result.latitude,
+        longitude: result.longitude,
+        address: result.address,
+        cuisine: result.cuisine,
+        hasWifi: result.hasWifi,
+        hasOutdoorSeating: result.hasOutdoorSeating,
+        source: result.source === "obelisk-db" ? "obelisk-db" : "overpass",
+      };
+      setSelectedPoi(externalPoi);
+      setSelectedRemark(null);
+      setSheetMode("poi");
     }
-  }, []);
+
+    setFlyToLocation({
+      latitude: result.latitude,
+      longitude: result.longitude,
+      ts: Date.now(),
+    });
+  }, [sheetMode]);
 
   const handleGenerateStoryForPoi = useCallback(async () => {
     if (!selectedPoi) return;
@@ -283,13 +322,33 @@ export default function Home() {
     }
   }, [selectedPoi]);
 
+  const handleSearchThisArea = useCallback(() => {
+    if (lastSearchQuery) {
+      handleSearch(lastSearchQuery);
+    }
+  }, [lastSearchQuery, handleSearch]);
+
+  const handleBackToResults = useCallback(() => {
+    setSelectedRemark(null);
+    setSelectedPoi(null);
+    setSheetMode("search");
+    setPreviousSheetMode(null);
+  }, []);
+
+  const isUsingViewport = !!(viewportState.center && hasRealLocation && location &&
+    haversineDistance(viewportState.center.latitude, viewportState.center.longitude,
+      location.latitude, location.longitude) > 200);
+
   const handleNavigateToPoi = useCallback(() => {
-    if (!selectedPoi) return;
+    const lat = selectedPoi?.latitude ?? selectedRemark?.poi.latitude;
+    const lng = selectedPoi?.longitude ?? selectedRemark?.poi.longitude;
+    const name = selectedPoi?.name ?? selectedRemark?.poi.name;
+    if (!lat || !lng || !name) return;
     window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${selectedPoi.latitude},${selectedPoi.longitude}&destination_place_id=${encodeURIComponent(selectedPoi.name)}`,
+      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&destination_place_id=${encodeURIComponent(name)}`,
       "_blank"
     );
-  }, [selectedPoi]);
+  }, [selectedPoi, selectedRemark]);
 
   const handleRegenerateStory = useCallback(async () => {
     if (!selectedRemark || isRegenerating || cooldownRemaining > 0) return;
@@ -333,10 +392,12 @@ export default function Home() {
         remarks={remarks}
         onPinClick={handlePinClick}
         onViewportChange={handleViewportChange}
+        onViewportUpdate={handleViewportUpdate}
         onPoiClick={handlePoiClick}
         selectedRemarkId={selectedRemark?.id}
         isLoading={isLoading}
         userLocation={hasRealLocation ? location : null}
+        flyToLocation={flyToLocation}
       />
 
       <div className="absolute top-safe-area left-4 right-4 z-20 pt-4">
@@ -345,9 +406,34 @@ export default function Home() {
           onClear={handleSearchClear}
           isLoading={isSearching}
           searchStage={searchStage}
-          placeholder={hasRealLocation || viewportCenter ? "Ask Obelisk anything..." : "Getting location..."}
+          placeholder={hasRealLocation || viewportState.center ? "Ask Obelisk anything..." : "Getting location..."}
+          isUsingViewport={isUsingViewport}
         />
       </div>
+
+      <AnimatePresence>
+        {lastSearchQuery && hasMapMovedSinceSearch && !isSearching && (
+          <motion.div
+            className="absolute left-1/2 z-15 pt-2"
+            style={{ top: "calc(var(--safe-area-top, 0px) + 72px)" }}
+            initial={{ opacity: 0, y: -10, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: -10, x: "-50%" }}
+            transition={springTransitions.floatingEntry}
+          >
+            <button
+              onClick={handleSearchThisArea}
+              className="flex items-center gap-2 px-4 py-2 glass-floating rounded-full text-[13px] font-medium text-[var(--foreground)] shadow-lg"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+              </svg>
+              Search this area
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {triggeredRemark && !sheetOpen && (
         <StoryNotification
@@ -368,32 +454,22 @@ export default function Home() {
             <POICard
               poi={selectedPoi ?? remarkPoiToExternalPOI(selectedRemark!.poi)}
               remark={selectedRemark}
-              onNavigate={selectedPoi ? handleNavigateToPoi : () =>
-                handleNavigate({
-                  type: "remark",
-                  remark: selectedRemark!,
-                  distance: 0,
-                  score: 0,
-                })
-              }
+              onNavigate={handleNavigateToPoi}
               onGenerateStory={!selectedRemark ? handleGenerateStoryForPoi : undefined}
               onRegenerate={selectedRemark ? handleRegenerateStory : undefined}
               isGenerating={selectedPoi ? generatingPoiId === selectedPoi.id : false}
               isRegenerating={isRegenerating}
               cooldownRemaining={cooldownRemaining}
               autoGenerate={!selectedRemark}
+              onBack={previousSheetMode === "search" ? handleBackToResults : undefined}
             />
           ) : null
         )}
         {sheetMode === "search" && (
           <SearchResults
             results={searchResults}
-            conversationalResponse={conversationalResponse ?? undefined}
             isLoading={isSearching}
-            onNavigate={handleNavigate}
-            onSelectStory={handleSelectStory}
-            onGenerateStory={handleGenerateStory}
-            generatingPoiId={generatingPoiId}
+            onResultTap={handleSearchResultTap}
           />
         )}
       </BottomSheet>

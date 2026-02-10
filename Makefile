@@ -1,4 +1,4 @@
-.PHONY: help setup run run-local stop logs rebuild destroy seed-pois enrich-pois sync-search generate-embeddings search-setup
+.PHONY: help setup run run-local stop logs rebuild destroy seed-pois enrich-pois sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -42,6 +42,10 @@ help:
 	@echo "  $(CYAN)sync-search$(RESET)         Sync POIs to Typesense"
 	@echo "  $(CYAN)generate-embeddings$(RESET)  Generate vector embeddings"
 	@echo "  $(CYAN)search-setup$(RESET)        Run full search pipeline"
+	@echo ""
+	@echo "$(GREEN)Database:$(RESET)"
+	@echo "  $(CYAN)db-dump$(RESET)     Export database to db/dump.sql"
+	@echo "  $(CYAN)db-restore$(RESET)  Restore database from db/dump.sql"
 	@echo ""
 
 ifeq ($(ARCH),aarch64)
@@ -191,6 +195,15 @@ sync-search:
 generate-embeddings:
 	bun scripts/generate-embeddings.ts
 
+db-dump:
+	@mkdir -p db
+	pg_dump -U obelisk -h localhost obelisk > db/dump.sql
+	@echo "$(GREEN)Dumped to db/dump.sql$(RESET)"
+
+db-restore:
+	psql -U obelisk -h localhost obelisk < db/dump.sql
+	@echo "$(GREEN)Restored from db/dump.sql$(RESET)"
+
 else
 
 seed-pois:
@@ -204,6 +217,15 @@ sync-search:
 
 generate-embeddings:
 	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
+
+db-dump:
+	@mkdir -p db
+	$(COMPOSE) exec -T postgres pg_dump -U obelisk obelisk > db/dump.sql
+	@echo "$(GREEN)Dumped to db/dump.sql$(RESET)"
+
+db-restore:
+	$(COMPOSE) exec -T postgres psql -U obelisk obelisk < db/dump.sql
+	@echo "$(GREEN)Restored from db/dump.sql$(RESET)"
 
 endif
 

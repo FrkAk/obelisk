@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { Marker, useMap } from "react-map-gl";
+import { Marker, useMap } from "react-map-gl/mapbox";
 
 interface ClusterPinProps {
   latitude: number;

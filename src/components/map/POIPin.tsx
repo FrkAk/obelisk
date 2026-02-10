@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { Marker } from "react-map-gl";
+import { Marker } from "react-map-gl/mapbox";
 import type { Remark, Poi, CategorySlug, Category } from "@/types";
 import { CATEGORY_COLORS } from "@/types";
 

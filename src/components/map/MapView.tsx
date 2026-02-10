@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useCallback, useEffect, useState } from "react";
-import Map, { type MapRef, type ViewStateChangeEvent, type MapLayerMouseEvent } from "react-map-gl";
+import Map, { type MapRef, type ViewStateChangeEvent, type MapMouseEvent } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MUNICH_CENTER } from "@/types";
 import { MapControls } from "./MapControls";
@@ -54,12 +54,13 @@ export function MapView({
 }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
   const hasFlownToUser = useRef(false);
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
   const [cursorStyle, setCursorStyle] = useState<string>("grab");
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    setIsDark(mediaQuery.matches);
 
     const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
     mediaQuery.addEventListener("change", handler);
@@ -142,7 +143,7 @@ export function MapView({
   }, []);
 
   const handleMapClick = useCallback(
-    (event: MapLayerMouseEvent) => {
+    (event: MapMouseEvent) => {
       const map = mapRef.current?.getMap();
       if (!onPoiClick || !map) return;
 

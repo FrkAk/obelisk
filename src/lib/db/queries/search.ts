@@ -1,11 +1,39 @@
 import { db } from "../client";
-import { remarks, pois, categories } from "../schema";
-import { eq, and, gte, lte, ilike, or, sql } from "drizzle-orm";
-import type { CategorySlug, Remark, Poi, Category } from "@/types";
+import { remarks, pois, categories, foodProfiles, natureProfiles } from "../schema";
+import { eq, and, gte, lte, sql, or } from "drizzle-orm";
+import type { CategorySlug } from "@/types";
 
-export type RemarkWithPoi = Remark & {
-  poi: Poi & { category?: Category };
-};
+export interface RemarkWithPoi {
+  id: string;
+  poiId: string;
+  title: string;
+  teaser: string | null;
+  content: string;
+  localTip: string | null;
+  durationSeconds: number;
+  audioUrl: string | null;
+  createdAt: Date;
+  poi: {
+    id: string;
+    osmId: number | null;
+    name: string;
+    categoryId: string;
+    latitude: number;
+    longitude: number;
+    address: string | null;
+    wikipediaUrl: string | null;
+    imageUrl: string | null;
+    osmTags: Record<string, string> | null;
+    createdAt: Date;
+    category?: {
+      id: string;
+      name: string;
+      slug: CategorySlug;
+      icon: string;
+      color: string;
+    };
+  };
+}
 
 function remarkPoiSelect() {
   return {
@@ -102,7 +130,8 @@ function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
 }
 
 /**
- * Searches remarks and POI names for text matches within a geo bounding box.
+ * Searches remarks and POI names using tsvector full-text search within a geo bounding box.
+ * Falls back to ILIKE if search_vector columns are not populated.
  *
  * Args:
  *     query: The text to search for.
@@ -122,40 +151,155 @@ export async function searchRemarksByText(
   limit: number = 20
 ): Promise<RemarkWithPoi[]> {
   const latDelta = radiusMeters / 111320;
-  const lonDelta = radiusMeters / (111320 * Math.cos(latitude * (Math.PI / 180)));
+  const lonDelta =
+    radiusMeters / (111320 * Math.cos(latitude * (Math.PI / 180)));
 
   const minLat = latitude - latDelta;
   const maxLat = latitude + latDelta;
   const minLon = longitude - lonDelta;
   const maxLon = longitude + lonDelta;
 
-  const pattern = `%${query}%`;
+  const tsQuery = sql`plainto_tsquery('simple', ${query})`;
 
   const results = await db
-    .select(remarkPoiSelect())
+    .select({
+      ...remarkPoiSelect(),
+      rank: sql<number>`COALESCE(ts_rank(${remarks.searchVector}, ${tsQuery}), 0) + COALESCE(ts_rank(${pois.searchVector}, ${tsQuery}), 0)`.as("rank"),
+    })
     .from(remarks)
     .innerJoin(pois, eq(remarks.poiId, pois.id))
     .leftJoin(categories, eq(pois.categoryId, categories.id))
     .where(
       and(
+        eq(remarks.isCurrent, true),
         gte(pois.latitude, minLat),
         lte(pois.latitude, maxLat),
         gte(pois.longitude, minLon),
         lte(pois.longitude, maxLon),
         or(
-          ilike(remarks.title, pattern),
-          ilike(remarks.content, pattern),
-          ilike(pois.name, pattern)
+          sql`${remarks.searchVector} @@ ${tsQuery}`,
+          sql`${pois.searchVector} @@ ${tsQuery}`,
+          sql`${pois.name} ILIKE ${"%" + query + "%"}`
         )
       )
     )
+    .orderBy(sql`rank DESC`)
     .limit(limit);
 
   return results.map(mapRowToRemarkWithPoi);
 }
 
 /**
+ * Searches with profile-aware filters using tsvector full-text search.
+ *
+ * Args:
+ *     query: The text to search for.
+ *     latitude: Center latitude.
+ *     longitude: Center longitude.
+ *     radiusMeters: Search radius in meters.
+ *     filters: Optional profile-specific filters.
+ *     limit: Maximum number of results.
+ *
+ * Returns:
+ *     Array of remarks matching the query and filters.
+ */
+export async function searchWithFilters(
+  query: string,
+  latitude: number,
+  longitude: number,
+  radiusMeters: number,
+  filters: {
+    priceLevel?: number;
+    cuisine?: string;
+    outdoor?: boolean;
+    trailDifficulty?: string;
+    category?: CategorySlug;
+  } = {},
+  limit: number = 20
+): Promise<RemarkWithPoi[]> {
+  const baseResults = await searchRemarksByText(
+    query,
+    latitude,
+    longitude,
+    radiusMeters,
+    limit * 3
+  );
+
+  let filtered = baseResults;
+
+  if (filters.category) {
+    filtered = filtered.filter(
+      (r) => r.poi.category?.slug === filters.category
+    );
+  }
+
+  if (
+    filters.priceLevel !== undefined ||
+    filters.outdoor !== undefined ||
+    filters.cuisine !== undefined
+  ) {
+    const poiIds = filtered.map((r) => r.poi.id);
+    if (poiIds.length > 0) {
+      const profiles = await db
+        .select({
+          poiId: foodProfiles.poiId,
+          priceLevel: foodProfiles.priceLevel,
+          hasOutdoorSeating: foodProfiles.hasOutdoorSeating,
+        })
+        .from(foodProfiles)
+        .where(sql`${foodProfiles.poiId} = ANY(${poiIds})`);
+
+      const profileMap = new Map(profiles.map((p) => [p.poiId, p]));
+
+      filtered = filtered.filter((r) => {
+        const fp = profileMap.get(r.poi.id);
+        if (!fp) {
+          return (
+            filters.priceLevel === undefined && filters.outdoor === undefined
+          );
+        }
+        if (
+          filters.priceLevel !== undefined &&
+          fp.priceLevel !== filters.priceLevel
+        )
+          return false;
+        if (
+          filters.outdoor !== undefined &&
+          fp.hasOutdoorSeating !== filters.outdoor
+        )
+          return false;
+        return true;
+      });
+    }
+  }
+
+  if (filters.trailDifficulty !== undefined) {
+    const poiIds = filtered.map((r) => r.poi.id);
+    if (poiIds.length > 0) {
+      const profiles = await db
+        .select({
+          poiId: natureProfiles.poiId,
+          trailDifficulty: natureProfiles.trailDifficulty,
+        })
+        .from(natureProfiles)
+        .where(sql`${natureProfiles.poiId} = ANY(${poiIds})`);
+
+      const profileMap = new Map(profiles.map((p) => [p.poiId, p]));
+
+      filtered = filtered.filter((r) => {
+        const np = profileMap.get(r.poi.id);
+        if (!np) return false;
+        return np.trailDifficulty === filters.trailDifficulty;
+      });
+    }
+  }
+
+  return filtered.slice(0, limit);
+}
+
+/**
  * Gets a random remark within a geo bounding box, optionally filtered by category.
+ * Only returns current (is_current = true) remarks.
  *
  * Args:
  *     latitude: Center latitude.
@@ -173,9 +317,11 @@ export async function getRandomRemark(
   category?: CategorySlug
 ): Promise<RemarkWithPoi | undefined> {
   const latDelta = radiusMeters / 111320;
-  const lonDelta = radiusMeters / (111320 * Math.cos(latitude * (Math.PI / 180)));
+  const lonDelta =
+    radiusMeters / (111320 * Math.cos(latitude * (Math.PI / 180)));
 
   const conditions = [
+    eq(remarks.isCurrent, true),
     gte(pois.latitude, latitude - latDelta),
     lte(pois.latitude, latitude + latDelta),
     gte(pois.longitude, longitude - lonDelta),

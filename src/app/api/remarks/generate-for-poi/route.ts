@@ -9,7 +9,10 @@ import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { scrapeWebsite } from "@/lib/web/scraper";
 import { enrichPOIWithWebSearch } from "@/lib/web/webSearch";
 import { z } from "zod";
+import { createLogger } from "@/lib/logger";
 import type { CategorySlug, Remark, Poi } from "@/types";
+
+const log = createLogger("generate-for-poi");
 
 const externalPoiSchema = z.object({
   id: z.string(),
@@ -117,14 +120,14 @@ const CATEGORY_MAPPING: Record<string, CategorySlug> = {
  *     Generated remark with POI data, or cached remark if exists.
  */
 export async function POST(request: NextRequest) {
-  console.log("[generate-for-poi] === API CALLED ===");
+  log.info("=== API CALLED ===");
 
   try {
     const body = await request.json();
     const parseResult = bodySchema.safeParse(body);
 
     if (!parseResult.success) {
-      console.log("[generate-for-poi] Invalid parameters:", parseResult.error.flatten());
+      log.warn("Invalid parameters:", parseResult.error.flatten());
       return NextResponse.json(
         { error: "Invalid parameters", details: parseResult.error.flatten() },
         { status: 400 }
@@ -133,35 +136,32 @@ export async function POST(request: NextRequest) {
 
     const { poi: externalPoi } = parseResult.data;
 
-    console.log(`[generate-for-poi] Request for: "${externalPoi.name}" (osmId: ${externalPoi.osmId}, website: ${externalPoi.website || "none"})`);
+    log.info(`Request for: "${externalPoi.name}" (osmId: ${externalPoi.osmId}, website: ${externalPoi.website || "none"})`);
 
     const existingPoi = await findPoiByOsmId(externalPoi.osmId);
 
     if (existingPoi) {
-      console.log(`[generate-for-poi] Found existing POI in DB: "${existingPoi.name}" (id: ${existingPoi.id})`);
+      log.info(`Found existing POI in DB: "${existingPoi.name}" (id: ${existingPoi.id})`);
 
       const existingRemark = await findRemarkForPoi(existingPoi.id);
 
       if (existingRemark) {
-        console.log(`[generate-for-poi] === RETURNING CACHED ===`);
-        console.log(`[generate-for-poi] Remark title: "${existingRemark.title}"`);
-        console.log(`[generate-for-poi] Remark POI name: "${existingRemark.poi.name}"`);
-        console.log(`[generate-for-poi] Remark content preview: "${existingRemark.content.slice(0, 80)}..."`);
+        log.success(`Returning cached remark: "${existingRemark.title}" for "${existingRemark.poi.name}"`);
         return NextResponse.json({
           remark: existingRemark,
           cached: true,
         });
       }
 
-      console.log(`[generate-for-poi] No remark exists, generating new one for: "${existingPoi.name}"`);
+      log.info(`No remark exists, generating new one for: "${existingPoi.name}"`);
       return await generateAndSaveRemark(existingPoi, externalPoi.website);
     }
 
-    console.log(`[generate-for-poi] POI not in DB, creating new: "${externalPoi.name}"`);
+    log.info(`POI not in DB, creating new: "${externalPoi.name}"`);
     const newPoi = await createPoiFromExternal(externalPoi);
     return await generateAndSaveRemark(newPoi, externalPoi.website);
   } catch (error) {
-    console.error("[generate-for-poi] Error:", error);
+    log.error("Error:", error);
     const errorMessage = error instanceof Error
       ? error.message
       : typeof error === "string"
@@ -306,7 +306,7 @@ async function createPoiFromExternal(externalPoi: z.infer<typeof externalPoiSche
   if (insertResult.length === 0) {
     const existingPoi = await findPoiByOsmId(externalPoi.osmId);
     if (existingPoi) {
-      console.log(`[generate-for-poi] Race condition handled - POI already exists: "${existingPoi.name}"`);
+      log.warn(`Race condition handled — POI already exists: "${existingPoi.name}"`);
       return existingPoi;
     }
     throw new Error(`Failed to create or retrieve POI with osmId: ${externalPoi.osmId}`);
@@ -352,15 +352,15 @@ async function generateAndSaveRemark(
 
   let websiteContent = null;
   if (websiteUrl) {
-    console.log(`[generate-for-poi] Scraping website: ${websiteUrl}`);
+    log.info(`Scraping website: ${websiteUrl}`);
     websiteContent = await scrapeWebsite(websiteUrl);
     if (websiteContent.error) {
-      console.log(`[generate-for-poi] Website scrape failed: ${websiteContent.error}`);
+      log.warn(`Website scrape failed: ${websiteContent.error}`);
     } else {
-      console.log(`[generate-for-poi] Scraped content - Title: "${websiteContent.title}", Desc: "${websiteContent.description?.slice(0, 100)}..."`);
+      log.success(`Scraped content — Title: "${websiteContent.title}", Desc: "${websiteContent.description?.slice(0, 100)}..."`);
     }
   } else {
-    console.log(`[generate-for-poi] No website URL provided for: "${poi.name}"`);
+    log.info(`No website URL provided for: "${poi.name}"`);
   }
 
   const categoryName = poi.categoryName || "Hidden Gems";
@@ -371,10 +371,10 @@ async function generateAndSaveRemark(
     address: poi.address,
   });
 
-  console.log(`[generate-for-poi] Web search query: "${webSearchContext.query}"`);
-  console.log(`[generate-for-poi] Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`);
+  log.info(`Web search query: "${webSearchContext.query}"`);
+  log.info(`Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`);
 
-  console.log(`[generate-for-poi] Generating story for: "${poi.name}" with category: "${categoryName}"`);
+  log.info(`Generating story for: "${poi.name}" with category: "${categoryName}"`);
 
   const story = await generateEnhancedStory({
     name: poi.name,
@@ -388,7 +388,7 @@ async function generateAndSaveRemark(
     webSearchContext,
   });
 
-  console.log(`[generate-for-poi] Generated story - Title: "${story.title}", Content preview: "${story.content.slice(0, 100)}..."`);
+  log.success(`Generated story — Title: "${story.title}"`);
 
   const [insertedRemark] = await db
     .insert(remarks)

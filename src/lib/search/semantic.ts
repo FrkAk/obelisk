@@ -11,6 +11,7 @@ interface EmbedResponse {
 
 interface SemanticSearchResult {
   poiId: string;
+  osmId?: number;
   name: string;
   latitude: number;
   longitude: number;
@@ -90,6 +91,7 @@ export async function semanticSearch(
   const rows = await db.execute(sql`
     SELECT
       p.id,
+      p.osm_id,
       p.name,
       p.latitude,
       p.longitude,
@@ -110,6 +112,7 @@ export async function semanticSearch(
     const lon = Number(r.longitude);
     return {
       poiId: String(r.id),
+      osmId: r.osm_id ? Number(r.osm_id) : undefined,
       name: String(r.name),
       latitude: lat,
       longitude: lon,

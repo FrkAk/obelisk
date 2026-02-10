@@ -1,6 +1,9 @@
 import { generateText, SEARCH_MODEL } from "@/lib/ai/ollama";
+import { createLogger } from "@/lib/logger";
 import type { ParsedIntent, SearchFilters } from "./types";
 import type { CategorySlug } from "@/types";
+
+const log = createLogger("queryParser");
 
 const VALID_CATEGORIES: CategorySlug[] = [
   "history", "food", "art", "nature", "architecture",
@@ -299,7 +302,7 @@ export async function parseQueryIntent(query: string): Promise<ParsedIntent> {
 
   const fastResult = lookupFastPath(normalized);
   if (fastResult) {
-    console.log(`[queryParser] Fast-path: "${query}"`);
+    log.info(`Fast-path: "${query}"`);
     return fastResult;
   }
 
@@ -366,7 +369,7 @@ async function llmFallback(query: string, normalized: string): Promise<ParsedInt
       temperature: 0.1,
       num_predict: 100,
     });
-    console.log(`[queryParser] LLM raw response: ${response}`);
+    log.info(`LLM raw response: ${response}`);
 
     const parsed = parseLabeledResponse(response);
     if (parsed.keywords.length > 0 || parsed.placeName || parsed.category) {
@@ -374,8 +377,8 @@ async function llmFallback(query: string, normalized: string): Promise<ParsedInt
     }
 
     return heuristicParse(normalized);
-  } catch {
-    console.log(`[queryParser] LLM fallback failed for: "${query}"`);
+  } catch (error) {
+    log.warn(`LLM fallback failed for: "${query}"`, error);
     return heuristicParse(normalized);
   }
 }

@@ -2,6 +2,7 @@ import type { SearchResult } from "./types";
 
 interface SemanticResult {
   poiId: string;
+  osmId?: number;
   name: string;
   similarity: number;
   latitude: number;
@@ -50,6 +51,7 @@ export function rankResults(input: RankingInput): SearchResult[] {
     if (!itemMap.has(sem.poiId)) {
       itemMap.set(sem.poiId, {
         id: sem.poiId,
+        osmId: sem.osmId,
         name: sem.name,
         category: sem.category,
         latitude: sem.latitude,

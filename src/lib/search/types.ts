@@ -36,6 +36,7 @@ export interface SearchLocation {
 
 export interface SearchResult {
   id: string;
+  osmId?: number;
   name: string;
   category: string;
   latitude: number;

@@ -271,7 +271,7 @@ export default function Home() {
     } else {
       const externalPoi: ExternalPOI = {
         id: result.id,
-        osmId: 0,
+        osmId: result.osmId ?? 0,
         osmType: "node",
         name: result.name,
         category: result.category,
@@ -281,7 +281,7 @@ export default function Home() {
         cuisine: result.cuisine,
         hasWifi: result.hasWifi,
         hasOutdoorSeating: result.hasOutdoorSeating,
-        source: "overpass",
+        source: result.source === "obelisk-db" ? "obelisk-db" : "overpass",
       };
       setSelectedPoi(externalPoi);
       setSelectedRemark(null);

@@ -1,5 +1,8 @@
 import Typesense from "typesense";
+import { createLogger } from "@/lib/logger";
 import type { SearchLocation } from "./types";
+
+const log = createLogger("typesense");
 
 const TYPESENSE_URL = process.env.TYPESENSE_URL || "http://localhost:8108";
 const TYPESENSE_API_KEY = process.env.TYPESENSE_API_KEY || "obelisk_typesense_dev";
@@ -87,15 +90,15 @@ export async function initCollection(): Promise<unknown> {
       [...schemaFieldNames].some((name) => !existingFieldNames.has(name));
 
     if (hasSchemaChange) {
-      console.log("[typesense] Schema changed, recreating collection");
+      log.warn("Schema changed, recreating collection");
       await client.collections(COLLECTION_NAME).delete();
       return client.collections().create(poiSchema);
     }
 
-    console.log("[typesense] Collection already exists with matching schema");
+    log.info("Collection already exists with matching schema");
     return existing;
   } catch {
-    console.log("[typesense] Creating new collection");
+    log.info("Creating new collection");
     return client.collections().create(poiSchema);
   }
 }

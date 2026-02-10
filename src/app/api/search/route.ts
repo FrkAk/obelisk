@@ -6,8 +6,11 @@ import { semanticSearch } from "@/lib/search/semantic";
 import { searchRemarksByText, getRandomRemark } from "@/lib/db/queries/search";
 import { rankResults } from "@/lib/search/ranking";
 import { haversineDistance } from "@/lib/geo/distance";
+import { createLogger } from "@/lib/logger";
 import type { SearchResult, SearchResponse } from "@/lib/search/types";
 import type { RemarkWithPoi } from "@/lib/db/queries/search";
+
+const log = createLogger("search");
 
 const requestSchema = z.object({
   query: z.string().min(1).max(500),
@@ -37,6 +40,7 @@ function typesenseHitToSearchResult(
 ): SearchResult {
   return {
     id: hit.poiId,
+    osmId: hit.osmId,
     name: hit.name,
     category: hit.category,
     latitude: hit.location[0],
@@ -72,6 +76,7 @@ function remarkToSearchResult(
 ): SearchResult {
   return {
     id: remark.poi.id,
+    osmId: remark.poi.osmId ?? undefined,
     name: remark.poi.name,
     category: remark.poi.category?.slug ?? "hidden",
     latitude: remark.poi.latitude,
@@ -133,7 +138,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`[search] Query: "${query}", category: ${intent.category}`);
+    log.info(`Query: "${query}", category: ${intent.category}`);
 
     const radiusKm = radius / 1000;
     const searchQuery = intent.keywords.length > 0 ? intent.keywords.join(" ") : query;
@@ -178,13 +183,22 @@ export async function POST(request: NextRequest) {
     const obeliskMs = obeliskSettled.status === "fulfilled" ? obeliskSettled.value.ms : 0;
 
     if (typesenseSettled.status === "rejected") {
-      console.error("[search] Typesense error:", typesenseSettled.reason);
+      log.error("Typesense failed:", typesenseSettled.reason);
+    } else {
+      const top = typesenseResults[0];
+      log.info(`Typesense: ${typesenseResults.length} hits in ${typesenseMs}ms${top ? ` — top: "${top.name}" (score: ${top.score})` : ""}`);
     }
     if (semanticSettled.status === "rejected") {
-      console.error("[search] Semantic error:", semanticSettled.reason);
+      log.error("Semantic failed:", semanticSettled.reason);
+    } else {
+      const top = semanticResults[0];
+      log.info(`Semantic: ${semanticResults.length} hits in ${semanticMs}ms${top ? ` — top: "${top.name}" (sim: ${top.similarity.toFixed(3)})` : ""}`);
     }
     if (obeliskSettled.status === "rejected") {
-      console.error("[search] Obelisk DB error:", obeliskSettled.reason);
+      log.error("Obelisk DB failed:", obeliskSettled.reason);
+    } else {
+      const top = obeliskResults[0];
+      log.info(`Obelisk DB: ${obeliskResults.length} hits in ${obeliskMs}ms${top ? ` — top: "${top.name}"` : ""}`);
     }
 
     const ranked = rankResults({
@@ -198,10 +212,17 @@ export async function POST(request: NextRequest) {
     const finalResults = ranked.slice(0, limit);
 
     const totalMs = Date.now() - startTime;
-    console.log(
-      `[search] Results: ${finalResults.length} (ts:${typesenseResults.length}, sem:${semanticResults.length}, ob:${obeliskResults.length}), ` +
-      `timing: parse=${parseMs}ms, ts=${typesenseMs}ms, sem=${semanticMs}ms, ob=${obeliskMs}ms, total=${totalMs}ms`
+    log.info(
+      `Results: ${finalResults.length} (ts:${typesenseResults.length}, sem:${semanticResults.length}, ob:${obeliskResults.length})`
     );
+    log.timing("total", totalMs);
+
+    const topN = finalResults.slice(0, 5);
+    for (let i = 0; i < topN.length; i++) {
+      const r = topN[i];
+      const dist = r.distance ? `${(r.distance / 1000).toFixed(1)}km` : "?";
+      log.info(`  #${i + 1} "${r.name}" — score: ${r.score.toFixed(4)}, src: ${r.source}, dist: ${dist}${r.hasStory ? " ★" : ""}`);
+    }
 
     const response: SearchResponse = {
       results: finalResults,
@@ -217,7 +238,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error("Search error:", error);
+    log.error("Search error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

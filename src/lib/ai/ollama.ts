@@ -1,3 +1,7 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("ollama");
+
 interface OllamaGenerateRequest {
   model: string;
   prompt: string;
@@ -90,11 +94,11 @@ export async function checkOllamaHealth(
     const modelPrefix = model.split(":")[0];
     const found = models.some((m: { name: string }) => m.name.startsWith(modelPrefix));
 
-    console.log(`[ollama] Health check - URL: ${OLLAMA_URL}, looking for: ${modelPrefix}, available: [${modelNames.join(", ")}], found: ${found}`);
+    log.info(`Health check — found: ${found ? modelNames.find((n: string) => n.startsWith(modelPrefix)) : "none"} (looking for: ${modelPrefix})`);
 
     return found;
   } catch (error) {
-    console.error("[ollama] Health check failed:", error);
+    log.error("Health check failed:", error);
     return false;
   }
 }

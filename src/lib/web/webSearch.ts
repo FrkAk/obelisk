@@ -1,4 +1,5 @@
 import { scrapeWebsite, type WebsiteContent } from "./scraper";
+import { searxngSearch } from "./searxng";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("webSearch");
@@ -21,16 +22,6 @@ export interface WebSearchContext {
   scrapedContent?: ScrapedContent[];
 }
 
-interface OllamaSearchResponse {
-  results?: Array<{
-    title?: string;
-    url?: string;
-    content?: string;
-  }>;
-}
-
-const OLLAMA_SEARCH_URL = "https://ollama.com/api/web_search";
-const SEARCH_TIMEOUT_MS = 10000;
 const MAX_SCRAPE_RESULTS = 2;
 
 /**
@@ -225,7 +216,7 @@ export function getEnrichmentPasses(categorySlug: string): EnrichmentPass[] {
 }
 
 /**
- * Performs web search using Ollama Cloud API.
+ * Performs web search using self-hosted SearXNG instance.
  *
  * Args:
  *     query: Search query string.
@@ -235,49 +226,17 @@ export function getEnrichmentPasses(categorySlug: string): EnrichmentPass[] {
  *     Array of search results with title, URL, and snippet.
  */
 export async function webSearch(query: string, maxResults: number = 5): Promise<WebSearchResult[]> {
-  const apiKey = process.env.OLLAMA_API_KEY;
-
-  if (!apiKey) {
-    log.warn("OLLAMA_API_KEY not configured, skipping web search");
-    return [];
-  }
-
   try {
-    const response = await fetch(OLLAMA_SEARCH_URL, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query,
-        max_results: maxResults,
-      }),
-      signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
-    });
+    const results = await searxngSearch(query, maxResults);
 
-    if (!response.ok) {
-      log.error(`API error: ${response.status} ${response.statusText}`);
-      return [];
-    }
-
-    const data: OllamaSearchResponse = await response.json();
-
-    if (!data.results || !Array.isArray(data.results)) {
-      log.info("No results in response");
-      return [];
-    }
-
-    return data.results
-      .filter((r) => r.title && r.url)
-      .map((r) => ({
-        title: r.title || "",
-        url: r.url || "",
-        snippet: r.content || "",
-      }));
+    return results.map((r) => ({
+      title: r.title,
+      url: r.url,
+      snippet: r.content,
+    }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    log.error(`Request failed: ${message}`);
+    log.error(`Search failed: ${message}`);
     return [];
   }
 }

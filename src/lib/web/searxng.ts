@@ -1,3 +1,7 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("searxng");
+
 const SEARXNG_URL = process.env.SEARXNG_URL || "http://localhost:8080";
 const SEARCH_TIMEOUT_MS = 10000;
 
@@ -36,14 +40,14 @@ export async function searxngSearch(query: string, maxResults: number = 5): Prom
     });
 
     if (!response.ok) {
-      console.log(`[searxng] API error: ${response.status} ${response.statusText}`);
+      log.error(`API error: ${response.status} ${response.statusText}`);
       return [];
     }
 
     const data: SearXNGResponse = await response.json();
 
     if (!data.results || !Array.isArray(data.results)) {
-      console.log("[searxng] No results in response");
+      log.info("No results in response");
       return [];
     }
 
@@ -57,7 +61,7 @@ export async function searxngSearch(query: string, maxResults: number = 5): Prom
       }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.log(`[searxng] Search failed: ${message}`);
+    log.error(`Search failed: ${message}`);
     return [];
   }
 }

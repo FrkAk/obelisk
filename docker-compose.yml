@@ -4,8 +4,6 @@ services:
       context: .
       target: dev
     network_mode: "host"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - .:/app
       - /app/node_modules
@@ -14,7 +12,7 @@ services:
       - .env.local
     environment:
       DATABASE_URL: postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
-      OLLAMA_URL: http://host.docker.internal:11434
+      OLLAMA_URL: http://localhost:11434
       TYPESENSE_URL: http://localhost:8108
       TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-obelisk_typesense_dev}
       SEARXNG_URL: http://localhost:8080
@@ -23,6 +21,8 @@ services:
         condition: service_healthy
       typesense:
         condition: service_healthy
+      searxng:
+        condition: service_started
     command: bun run dev
 
   postgres:

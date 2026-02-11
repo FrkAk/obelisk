@@ -1,4 +1,4 @@
-.PHONY: help setup run run-local stop logs rebuild destroy seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup run run-local stop logs rebuild destroy download-pbf seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -27,7 +27,7 @@ export OLLAMA_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_SEARCH_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_EMBED_MODEL ?= embeddinggemma:300m
 export TYPESENSE_API_KEY ?= obelisk_typesense_dev
-export SEED_RADIUS ?= 300
+export SEED_RADIUS ?= 100
 
 help:
 	@printf "\n"
@@ -46,7 +46,8 @@ help:
 	@printf "  $(CYAN)seed-regions$(RESET)        Seed regions (Germany -> Munich)\n"
 	@printf "  $(CYAN)seed-cuisines$(RESET)       Seed cuisine taxonomy\n"
 	@printf "  $(CYAN)seed-tags$(RESET)           Seed tags across all groups\n"
-	@printf "  $(CYAN)seed-pois$(RESET)           Seed POIs from Overpass API\n"
+	@printf "  $(CYAN)download-pbf$(RESET)        Download Munich OSM PBF extract\n"
+	@printf "  $(CYAN)seed-pois$(RESET)           Seed POIs from local OSM extract\n"
 	@printf "  $(CYAN)seed-all$(RESET)            Run all seed scripts in order\n"
 	@printf "\n"
 	@printf "$(GREEN)Search Pipeline:$(RESET)\n"
@@ -65,39 +66,42 @@ ifeq ($(ARCH),aarch64)
 setup:
 	@printf "$(GREEN)Setting up Obelisk on $(PLATFORM)...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[1/10]$(RESET) Installing dependencies...\n"
+	@printf "$(CYAN)[1/11]$(RESET) Installing dependencies...\n"
 	bun install
 	@printf "\n"
-	@printf "$(CYAN)[2/10]$(RESET) Starting PostgreSQL...\n"
+	@printf "$(CYAN)[2/11]$(RESET) Starting PostgreSQL...\n"
 	$(COMPOSE) up -d
 	@printf "Waiting for database...\n"
 	@sleep 8
 	@printf "\n"
-	@printf "$(CYAN)[3/10]$(RESET) Enabling extensions and running migrations...\n"
+	@printf "$(CYAN)[3/11]$(RESET) Enabling extensions and running migrations...\n"
 	psql -U obelisk -h localhost -d obelisk -f drizzle/0001_enable_extensions.sql
 	bun run drizzle-kit push
 	@printf "\n"
-	@printf "$(CYAN)[4/10]$(RESET) Ensuring Ollama models...\n"
+	@printf "$(CYAN)[4/11]$(RESET) Ensuring Ollama models...\n"
 	ollama pull $(OLLAMA_MODEL)
 	ollama pull $(OLLAMA_SEARCH_MODEL)
 	ollama pull $(OLLAMA_EMBED_MODEL)
 	@printf "\n"
-	@printf "$(CYAN)[5/10]$(RESET) Seeding regions...\n"
+	@printf "$(CYAN)[5/11]$(RESET) Seeding regions...\n"
 	bun scripts/seed-regions.ts
 	@printf "\n"
-	@printf "$(CYAN)[6/10]$(RESET) Seeding cuisines...\n"
+	@printf "$(CYAN)[6/11]$(RESET) Seeding cuisines...\n"
 	bun scripts/seed-cuisines.ts
 	@printf "\n"
-	@printf "$(CYAN)[7/10]$(RESET) Seeding tags...\n"
+	@printf "$(CYAN)[7/11]$(RESET) Seeding tags...\n"
 	bun scripts/seed-tags.ts
 	@printf "\n"
-	@printf "$(CYAN)[8/10]$(RESET) Seeding POIs...\n"
+	@printf "$(CYAN)[8/11]$(RESET) Downloading Munich OSM extract...\n"
+	$(MAKE) download-pbf
+	@printf "\n"
+	@printf "$(CYAN)[9/11]$(RESET) Seeding POIs...\n"
 	bun scripts/seed-pois.ts
 	@printf "\n"
-	@printf "$(CYAN)[9/10]$(RESET) Syncing search index...\n"
+	@printf "$(CYAN)[10/11]$(RESET) Syncing search index...\n"
 	bun scripts/sync-typesense.ts
 	@printf "\n"
-	@printf "$(CYAN)[10/10]$(RESET) Generating vector embeddings...\n"
+	@printf "$(CYAN)[11/11]$(RESET) Generating vector embeddings...\n"
 	bun scripts/generate-embeddings.ts
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
@@ -142,42 +146,45 @@ else
 setup:
 	@printf "$(GREEN)Setting up Obelisk on $(PLATFORM)...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[1/11]$(RESET) Building and starting services...\n"
+	@printf "$(CYAN)[1/12]$(RESET) Building and starting services...\n"
 	$(COMPOSE) up -d --build
 	@printf "Waiting for services...\n"
 	@sleep 8
 	@printf "\n"
-	@printf "$(CYAN)[2/11]$(RESET) Enabling extensions and running migrations...\n"
+	@printf "$(CYAN)[2/12]$(RESET) Enabling extensions and running migrations...\n"
 	$(COMPOSE) exec -T postgres psql -U obelisk -d obelisk -f /dev/stdin < drizzle/0001_enable_extensions.sql
 	$(COMPOSE) exec app bun run drizzle-kit push
 	@printf "\n"
-	@printf "$(CYAN)[3/11]$(RESET) Ensuring Ollama models...\n"
+	@printf "$(CYAN)[3/12]$(RESET) Ensuring Ollama models...\n"
 	ollama pull $(OLLAMA_MODEL)
 	ollama pull $(OLLAMA_SEARCH_MODEL)
 	ollama pull $(OLLAMA_EMBED_MODEL)
 	@printf "\n"
-	@printf "$(CYAN)[4/11]$(RESET) Seeding regions...\n"
+	@printf "$(CYAN)[4/12]$(RESET) Seeding regions...\n"
 	$(COMPOSE) exec app bun scripts/seed-regions.ts
 	@printf "\n"
-	@printf "$(CYAN)[5/11]$(RESET) Seeding cuisines...\n"
+	@printf "$(CYAN)[5/12]$(RESET) Seeding cuisines...\n"
 	$(COMPOSE) exec app bun scripts/seed-cuisines.ts
 	@printf "\n"
-	@printf "$(CYAN)[6/11]$(RESET) Seeding tags...\n"
+	@printf "$(CYAN)[6/12]$(RESET) Seeding tags...\n"
 	$(COMPOSE) exec app bun scripts/seed-tags.ts
 	@printf "\n"
-	@printf "$(CYAN)[7/11]$(RESET) Seeding POIs...\n"
+	@printf "$(CYAN)[7/12]$(RESET) Downloading Munich OSM extract...\n"
+	$(MAKE) download-pbf
+	@printf "\n"
+	@printf "$(CYAN)[8/12]$(RESET) Seeding POIs...\n"
 	$(COMPOSE) exec app bun scripts/seed-pois.ts
 	@printf "\n"
-	@printf "$(CYAN)[8/11]$(RESET) Enrich POIs...\n"
+	@printf "$(CYAN)[9/12]$(RESET) Enrich POIs...\n"
 	$(COMPOSE) exec app bun scripts/enrich-pois.ts
 	@printf "\n"
-	@printf "$(CYAN)[9/11]$(RESET) Generating stories...\n"
+	@printf "$(CYAN)[10/12]$(RESET) Generating stories...\n"
 	$(COMPOSE) exec app bun scripts/generate-stories.ts || true
 	@printf "\n"
-	@printf "$(CYAN)[10/11]$(RESET) Syncing search index...\n"
+	@printf "$(CYAN)[11/12]$(RESET) Syncing search index...\n"
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
 	@printf "\n"
-	@printf "$(CYAN)[11/11]$(RESET) Generating vector embeddings...\n"
+	@printf "$(CYAN)[12/12]$(RESET) Generating vector embeddings...\n"
 	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
@@ -224,6 +231,16 @@ destroy:
 	$(COMPOSE) down -v --remove-orphans
 	rm -rf .next node_modules
 	@printf "Done. Run 'make setup' to start fresh.\n"
+
+download-pbf:
+	@if [ -f data/Muenchen.osm.pbf ]; then \
+		printf "$(GREEN)PBF extract already exists, skipping download$(RESET)\n"; \
+	else \
+		mkdir -p data; \
+		printf "$(CYAN)Downloading Munich OSM PBF extract...$(RESET)\n"; \
+		curl -L -o data/Muenchen.osm.pbf https://download.bbbike.org/osm/bbbike/Muenchen/Muenchen.osm.pbf; \
+		printf "$(GREEN)Download complete: data/Muenchen.osm.pbf$(RESET)\n"; \
+	fi
 
 ifeq ($(ARCH),aarch64)
 

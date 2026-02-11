@@ -21,13 +21,14 @@ import {
 } from "../src/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import type { CategorySlug } from "../src/types";
+import { readPoisFromPbf } from "./lib/pbf-reader";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const MUNICH_CENTER = { lat: 48.137154, lon: 11.576124 };
-const SEED_RADIUS = parseInt(process.env.SEED_RADIUS || "10000", 10);
+const SEED_RADIUS = parseInt(process.env.SEED_RADIUS || "100", 10);
 
 const CATEGORY_DATA: Array<{
   name: string;
@@ -53,7 +54,7 @@ const CATEGORY_DATA: Array<{
 ];
 
 // ---------------------------------------------------------------------------
-// Overpass types
+// PBF element type (matches shape produced by pbf-reader)
 // ---------------------------------------------------------------------------
 
 interface OverpassElement {
@@ -65,178 +66,7 @@ interface OverpassElement {
   tags?: Record<string, string>;
 }
 
-interface OverpassResponse {
-  elements: OverpassElement[];
-}
-
-interface QueryGroup {
-  label: string;
-  filters: string[];
-}
-
-const QUERY_GROUPS: QueryGroup[] = [
-  {
-    label: "Food & Drink",
-    filters: [
-      '["amenity"="restaurant"]["name"]',
-      '["amenity"="cafe"]["name"]',
-      '["amenity"="bar"]["name"]',
-      '["amenity"="pub"]["name"]',
-      '["amenity"="fast_food"]["name"]',
-      '["amenity"="biergarten"]["name"]',
-      '["amenity"="ice_cream"]["name"]',
-      '["amenity"="food_court"]["name"]',
-    ],
-  },
-  {
-    label: "Culture & Entertainment",
-    filters: [
-      '["amenity"="theatre"]["name"]',
-      '["amenity"="cinema"]["name"]',
-      '["tourism"="museum"]["name"]',
-      '["tourism"="gallery"]["name"]',
-      '["amenity"="library"]["name"]',
-      '["amenity"="community_centre"]["name"]',
-      '["amenity"="nightclub"]["name"]',
-    ],
-  },
-  {
-    label: "Services",
-    filters: [
-      '["amenity"="hospital"]["name"]',
-      '["amenity"="pharmacy"]["name"]',
-      '["amenity"="clinic"]["name"]',
-      '["amenity"="doctors"]["name"]',
-      '["amenity"="dentist"]["name"]',
-      '["amenity"="bank"]["name"]',
-      '["amenity"="post_office"]["name"]',
-      '["amenity"="police"]["name"]',
-      '["amenity"="fire_station"]["name"]',
-    ],
-  },
-  {
-    label: "Education",
-    filters: [
-      '["amenity"="university"]["name"]',
-      '["amenity"="school"]["name"]',
-      '["amenity"="college"]["name"]',
-      '["amenity"="kindergarten"]["name"]',
-    ],
-  },
-  {
-    label: "Tourism",
-    filters: [
-      '["tourism"="hotel"]["name"]',
-      '["tourism"="hostel"]["name"]',
-      '["tourism"="guest_house"]["name"]',
-      '["tourism"="attraction"]["name"]',
-      '["tourism"="artwork"]["name"]',
-      '["tourism"="viewpoint"]["name"]',
-      '["tourism"="information"]["name"]',
-    ],
-  },
-  {
-    label: "Historic",
-    filters: ['["historic"]["name"]'],
-  },
-  {
-    label: "Leisure",
-    filters: [
-      '["leisure"="park"]["name"]',
-      '["leisure"="garden"]["name"]',
-      '["leisure"="nature_reserve"]["name"]',
-      '["leisure"="sports_centre"]["name"]',
-      '["leisure"="stadium"]["name"]',
-      '["leisure"="fitness_centre"]["name"]',
-      '["leisure"="swimming_pool"]["name"]',
-      '["leisure"="pitch"]["name"]',
-      '["leisure"="playground"]["name"]',
-    ],
-  },
-  {
-    label: "Shopping",
-    filters: ['["shop"]["name"]'],
-  },
-  {
-    label: "Healthcare",
-    filters: ['["healthcare"]["name"]'],
-  },
-  {
-    label: "Transport",
-    filters: [
-      '["amenity"="bus_station"]["name"]',
-      '["railway"="station"]["name"]',
-      '["railway"="tram_stop"]["name"]',
-    ],
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Overpass fetching (reused from existing script)
-// ---------------------------------------------------------------------------
-
-async function fetchQueryGroup(group: QueryGroup): Promise<OverpassElement[]> {
-  const around = `around:${SEED_RADIUS},${MUNICH_CENTER.lat},${MUNICH_CENTER.lon}`;
-
-  const nodeQueries = group.filters.map((f) => `node${f}(${around});`).join("\n      ");
-  const wayQueries = group.filters.map((f) => `way${f}(${around});`).join("\n      ");
-
-  const query = `
-    [out:json][timeout:120];
-    (
-      ${nodeQueries}
-      ${wayQueries}
-    );
-    out body center;
-  `;
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const response = await fetch("https://overpass-api.de/api/interpreter", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(180000),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Overpass API error: ${response.statusText}`);
-      }
-
-      const data: OverpassResponse = await response.json();
-      return data.elements;
-    } catch (error) {
-      console.log(`  Attempt ${attempt}/3 failed:`, error instanceof Error ? error.message : error);
-      if (attempt === 3) return [];
-      await new Promise((r) => setTimeout(r, 5000 * attempt));
-    }
-  }
-  return [];
-}
-
-async function fetchAllPois(): Promise<OverpassElement[]> {
-  const allElements: OverpassElement[] = [];
-  const seenIds = new Set<number>();
-
-  for (const group of QUERY_GROUPS) {
-    console.log(`Fetching ${group.label}...`);
-    const elements = await fetchQueryGroup(group);
-    let newCount = 0;
-
-    for (const el of elements) {
-      if (!seenIds.has(el.id)) {
-        seenIds.add(el.id);
-        allElements.push(el);
-        newCount++;
-      }
-    }
-
-    console.log(`  Found ${elements.length} elements (${newCount} new, ${elements.length - newCount} duplicates)`);
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-
-  return allElements;
-}
+const PBF_PATH = process.env.PBF_FILE_PATH || "data/Muenchen.osm.pbf";
 
 // ---------------------------------------------------------------------------
 // Category classification
@@ -293,11 +123,17 @@ function determineCategorySlug(osmTags: Record<string, string>): CategorySlug {
 // OSM tag parsers for related tables
 // ---------------------------------------------------------------------------
 
-function parseContactInfo(osmTags: Record<string, string>): Record<string, string | null> {
+function splitSemicolon(value: string | undefined): string[] | null {
+  if (!value) return null;
+  const parts = value.split(";").map((s) => s.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : null;
+}
+
+function parseContactInfo(osmTags: Record<string, string>) {
   return {
-    phone: osmTags.phone ?? osmTags["contact:phone"] ?? null,
-    email: osmTags.email ?? osmTags["contact:email"] ?? null,
-    website: osmTags.website ?? osmTags["contact:website"] ?? null,
+    phone: splitSemicolon(osmTags.phone ?? osmTags["contact:phone"]),
+    email: splitSemicolon(osmTags.email ?? osmTags["contact:email"]),
+    website: splitSemicolon(osmTags.website ?? osmTags["contact:website"]),
     bookingUrl: osmTags["reservation:url"] ?? null,
     instagram: osmTags["contact:instagram"] ?? null,
     facebook: osmTags["contact:facebook"] ?? null,
@@ -305,7 +141,7 @@ function parseContactInfo(osmTags: Record<string, string>): Record<string, strin
   };
 }
 
-function hasContactData(data: Record<string, string | null>): boolean {
+function hasContactData(data: ReturnType<typeof parseContactInfo>): boolean {
   return Object.values(data).some((v) => v !== null);
 }
 
@@ -606,6 +442,59 @@ function extractTagSlugs(osmTags: Record<string, string>, categorySlug: Category
 }
 
 // ---------------------------------------------------------------------------
+// Concurrency utilities
+// ---------------------------------------------------------------------------
+
+interface ProcessResult {
+  pois: number;
+  contacts: number;
+  accessibility: number;
+  profiles: number;
+  cuisines: number;
+  tags: number;
+  translations: number;
+}
+
+function emptyResult(): ProcessResult {
+  return { pois: 0, contacts: 0, accessibility: 0, profiles: 0, cuisines: 0, tags: 0, translations: 0 };
+}
+
+function sumResults(results: ProcessResult[]): ProcessResult {
+  const totals = emptyResult();
+  for (const r of results) {
+    totals.pois += r.pois;
+    totals.contacts += r.contacts;
+    totals.accessibility += r.accessibility;
+    totals.profiles += r.profiles;
+    totals.cuisines += r.cuisines;
+    totals.tags += r.tags;
+    totals.translations += r.translations;
+  }
+  return totals;
+}
+
+async function processWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let index = 0;
+
+  async function worker() {
+    while (index < items.length) {
+      const i = index++;
+      results[i] = await fn(items[i]);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+  return results;
+}
+
+// ---------------------------------------------------------------------------
 // Main seeding logic
 // ---------------------------------------------------------------------------
 
@@ -654,12 +543,12 @@ async function main() {
   // --- Fetch POIs ---
 
   console.log("");
-  console.log("Fetching Munich POIs from Overpass API...");
-  let elements = await fetchAllPois();
+  console.log("Reading Munich POIs from PBF extract...");
+  let elements = await readPoisFromPbf(PBF_PATH, MUNICH_CENTER, SEED_RADIUS);
   console.log(`Total unique elements: ${elements.length}`);
 
   if (elements.length === 0) {
-    console.log("No POIs from Overpass, using fallback data...");
+    console.log("No POIs from PBF extract, using fallback data...");
     elements = getFallbackElements();
   }
 
@@ -668,173 +557,132 @@ async function main() {
   console.log("");
   console.log("Processing POIs...");
 
-  let poiCount = 0;
-  let contactCount = 0;
-  let accessibilityCount = 0;
-  let profileCount = 0;
-  let cuisineCount = 0;
-  let tagCount = 0;
-  let translationCount = 0;
-
+  const totals = emptyResult();
   const BATCH_SIZE = 50;
+  const CONCURRENCY = 20;
+
+  async function processElement(el: OverpassElement): Promise<ProcessResult> {
+    const result = emptyResult();
+
+    const osmTags = el.tags;
+    if (!osmTags?.name) return result;
+
+    const lat = el.lat ?? el.center?.lat;
+    const lon = el.lon ?? el.center?.lon;
+    if (!lat || !lon) return result;
+
+    const categorySlug = determineCategorySlug(osmTags);
+    const categoryId = categoryMap.get(categorySlug);
+
+    const address = osmTags["addr:street"]
+      ? `${osmTags["addr:street"]} ${osmTags["addr:housenumber"] ?? ""}, Munich`.trim()
+      : null;
+
+    const wikipediaUrl = osmTags.wikipedia
+      ? `https://en.wikipedia.org/wiki/${osmTags.wikipedia.split(":").pop()}`
+      : null;
+
+    const [insertedPoi] = await db
+      .insert(pois)
+      .values({
+        osmId: el.id,
+        name: osmTags.name,
+        categoryId: categoryId ?? null,
+        regionId: munichRegionId,
+        latitude: lat,
+        longitude: lon,
+        address,
+        locale: "de-DE",
+        osmType: el.type === "way" ? "way" : el.type === "relation" ? "relation" : "node",
+        osmTags,
+        wikipediaUrl,
+        imageUrl: osmTags.image ?? null,
+      })
+      .onConflictDoUpdate({
+        target: pois.osmId,
+        set: {
+          name: sql`EXCLUDED.name`,
+          categoryId: sql`EXCLUDED.category_id`,
+          regionId: sql`EXCLUDED.region_id`,
+          latitude: sql`EXCLUDED.latitude`,
+          longitude: sql`EXCLUDED.longitude`,
+          address: sql`EXCLUDED.address`,
+          osmType: sql`EXCLUDED.osm_type`,
+          osmTags: sql`EXCLUDED.osm_tags`,
+          wikipediaUrl: sql`EXCLUDED.wikipedia_url`,
+          imageUrl: sql`EXCLUDED.image_url`,
+          updatedAt: sql`now()`,
+        },
+      })
+      .returning({ id: pois.id });
+
+    if (!insertedPoi) return result;
+    const poiId = insertedPoi.id;
+    result.pois++;
+
+    const contact = parseContactInfo(osmTags);
+    const access = parseAccessibility(osmTags);
+
+    await Promise.all([
+      hasContactData(contact)
+        ? db
+            .insert(contactInfo)
+            .values({ poiId, ...contact })
+            .onConflictDoUpdate({ target: contactInfo.poiId, set: contact })
+            .then(() => { result.contacts++; })
+        : null,
+
+      hasAccessibilityData(access)
+        ? db
+            .insert(accessibilityInfo)
+            .values({ poiId, ...access })
+            .onConflictDoUpdate({ target: accessibilityInfo.poiId, set: access })
+            .then(() => { result.accessibility++; })
+        : null,
+
+      insertProfile(poiId, categorySlug, osmTags)
+        .then(() => { result.profiles++; })
+        .catch(() => {}),
+
+      insertCuisinesForPoi(poiId, osmTags, cuisineSlugMap)
+        .then((n) => { result.cuisines += n; }),
+
+      insertTagsForPoi(poiId, osmTags, categorySlug, tagSlugMap)
+        .then((n) => { result.tags += n; }),
+
+      insertTranslationsForPoi(poiId, osmTags)
+        .then((n) => { result.translations += n; }),
+    ].filter(Boolean));
+
+    return result;
+  }
 
   for (let i = 0; i < elements.length; i += BATCH_SIZE) {
     const batch = elements.slice(i, i + BATCH_SIZE);
 
-    for (const el of batch) {
-      const osmTags = el.tags;
-      if (!osmTags?.name) continue;
+    const batchResults = await processWithConcurrency(batch, CONCURRENCY, processElement);
+    const batchTotals = sumResults(batchResults);
 
-      const lat = el.lat ?? el.center?.lat;
-      const lon = el.lon ?? el.center?.lon;
-      if (!lat || !lon) continue;
-
-      const categorySlug = determineCategorySlug(osmTags);
-      const categoryId = categoryMap.get(categorySlug);
-
-      const address = osmTags["addr:street"]
-        ? `${osmTags["addr:street"]} ${osmTags["addr:housenumber"] ?? ""}, Munich`.trim()
-        : null;
-
-      const wikipediaUrl = osmTags.wikipedia
-        ? `https://en.wikipedia.org/wiki/${osmTags.wikipedia.split(":").pop()}`
-        : null;
-
-      // --- Upsert POI ---
-      const [insertedPoi] = await db
-        .insert(pois)
-        .values({
-          osmId: el.id,
-          name: osmTags.name,
-          categoryId: categoryId ?? null,
-          regionId: munichRegionId,
-          latitude: lat,
-          longitude: lon,
-          address,
-          locale: "de-DE",
-          osmType: el.type === "way" ? "way" : el.type === "relation" ? "relation" : "node",
-          osmTags,
-          wikipediaUrl,
-          imageUrl: osmTags.image ?? null,
-        })
-        .onConflictDoUpdate({
-          target: pois.osmId,
-          set: {
-            name: sql`EXCLUDED.name`,
-            categoryId: sql`EXCLUDED.category_id`,
-            regionId: sql`EXCLUDED.region_id`,
-            latitude: sql`EXCLUDED.latitude`,
-            longitude: sql`EXCLUDED.longitude`,
-            address: sql`EXCLUDED.address`,
-            osmType: sql`EXCLUDED.osm_type`,
-            osmTags: sql`EXCLUDED.osm_tags`,
-            wikipediaUrl: sql`EXCLUDED.wikipedia_url`,
-            imageUrl: sql`EXCLUDED.image_url`,
-            updatedAt: sql`now()`,
-          },
-        })
-        .returning({ id: pois.id });
-
-      if (!insertedPoi) continue;
-      const poiId = insertedPoi.id;
-      poiCount++;
-
-      // --- Contact info ---
-      const contact = parseContactInfo(osmTags);
-      if (hasContactData(contact)) {
-        await db
-          .insert(contactInfo)
-          .values({ poiId, ...contact })
-          .onConflictDoUpdate({
-            target: contactInfo.poiId,
-            set: contact,
-          });
-        contactCount++;
-      }
-
-      // --- Accessibility info ---
-      const access = parseAccessibility(osmTags);
-      if (hasAccessibilityData(access)) {
-        await db
-          .insert(accessibilityInfo)
-          .values({ poiId, ...access })
-          .onConflictDoUpdate({
-            target: accessibilityInfo.poiId,
-            set: access,
-          });
-        accessibilityCount++;
-      }
-
-      // --- Profile row ---
-      try {
-        await insertProfile(poiId, categorySlug, osmTags);
-        profileCount++;
-      } catch {
-        // Profile insertion may fail if category doesn't have a profile table
-      }
-
-      // --- Cuisines ---
-      if (osmTags.cuisine && cuisineSlugMap.size > 0) {
-        const cuisineSlugs = parseCuisineTag(osmTags.cuisine);
-        let isFirst = true;
-        for (const slug of cuisineSlugs) {
-          const cuisineId = cuisineSlugMap.get(slug);
-          if (cuisineId) {
-            await db
-              .insert(poiCuisines)
-              .values({ poiId, cuisineId, isPrimary: isFirst })
-              .onConflictDoNothing();
-            cuisineCount++;
-            isFirst = false;
-          }
-        }
-      }
-
-      // --- Tags ---
-      if (tagSlugMap.size > 0) {
-        const tagSlugs = extractTagSlugs(osmTags, categorySlug);
-        for (const slug of tagSlugs) {
-          const tagId = tagSlugMap.get(slug);
-          if (tagId) {
-            await db.insert(poiTags).values({ poiId, tagId }).onConflictDoNothing();
-            tagCount++;
-          }
-        }
-      }
-
-      // --- Translations ---
-      const nameDE = osmTags["name:de"];
-      const nameEN = osmTags["name:en"];
-
-      if (nameDE) {
-        await db
-          .insert(poiTranslations)
-          .values({ poiId, locale: "de-DE", name: nameDE, source: "osm" })
-          .onConflictDoNothing();
-        translationCount++;
-      }
-
-      if (nameEN) {
-        await db
-          .insert(poiTranslations)
-          .values({ poiId, locale: "en-US", name: nameEN, source: "osm" })
-          .onConflictDoNothing();
-        translationCount++;
-      }
-    }
+    totals.pois += batchTotals.pois;
+    totals.contacts += batchTotals.contacts;
+    totals.accessibility += batchTotals.accessibility;
+    totals.profiles += batchTotals.profiles;
+    totals.cuisines += batchTotals.cuisines;
+    totals.tags += batchTotals.tags;
+    totals.translations += batchTotals.translations;
 
     console.log(`  Processed batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(elements.length / BATCH_SIZE)} (${Math.min(i + BATCH_SIZE, elements.length)}/${elements.length} elements)`);
   }
 
   console.log("");
   console.log("Seeding complete!");
-  console.log(`  POIs: ${poiCount}`);
-  console.log(`  Contact info: ${contactCount}`);
-  console.log(`  Accessibility info: ${accessibilityCount}`);
-  console.log(`  Profiles: ${profileCount}`);
-  console.log(`  Cuisine links: ${cuisineCount}`);
-  console.log(`  Tag links: ${tagCount}`);
-  console.log(`  Translations: ${translationCount}`);
+  console.log(`  POIs: ${totals.pois}`);
+  console.log(`  Contact info: ${totals.contacts}`);
+  console.log(`  Accessibility info: ${totals.accessibility}`);
+  console.log(`  Profiles: ${totals.profiles}`);
+  console.log(`  Cuisine links: ${totals.cuisines}`);
+  console.log(`  Tag links: ${totals.tags}`);
+  console.log(`  Translations: ${totals.translations}`);
   process.exit(0);
 }
 
@@ -940,6 +788,68 @@ async function insertProfile(
     default:
       break;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Batch insert helpers (Layer 3: multi-row inserts)
+// ---------------------------------------------------------------------------
+
+async function insertCuisinesForPoi(
+  poiId: string,
+  osmTags: Record<string, string>,
+  cuisineSlugMap: Map<string, string>,
+): Promise<number> {
+  if (!osmTags.cuisine || cuisineSlugMap.size === 0) return 0;
+
+  const cuisineSlugs = parseCuisineTag(osmTags.cuisine);
+  const cuisineValues = cuisineSlugs
+    .map((slug, i) => {
+      const cuisineId = cuisineSlugMap.get(slug);
+      return cuisineId ? { poiId, cuisineId, isPrimary: i === 0 } : null;
+    })
+    .filter((v): v is NonNullable<typeof v> => v !== null);
+
+  if (cuisineValues.length === 0) return 0;
+  await db.insert(poiCuisines).values(cuisineValues).onConflictDoNothing();
+  return cuisineValues.length;
+}
+
+async function insertTagsForPoi(
+  poiId: string,
+  osmTags: Record<string, string>,
+  categorySlug: CategorySlug,
+  tagSlugMap: Map<string, string>,
+): Promise<number> {
+  if (tagSlugMap.size === 0) return 0;
+
+  const tagSlugs = extractTagSlugs(osmTags, categorySlug);
+  const tagValues = tagSlugs
+    .map((slug) => {
+      const tagId = tagSlugMap.get(slug);
+      return tagId ? { poiId, tagId } : null;
+    })
+    .filter((v): v is NonNullable<typeof v> => v !== null);
+
+  if (tagValues.length === 0) return 0;
+  await db.insert(poiTags).values(tagValues).onConflictDoNothing();
+  return tagValues.length;
+}
+
+async function insertTranslationsForPoi(
+  poiId: string,
+  osmTags: Record<string, string>,
+): Promise<number> {
+  const translationValues: Array<{ poiId: string; locale: string; name: string; source: string }> = [];
+
+  const nameDE = osmTags["name:de"];
+  const nameEN = osmTags["name:en"];
+
+  if (nameDE) translationValues.push({ poiId, locale: "de-DE", name: nameDE, source: "osm" });
+  if (nameEN) translationValues.push({ poiId, locale: "en-US", name: nameEN, source: "osm" });
+
+  if (translationValues.length === 0) return 0;
+  await db.insert(poiTranslations).values(translationValues).onConflictDoNothing();
+  return translationValues.length;
 }
 
 // ---------------------------------------------------------------------------

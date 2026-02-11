@@ -16,6 +16,7 @@
     "framer-motion": "12.27.5",
     "mapbox-gl": "3.18.0",
     "next": "16.1.6",
+    "osm-read": "^0.7.0",
     "postgres": "3.4.8",
     "react": "19.2.3",
     "react-dom": "19.2.3",

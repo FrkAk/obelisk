@@ -45,6 +45,9 @@ drizzle/*.sql
 # database dumps
 /db/
 
+# OSM data extracts
+/data/
+
 # IDE
 .idea/
 .vscode/

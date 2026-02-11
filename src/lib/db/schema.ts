@@ -115,13 +115,13 @@ export const contactInfo = pgTable("contact_info", {
     .references(() => pois.id, { onDelete: "cascade" })
     .unique()
     .primaryKey(),
-  phone: varchar("phone", { length: 50 }),
-  email: varchar("email", { length: 255 }),
-  website: varchar("website", { length: 500 }),
-  bookingUrl: varchar("booking_url", { length: 500 }),
-  instagram: varchar("instagram", { length: 100 }),
-  facebook: varchar("facebook", { length: 100 }),
-  openingHoursRaw: varchar("opening_hours_raw", { length: 255 }),
+  phone: text("phone").array(),
+  email: text("email").array(),
+  website: text("website").array(),
+  bookingUrl: text("booking_url"),
+  instagram: text("instagram"),
+  facebook: text("facebook"),
+  openingHoursRaw: text("opening_hours_raw"),
   openingHoursDisplay: text("opening_hours_display"),
 });
 

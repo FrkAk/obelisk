@@ -161,19 +161,20 @@ async function enrichPoiMenu(poi: {
   id: string;
   name: string;
   address: string | null;
-  website: string | null;
+  website: string[] | null;
 }): Promise<{ dishesAdded: number; status: string }> {
   const { id, name, address, website } = poi;
   const city = extractCity(address);
+  const primaryWebsite = website?.[0] ?? null;
 
   let menuText = "";
   let menuSourceUrl: string | null = null;
 
-  if (website) {
+  if (primaryWebsite) {
     const menuVariants = [
-      website.replace(/\/$/, "") + "/menu",
-      website.replace(/\/$/, "") + "/speisekarte",
-      website,
+      primaryWebsite.replace(/\/$/, "") + "/menu",
+      primaryWebsite.replace(/\/$/, "") + "/speisekarte",
+      primaryWebsite,
     ];
 
     for (const url of menuVariants) {

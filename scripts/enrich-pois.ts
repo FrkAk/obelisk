@@ -173,7 +173,7 @@ async function enrichSinglePoi(
     name: string;
     address: string | null;
     categorySlug: string;
-    website: string | null;
+    website: string[] | null;
   },
 ): Promise<{ fieldsUpdated: string[]; status: string }> {
   const { id, name, address, categorySlug, website } = poi;
@@ -186,13 +186,14 @@ async function enrichSinglePoi(
 
   let allScrapedText = "";
   const sources: Array<{ url: string; title: string | null; pass: string }> = [];
+  const primaryWebsite = website?.[0] ?? null;
 
-  if (website && !(await hasRecentEnrichment(id, "web_scrape"))) {
+  if (primaryWebsite && !(await hasRecentEnrichment(id, "web_scrape"))) {
     try {
-      const content = await scrapeForEnrichment(website);
+      const content = await scrapeForEnrichment(primaryWebsite);
       if (!content.error && content.mainContent) {
         allScrapedText += `\n--- ${name} Official Website ---\n${content.mainContent}\n`;
-        sources.push({ url: website, title: content.title, pass: "website" });
+        sources.push({ url: primaryWebsite, title: content.title, pass: "website" });
       }
     } catch {
       log.warn(`Failed to scrape website for ${name}`);

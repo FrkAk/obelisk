@@ -5,15 +5,7 @@ YELLOW := \033[33m
 RED := \033[31m
 RESET := \033[0m
 
-ARCH := $(shell uname -m)
-
-ifeq ($(ARCH),aarch64)
-  COMPOSE := docker compose -f docker-compose.jetson.yml
-  PLATFORM := Jetson
-else
-  COMPOSE := docker compose
-  PLATFORM := PC
-endif
+COMPOSE := docker compose
 
 # Load .env.local if it exists
 ifneq (,$(wildcard .env.local))
@@ -31,7 +23,7 @@ export SEED_RADIUS ?= 1000
 
 help:
 	@printf "\n"
-	@printf "$(CYAN)Obelisk$(RESET) - Ambient Storytelling App ($(PLATFORM) / $(ARCH))\n"
+	@printf "$(CYAN)Obelisk$(RESET) - Ambient Storytelling App\n"
 	@printf "\n"
 	@printf "$(GREEN)Commands:$(RESET)\n"
 	@printf "  $(CYAN)setup$(RESET)      First-time setup (deps, db, model, seed)\n"
@@ -61,90 +53,8 @@ help:
 	@printf "  $(CYAN)db-restore$(RESET)  Restore database from db/dump.sql\n"
 	@printf "\n"
 
-ifeq ($(ARCH),aarch64)
-
 setup:
-	@printf "$(GREEN)Setting up Obelisk on $(PLATFORM)...$(RESET)\n"
-	@printf "\n"
-	@printf "$(CYAN)[1/11]$(RESET) Installing dependencies...\n"
-	bun install
-	@printf "\n"
-	@printf "$(CYAN)[2/11]$(RESET) Starting PostgreSQL...\n"
-	$(COMPOSE) up -d
-	@printf "Waiting for database...\n"
-	@sleep 8
-	@printf "\n"
-	@printf "$(CYAN)[3/11]$(RESET) Enabling extensions and running migrations...\n"
-	psql -U obelisk -h localhost -d obelisk -f drizzle/0001_enable_extensions.sql
-	bun run drizzle-kit push
-	@printf "\n"
-	@printf "$(CYAN)[4/11]$(RESET) Ensuring Ollama models...\n"
-	ollama pull $(OLLAMA_MODEL)
-	ollama pull $(OLLAMA_SEARCH_MODEL)
-	ollama pull $(OLLAMA_EMBED_MODEL)
-	@printf "\n"
-	@printf "$(CYAN)[5/11]$(RESET) Seeding regions...\n"
-	bun scripts/seed-regions.ts
-	@printf "\n"
-	@printf "$(CYAN)[6/11]$(RESET) Seeding cuisines...\n"
-	bun scripts/seed-cuisines.ts
-	@printf "\n"
-	@printf "$(CYAN)[7/11]$(RESET) Seeding tags...\n"
-	bun scripts/seed-tags.ts
-	@printf "\n"
-	@printf "$(CYAN)[8/11]$(RESET) Downloading Munich OSM extract...\n"
-	$(MAKE) download-pbf
-	@printf "\n"
-	@printf "$(CYAN)[9/11]$(RESET) Seeding POIs...\n"
-	bun scripts/seed-pois.ts
-	@printf "\n"
-	@printf "$(CYAN)[10/11]$(RESET) Syncing search index...\n"
-	bun scripts/sync-typesense.ts
-	@printf "\n"
-	@printf "$(CYAN)[11/11]$(RESET) Generating vector embeddings...\n"
-	bun scripts/generate-embeddings.ts
-	@printf "\n"
-	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
-
-run:
-	@printf "$(GREEN)Starting Obelisk ($(PLATFORM))...$(RESET)\n"
-	$(COMPOSE) up -d
-	@sleep 3
-	-bun run drizzle-kit push 2>/dev/null || true
-	@printf "\n"
-	@printf "$(GREEN)App starting at http://localhost:3000$(RESET)\n"
-	@printf "Press Ctrl+C to stop the app\n"
-	@printf "\n"
-	bun run dev
-
-run-local:
-	@printf "$(GREEN)Starting Obelisk for local network ($(PLATFORM))...$(RESET)\n"
-	$(COMPOSE) up -d
-	@sleep 3
-	-bun run drizzle-kit push 2>/dev/null || true
-	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
-	printf "\n"; \
-	printf "$(GREEN)App starting:$(RESET)\n"; \
-	printf "  Local:   http://localhost:3000\n"; \
-	printf "  Network: http://$$LOCAL_IP:3000\n"; \
-	printf "\n"; \
-	printf "Press Ctrl+C to stop the app\n"
-	bun run dev --hostname 0.0.0.0
-
-rebuild:
-	@printf "$(YELLOW)Rebuilding ($(PLATFORM))...$(RESET)\n"
-	$(COMPOSE) down
-	rm -rf .next node_modules
-	bun install
-	$(COMPOSE) up -d
-	@sleep 3
-	-bun run drizzle-kit push 2>/dev/null || true
-	@printf "$(GREEN)Rebuild complete!$(RESET) Run 'make run' to start\n"
-
-else
-
-setup:
-	@printf "$(GREEN)Setting up Obelisk on $(PLATFORM)...$(RESET)\n"
+	@printf "$(GREEN)Setting up Obelisk...$(RESET)\n"
 	@printf "\n"
 	@printf "$(CYAN)[1/12]$(RESET) Building and starting services...\n"
 	$(COMPOSE) up -d --build
@@ -190,7 +100,7 @@ setup:
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
 run:
-	@printf "$(GREEN)Starting Obelisk ($(PLATFORM))...$(RESET)\n"
+	@printf "$(GREEN)Starting Obelisk...$(RESET)\n"
 	@printf "\n"
 	@printf "$(GREEN)App starting at http://localhost:3000$(RESET)\n"
 	@printf "Press Ctrl+C to stop\n"
@@ -198,7 +108,7 @@ run:
 	$(COMPOSE) up
 
 run-local:
-	@printf "$(GREEN)Starting Obelisk for local network ($(PLATFORM))...$(RESET)\n"
+	@printf "$(GREEN)Starting Obelisk for local network...$(RESET)\n"
 	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
 	printf "\n"; \
 	printf "$(GREEN)App starting:$(RESET)\n"; \
@@ -208,16 +118,6 @@ run-local:
 	printf "Press Ctrl+C to stop\n"
 	docker compose -f docker-compose.yml -f docker-compose.local.yml up
 
-rebuild:
-	@printf "$(YELLOW)Rebuilding ($(PLATFORM))...$(RESET)\n"
-	$(COMPOSE) down
-	$(COMPOSE) up -d --build
-	@sleep 3
-	$(COMPOSE) exec app bun run drizzle-kit push
-	@printf "$(GREEN)Rebuild complete!$(RESET) Run 'make run' to start\n"
-
-endif
-
 stop:
 	@printf "Stopping services...\n"
 	$(COMPOSE) down
@@ -225,6 +125,14 @@ stop:
 
 logs:
 	$(COMPOSE) logs -f
+
+rebuild:
+	@printf "$(YELLOW)Rebuilding...$(RESET)\n"
+	$(COMPOSE) down
+	$(COMPOSE) up -d --build
+	@sleep 3
+	$(COMPOSE) exec app bun run drizzle-kit push
+	@printf "$(GREEN)Rebuild complete!$(RESET) Run 'make run' to start\n"
 
 destroy:
 	@printf "$(YELLOW)Destroying all Obelisk data...$(RESET)\n"
@@ -241,45 +149,6 @@ download-pbf:
 		curl -L -o data/Muenchen.osm.pbf https://download.bbbike.org/osm/bbbike/Muenchen/Muenchen.osm.pbf; \
 		printf "$(GREEN)Download complete: data/Muenchen.osm.pbf$(RESET)\n"; \
 	fi
-
-ifeq ($(ARCH),aarch64)
-
-seed-regions:
-	bun scripts/seed-regions.ts
-
-seed-cuisines:
-	bun scripts/seed-cuisines.ts
-
-seed-tags:
-	bun scripts/seed-tags.ts
-
-seed-pois:
-	bun scripts/seed-pois.ts
-
-seed-all: seed-regions seed-cuisines seed-tags seed-pois
-
-enrich-pois:
-	bun scripts/enrich-pois.ts
-
-sync-search:
-	bun scripts/sync-typesense.ts
-
-generate-embeddings:
-	bun scripts/generate-embeddings.ts
-
-db-dump:
-	@mkdir -p db
-	pg_dump -U obelisk -h localhost obelisk > db/dump.sql
-	@printf "$(GREEN)Dumped to db/dump.sql$(RESET)\n"
-
-db-restore:
-	psql -U obelisk -h localhost obelisk < db/dump.sql
-	@printf "$(GREEN)Restored from db/dump.sql$(RESET)\n"
-	@printf "$(CYAN)Syncing search index...$(RESET)\n"
-	bun scripts/sync-typesense.ts
-	@printf "$(GREEN)Search index synced$(RESET)\n"
-
-else
 
 seed-regions:
 	$(COMPOSE) exec app bun scripts/seed-regions.ts
@@ -315,7 +184,5 @@ db-restore:
 	@printf "$(CYAN)Syncing search index...$(RESET)\n"
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
 	@printf "$(GREEN)Search index synced$(RESET)\n"
-
-endif
 
 search-setup: seed-pois enrich-pois sync-search generate-embeddings

@@ -140,7 +140,6 @@ obelisk/
 │
 ├── drizzle/                          # Database migrations
 ├── docker-compose.yml                # Dev: app + postgres + ollama
-├── docker-compose.jetson.yml         # NVIDIA Jetson (aarch64)
 ├── Dockerfile
 ├── Makefile                          # CLI commands
 ├── package.json

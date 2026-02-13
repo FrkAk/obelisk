@@ -74,6 +74,67 @@ export async function generateText(
 }
 
 /**
+ * Extracts structured JSON from text using Ollama's chat API with format enforcement.
+ *
+ * Args:
+ *     systemPrompt: System message defining extraction rules.
+ *     userPrompt: User message containing the text to extract from.
+ *     model: The model to use (defaults to OLLAMA_SEARCH_MODEL).
+ *     options: Generation options (temperature, top_p, num_predict).
+ *
+ * Returns:
+ *     Parsed JSON object of type T, or null if extraction failed.
+ */
+export async function chatExtract<T>(
+  systemPrompt: string,
+  userPrompt: string,
+  model: string = SEARCH_MODEL,
+  options?: { temperature?: number; top_p?: number; num_predict?: number },
+): Promise<T | null> {
+  try {
+    const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        format: "json",
+        stream: false,
+        options: {
+          temperature: 0.1,
+          top_p: 0.7,
+          num_predict: 2048,
+          ...options,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      log.error(`Chat API error: ${response.status} ${response.statusText} - ${errorText}`);
+      return null;
+    }
+
+    const data: { message?: { content?: string }; done: boolean } = await response.json();
+    const content = data.message?.content;
+
+    if (!content) {
+      log.warn("Chat API returned empty message content");
+      return null;
+    }
+
+    return JSON.parse(content) as T;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    log.error(`chatExtract failed: ${msg}`);
+    return null;
+  }
+}
+
+/**
  * Checks if Ollama is available and the model is loaded.
  *
  * Args:

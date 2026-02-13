@@ -1,5 +1,5 @@
-import { scrapeWebsite, type WebsiteContent } from "./scraper";
-import { searxngSearch } from "./searxng";
+import { scrapeWebsite, scrapeWithOptions, type WebsiteContent } from "./scraper";
+import { searxngSearch, type SearXNGSearchOptions } from "./searxng";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("webSearch");
@@ -65,15 +65,16 @@ export function buildSearchQuery(poi: {
   const city = extractCity(address);
   const location = city || "";
 
+  const base = `${name} ${location}`.trim();
   const patterns: Record<string, string> = {
-    food: `${name} ${location} restaurant reviews menu`,
-    history: `${name} ${location} history facts significance`,
-    art: `${name} ${location} museum gallery art collection`,
-    architecture: `${name} ${location} architecture building history design`,
-    nature: `${name} ${location} park nature trails things to do`,
-    culture: `${name} ${location} cultural events performances`,
-    views: `${name} ${location} viewpoint scenic best time visit`,
-    hidden: `${name} ${location} local secret hidden gem`,
+    food: `"${base}" restaurant review`,
+    history: `"${base}" history facts significance`,
+    art: `"${base}" museum gallery art collection`,
+    architecture: `"${base}" architecture building history design`,
+    nature: `"${base}" park nature trails things to do`,
+    culture: `"${base}" cultural events performances`,
+    views: `"${base}" viewpoint scenic best time visit`,
+    hidden: `"${base}" local secret hidden gem`,
   };
 
   const normalized = category.toLowerCase();
@@ -134,50 +135,50 @@ export function buildEnrichmentQuery(
 
   const passQueries: Record<string, Record<string, string>> = {
     food: {
-      general: `${base} restaurant reviews menu`,
-      reviews: `${base} reviews atmosphere experience`,
-      menu: `${base} menu speisekarte`,
-      awards: `${base} michelin guide award`,
+      general: `"${base}" restaurant review`,
+      reviews: `"${base}" erfahrungen bewertung OR review`,
+      menu: `"${base}" speisekarte OR menu`,
+      awards: `"${base}" michelin bib gourmand OR "best restaurants Munich"`,
     },
     history: {
-      general: `${base} history wikipedia`,
-      history: `${base} historical significance key events`,
-      architecture: `${base} heritage UNESCO preservation`,
+      general: `"${base}" history wikipedia`,
+      history: `"${base}" Geschichte historische Bedeutung OR "historical significance"`,
+      architecture: `"${base}" heritage Denkmalschutz OR UNESCO preservation`,
     },
     architecture: {
-      general: `${base} architecture architect style`,
-      architecture: `${base} interior tour highlights`,
-      history: `${base} construction history wikipedia`,
+      general: `"${base}" architecture architect style Architektur`,
+      architecture: `"${base}" interior tour highlights Rundgang`,
+      history: `"${base}" construction history Baugeschichte wikipedia`,
     },
     nature: {
-      general: `${base} trails activities visitors`,
-      nature: `${base} facilities playground amenities`,
-      reviews: `${base} visitor guide tips`,
+      general: `"${base}" trails activities visitors Natur`,
+      nature: `"${base}" facilities playground amenities Ausstattung`,
+      reviews: `"${base}" visitor guide Tipps`,
     },
     art: {
-      general: `${base} exhibitions collection museum`,
-      art: `${base} notable works highlights`,
-      reviews: `${base} tickets tours visit guide`,
+      general: `"${base}" exhibitions collection Ausstellung museum`,
+      art: `"${base}" notable works Kunstwerke highlights`,
+      reviews: `"${base}" tickets tours visit guide Besuch`,
     },
     culture: {
-      general: `${base} cultural events performances program`,
-      reviews: `${base} tickets tours experience`,
-      art: `${base} notable performers history`,
+      general: `"${base}" cultural events Veranstaltungen program`,
+      reviews: `"${base}" tickets tours Erlebnis experience`,
+      art: `"${base}" notable performers Kuenstler history`,
     },
     nightlife: {
-      general: `${base} reviews nightlife bar club`,
-      nightlife: `${base} events DJ lineup music`,
-      reviews: `${base} drinks menu atmosphere`,
+      general: `"${base}" reviews nightlife bar club`,
+      nightlife: `"${base}" events DJ lineup Programm music`,
+      reviews: `"${base}" drinks atmosphere Stimmung`,
     },
     shopping: {
-      general: `${base} products reviews shop store`,
-      shopping: `${base} brands specialties`,
-      reviews: `${base} shopping experience visitor tips`,
+      general: `"${base}" products reviews shop store Angebot`,
+      shopping: `"${base}" brands specialties Sortiment`,
+      reviews: `"${base}" shopping experience visitor tips`,
     },
     views: {
-      general: `${base} viewpoint photos best time`,
-      viewpoint: `${base} panorama visible landmarks`,
-      reviews: `${base} visitor experience tips photography`,
+      general: `"${base}" viewpoint panorama photos Aussicht`,
+      viewpoint: `"${base}" panorama visible landmarks Aussichtspunkt`,
+      reviews: `"${base}" visitor experience tips photography`,
     },
   };
 
@@ -221,13 +222,18 @@ export function getEnrichmentPasses(categorySlug: string): EnrichmentPass[] {
  * Args:
  *     query: Search query string.
  *     maxResults: Maximum number of results to return.
+ *     options: Optional SearXNG search parameters (engines, language, etc).
  *
  * Returns:
  *     Array of search results with title, URL, and snippet.
  */
-export async function webSearch(query: string, maxResults: number = 5): Promise<WebSearchResult[]> {
+export async function webSearch(
+  query: string,
+  maxResults: number = 5,
+  options: SearXNGSearchOptions = {},
+): Promise<WebSearchResult[]> {
   try {
-    const results = await searxngSearch(query, maxResults);
+    const results = await searxngSearch(query, maxResults, options);
 
     return results.map((r) => ({
       title: r.title,
@@ -247,34 +253,32 @@ export async function webSearch(query: string, maxResults: number = 5): Promise<
  * Args:
  *     results: Search results to scrape.
  *     limit: Maximum number of URLs to scrape.
+ *     maxContentLength: Optional content length limit override.
  *
  * Returns:
  *     Array of scraped content from each URL.
  */
 export async function scrapeTopResults(
   results: WebSearchResult[],
-  limit: number = MAX_SCRAPE_RESULTS
+  limit: number = MAX_SCRAPE_RESULTS,
+  maxContentLength?: number,
 ): Promise<ScrapedContent[]> {
   const urlsToScrape = results.slice(0, limit);
-  const scrapedContent: ScrapedContent[] = [];
-
-  for (const result of urlsToScrape) {
-    try {
-      const content: WebsiteContent = await scrapeWebsite(result.url);
-
+  const settled = await Promise.allSettled(
+    urlsToScrape.map(async (result) => {
+      const content: WebsiteContent = maxContentLength
+        ? await scrapeWithOptions(result.url, { maxContentLength })
+        : await scrapeWebsite(result.url);
       if (!content.error && content.mainContent) {
-        scrapedContent.push({
-          url: result.url,
-          title: content.title,
-          content: content.mainContent,
-        });
+        return { url: result.url, title: content.title, content: content.mainContent } as ScrapedContent;
       }
-    } catch {
-      log.warn(`Failed to scrape ${result.url}`);
-    }
-  }
-
-  return scrapedContent;
+      return null;
+    }),
+  );
+  return settled
+    .filter((r): r is PromiseFulfilledResult<ScrapedContent | null> => r.status === "fulfilled")
+    .map((r) => r.value)
+    .filter((r): r is ScrapedContent => r !== null);
 }
 
 /**

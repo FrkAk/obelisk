@@ -22,6 +22,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import type { CategorySlug } from "../src/types";
 import { readPoisFromPbf } from "./lib/pbf-reader";
+import { processWithConcurrency } from "./lib/concurrency";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -473,26 +474,7 @@ function sumResults(results: ProcessResult[]): ProcessResult {
   return totals;
 }
 
-async function processWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let index = 0;
-
-  async function worker() {
-    while (index < items.length) {
-      const i = index++;
-      results[i] = await fn(items[i]);
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
-  return results;
-}
+// processWithConcurrency imported from ./lib/concurrency
 
 // ---------------------------------------------------------------------------
 // Main seeding logic

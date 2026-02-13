@@ -145,9 +145,8 @@ function matchesFilters(tags: Record<string, string>): boolean {
 export async function readPoisFromPbf(
   filePath: string,
   center: { lat: number; lon: number },
-  radiusKm: number,
+  radiusMeters: number,
 ): Promise<OverpassElement[]> {
-  const radiusMeters = radiusKm * 1000;
   const nodeCoords = new Map<string, { lat: number; lon: number }>();
   const matchedNodes: OverpassElement[] = [];
   const matchedWays: OverpassElement[] = [];

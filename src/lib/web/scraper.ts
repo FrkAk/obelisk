@@ -10,6 +10,9 @@ export interface ScrapeOptions {
   timeoutMs?: number;
 }
 
+const USER_AGENT =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 const FETCH_TIMEOUT_MS = 5000;
 const MAX_CONTENT_LENGTH = 500;
 const MENU_CONTENT_LENGTH = 8000;
@@ -30,7 +33,7 @@ export async function scrapeWebsite(url: string): Promise<WebsiteContent> {
     const response = await fetch(normalizedUrl, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; ObeliskBot/1.0)",
+        "User-Agent": USER_AGENT,
         "Accept": "text/html,application/xhtml+xml",
       },
     });
@@ -64,10 +67,10 @@ function normalizeUrl(url: string): string {
   return url;
 }
 
-function parseHtml(html: string): WebsiteContent {
+function parseHtml(html: string, maxLen?: number): WebsiteContent {
   const title = extractTitle(html);
   const description = extractMetaDescription(html);
-  const mainContent = extractMainContent(html);
+  const mainContent = extractMainContent(html, maxLen);
 
   return {
     title,
@@ -98,7 +101,7 @@ function extractMetaDescription(html: string): string | null {
   return ogMatch ? cleanText(ogMatch[1]) : null;
 }
 
-function extractMainContent(html: string): string | null {
+function extractMainContent(html: string, maxLen: number = MAX_CONTENT_LENGTH): string | null {
   let content = html;
   content = content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
   content = content.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
@@ -126,8 +129,8 @@ function extractMainContent(html: string): string | null {
 
   if (!text || text.length < 20) return null;
 
-  return text.length > MAX_CONTENT_LENGTH
-    ? text.slice(0, MAX_CONTENT_LENGTH) + "..."
+  return text.length > maxLen
+    ? text.slice(0, maxLen) + "..."
     : text;
 }
 
@@ -166,7 +169,7 @@ export async function scrapeWithOptions(
     const response = await fetch(normalizedUrl, {
       signal: AbortSignal.timeout(timeout),
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; ObeliskBot/1.0)",
+        "User-Agent": USER_AGENT,
         Accept: "text/html,application/xhtml+xml",
       },
     });
@@ -181,7 +184,7 @@ export async function scrapeWithOptions(
     }
 
     const html = await response.text();
-    return parseHtmlWithLimit(html, maxLen);
+    return parseHtml(html, maxLen);
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
@@ -192,48 +195,6 @@ export async function scrapeWithOptions(
       error: errorMessage,
     };
   }
-}
-
-function parseHtmlWithLimit(html: string, maxLen: number): WebsiteContent {
-  const title = extractTitle(html);
-  const description = extractMetaDescription(html);
-  const mainContent = extractMainContentWithLimit(html, maxLen);
-  return { title, description, mainContent };
-}
-
-function extractMainContentWithLimit(
-  html: string,
-  maxLen: number,
-): string | null {
-  let content = html;
-  content = content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
-  content = content.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
-  content = content.replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "");
-  content = content.replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "");
-  content = content.replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "");
-  content = content.replace(/<!--[\s\S]*?-->/g, "");
-
-  const mainMatch = content.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
-  const articleMatch = content.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-  const bodyMatch = content.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-
-  const targetContent =
-    mainMatch?.[1] || articleMatch?.[1] || bodyMatch?.[1] || content;
-
-  const text = targetContent
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#\d+;/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!text || text.length < 20) return null;
-
-  return text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
 }
 
 /**

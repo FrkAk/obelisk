@@ -14,6 +14,7 @@ import {
   enrichmentLog,
 } from "../src/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
+import { isWithinRadius } from "../src/lib/geo/distance";
 import {
   buildEnrichmentQuery,
   getEnrichmentPasses,
@@ -23,11 +24,17 @@ import {
 import { scrapeForEnrichment } from "../src/lib/web/scraper";
 import { extractProfileByCategory } from "../src/lib/enrichment/extractors";
 import { createLogger } from "../src/lib/logger";
+import { processWithConcurrency } from "./lib/concurrency";
 
 const log = createLogger("enrich-pois");
 
-const BATCH_SIZE = 5;
-const BATCH_DELAY_MS = 2000;
+const MUNICH_CENTER = { lat: 48.137154, lon: 11.576124 };
+const ENRICH_RADIUS = parseInt(process.env.ENRICH_RADIUS || process.env.SEED_RADIUS || "5000", 10);
+
+const BATCH_SIZE = parseInt(process.env.ENRICH_BATCH_SIZE || "20", 10);
+const CONCURRENCY = parseInt(process.env.ENRICH_CONCURRENCY || "3", 10);
+const INTER_PASS_DELAY_MS = 500;
+const INTER_BATCH_DELAY_MS = 2000;
 const MAX_SCRAPE_PER_PASS = 2;
 
 // ---------------------------------------------------------------------------
@@ -175,13 +182,13 @@ async function enrichSinglePoi(
     categorySlug: string;
     website: string[] | null;
   },
-): Promise<{ fieldsUpdated: string[]; status: string }> {
+): Promise<{ fieldsUpdated: string[]; status: string; confidenceScore: number | null }> {
   const { id, name, address, categorySlug, website } = poi;
   const city = extractCity(address);
   const profileTable = getProfileTable(categorySlug);
 
   if (!profileTable) {
-    return { fieldsUpdated: [], status: "skipped" };
+    return { fieldsUpdated: [], status: "skipped", confidenceScore: null };
   }
 
   let allScrapedText = "";
@@ -209,22 +216,23 @@ async function enrichSinglePoi(
 
     const query = buildEnrichmentQuery(name, city, categorySlug, pass);
     const results = await webSearch(query, 3);
+    if (results.length === 0) continue;
 
-    if (results.length > 0) {
-      const scraped = await scrapeTopResults(results, MAX_SCRAPE_PER_PASS);
-      for (const s of scraped) {
-        if (s.content) {
-          allScrapedText += `\n--- ${s.title || s.url} ---\n${s.content}\n`;
-          sources.push({ url: s.url, title: s.title, pass });
-        }
+    let passText = "";
+    const scraped = await scrapeTopResults(results, MAX_SCRAPE_PER_PASS, 4000);
+    for (const s of scraped) {
+      if (s.content) {
+        passText += `\n--- ${s.title || s.url} ---\n${s.content}\n`;
+        sources.push({ url: s.url, title: s.title, pass });
       }
     }
 
-    if (results.length > 0 && allScrapedText.length === 0) {
-      allScrapedText += results
-        .map((r) => `${r.title}: ${r.snippet}`)
-        .join("\n");
+    if (results.length > 0 && !passText) {
+      passText = results.map((r) => `${r.title}: ${r.snippet}`).join("\n");
     }
+
+    allScrapedText += passText;
+    await new Promise((r) => setTimeout(r, INTER_PASS_DELAY_MS));
   }
 
   if (!allScrapedText.trim()) {
@@ -232,13 +240,14 @@ async function enrichSinglePoi(
       reason: "no_content_scraped",
       passes,
     });
-    return { fieldsUpdated: [], status: "failed" };
+    return { fieldsUpdated: [], status: "failed", confidenceScore: null };
   }
 
   const extracted = await extractProfileByCategory(
     categorySlug,
     allScrapedText,
     name,
+    allScrapedText.length,
   );
 
   if (!extracted || Object.keys(extracted).length === 0) {
@@ -246,10 +255,13 @@ async function enrichSinglePoi(
       reason: "extraction_empty",
       textLength: allScrapedText.length,
     });
-    return { fieldsUpdated: [], status: "failed" };
+    return { fieldsUpdated: [], status: "failed", confidenceScore: null };
   }
 
   const camelCased = mapExtractedToProfileFields(extracted);
+  const confidenceScore = typeof camelCased.confidenceScore === "number"
+    ? (camelCased.confidenceScore as number)
+    : null;
 
   const signatureDishes =
     "signatureDishes" in camelCased
@@ -300,9 +312,10 @@ async function enrichSinglePoi(
   await logEnrichment(id, "llm_enrich", "success", allFieldsUpdated, {
     sources: sources.map((s) => ({ url: s.url, pass: s.pass })),
     extractedFields: Object.keys(extracted),
+    confidenceScore,
   });
 
-  return { fieldsUpdated: allFieldsUpdated, status: "success" };
+  return { fieldsUpdated: allFieldsUpdated, status: "success", confidenceScore };
 }
 
 // ---------------------------------------------------------------------------
@@ -315,19 +328,25 @@ async function main() {
   const allCategories = await db.select().from(categories);
   const categoryMap = new Map(allCategories.map((c) => [c.id, c.slug]));
 
-  const poisToEnrich = await db
+  const allPois = await db
     .select({
       id: pois.id,
       name: pois.name,
       address: pois.address,
       categoryId: pois.categoryId,
+      latitude: pois.latitude,
+      longitude: pois.longitude,
       website: contactInfo.website,
     })
     .from(pois)
     .leftJoin(contactInfo, eq(pois.id, contactInfo.poiId))
     .orderBy(pois.name);
 
-  log.info(`Found ${poisToEnrich.length} POIs to process`);
+  const poisToEnrich = allPois.filter((p) =>
+    isWithinRadius(MUNICH_CENTER.lat, MUNICH_CENTER.lon, p.latitude, p.longitude, ENRICH_RADIUS),
+  );
+
+  log.info(`Found ${allPois.length} total POIs, ${poisToEnrich.length} within enrich radius (${ENRICH_RADIUS}m)`);
 
   let enriched = 0;
   let failed = 0;
@@ -338,16 +357,15 @@ async function main() {
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
     const totalBatches = Math.ceil(poisToEnrich.length / BATCH_SIZE);
 
-    log.info(`Batch ${batchNum}/${totalBatches}`);
+    log.info(`Batch ${batchNum}/${totalBatches} (${CONCURRENCY} concurrent)`);
 
-    for (const poi of batch) {
+    const batchResults = await processWithConcurrency(batch, CONCURRENCY, async (poi) => {
       const categorySlug = poi.categoryId
         ? (categoryMap.get(poi.categoryId) ?? "hidden")
         : "hidden";
 
       if (await hasRecentEnrichment(poi.id, "llm_enrich")) {
-        skipped++;
-        continue;
+        return { status: "skipped" as const, name: poi.name, fields: 0, confidence: null as number | null };
       }
 
       try {
@@ -359,31 +377,34 @@ async function main() {
           website: poi.website,
         });
 
-        if (result.status === "success") {
-          enriched++;
-          log.success(
-            `[${enriched + failed + skipped}/${poisToEnrich.length}] ${poi.name} (+${result.fieldsUpdated.length} fields)`,
-          );
-        } else if (result.status === "skipped") {
-          skipped++;
-        } else {
-          failed++;
-          log.warn(
-            `[${enriched + failed + skipped}/${poisToEnrich.length}] ${poi.name}: no data extracted`,
-          );
-        }
+        return {
+          status: result.status as "success" | "failed" | "skipped",
+          name: poi.name,
+          fields: result.fieldsUpdated.length,
+          confidence: result.confidenceScore,
+        };
       } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        log.error(`${poi.name}: ${message}`);
+        return { status: "failed" as const, name: poi.name, fields: 0, confidence: null as number | null };
+      }
+    });
+
+    for (const r of batchResults) {
+      if (r.status === "success") {
+        enriched++;
+        const confidenceStr = r.confidence !== null ? `, confidence: ${r.confidence}%` : "";
+        log.success(`[${enriched + failed + skipped}/${poisToEnrich.length}] ${r.name} (+${r.fields} fields${confidenceStr})`);
+      } else if (r.status === "skipped") {
+        skipped++;
+      } else {
         failed++;
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
-        log.error(
-          `[${enriched + failed + skipped}/${poisToEnrich.length}] ${poi.name}: ${message}`,
-        );
+        log.warn(`[${enriched + failed + skipped}/${poisToEnrich.length}] ${r.name}: no data extracted`);
       }
     }
 
     if (i + BATCH_SIZE < poisToEnrich.length) {
-      await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
+      await new Promise((r) => setTimeout(r, INTER_BATCH_DELAY_MS));
     }
   }
 

@@ -13,8 +13,12 @@ import { scrapeMenuPage } from "../src/lib/web/scraper";
 import { extractMenuDishes } from "../src/lib/enrichment/extractors";
 import type { MenuDishExtraction } from "../src/lib/enrichment/extractors";
 import { createLogger } from "../src/lib/logger";
+import { isWithinRadius } from "../src/lib/geo/distance";
 
 const log = createLogger("enrich-menus");
+
+const MUNICH_CENTER = { lat: 48.137154, lon: 11.576124 };
+const ENRICH_RADIUS = parseInt(process.env.ENRICH_RADIUS || process.env.SEED_RADIUS || "5000", 10);
 
 const BATCH_SIZE = 3;
 const BATCH_DELAY_MS = 3000;
@@ -270,11 +274,13 @@ async function main() {
 
   const foodCategoryId = foodCategory[0].id;
 
-  const foodPois = await db
+  const allFoodPois = await db
     .select({
       id: pois.id,
       name: pois.name,
       address: pois.address,
+      latitude: pois.latitude,
+      longitude: pois.longitude,
       website: contactInfo.website,
     })
     .from(pois)
@@ -282,7 +288,11 @@ async function main() {
     .where(eq(pois.categoryId, foodCategoryId))
     .orderBy(pois.name);
 
-  log.info(`Found ${foodPois.length} food POIs to process`);
+  const foodPois = allFoodPois.filter((p) =>
+    isWithinRadius(MUNICH_CENTER.lat, MUNICH_CENTER.lon, p.latitude, p.longitude, ENRICH_RADIUS),
+  );
+
+  log.info(`Found ${allFoodPois.length} total food POIs, ${foodPois.length} within enrich radius (${ENRICH_RADIUS}m)`);
 
   let enriched = 0;
   let failed = 0;

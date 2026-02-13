@@ -33,19 +33,19 @@ import type {
 } from "../src/types";
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
-const BATCH_SIZE = 10;
+const BATCH_SIZE = parseInt(process.env.EMBED_BATCH_SIZE || "25", 10);
 
 interface EmbedResponse {
   embeddings: number[][];
 }
 
-async function embedText(text: string): Promise<number[]> {
+async function embedTexts(texts: string[]): Promise<number[][]> {
   const response = await fetch(`${OLLAMA_URL}/api/embed`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: EMBED_MODEL,
-      input: text,
+      input: texts,
     }),
   });
 
@@ -60,7 +60,7 @@ async function embedText(text: string): Promise<number[]> {
     throw new Error("Ollama returned empty embeddings");
   }
 
-  return data.embeddings[0];
+  return data.embeddings;
 }
 
 const CATEGORY_PROFILE_TABLE: Record<string, typeof foodProfiles | typeof historyProfiles | typeof architectureProfiles | typeof natureProfiles | typeof artCultureProfiles | typeof nightlifeProfiles | typeof shoppingProfiles | typeof viewpointProfiles> = {
@@ -144,6 +144,12 @@ async function loadContactInfo(poiId: string): Promise<ContactInfo | null> {
   return results[0] ?? null;
 }
 
+interface PoiContext {
+  poi: Poi;
+  text: string;
+  profile: ProfileUnion;
+}
+
 async function generateEmbeddings() {
   console.log("[embeddings] Starting embedding generation from profile data...");
 
@@ -179,7 +185,7 @@ async function generateEmbeddings() {
     .leftJoin(categories, eq(pois.categoryId, categories.id))
     .where(isNull(pois.embedding));
 
-  console.log(`[embeddings] Found ${unembeddedPois.length} POIs without embeddings`);
+  console.log(`[embeddings] Found ${unembeddedPois.length} POIs without embeddings (batch size: ${BATCH_SIZE})`);
 
   if (unembeddedPois.length === 0) {
     console.log("[embeddings] Nothing to do");
@@ -192,8 +198,11 @@ async function generateEmbeddings() {
   for (let i = 0; i < unembeddedPois.length; i += BATCH_SIZE) {
     const batch = unembeddedPois.slice(i, i + BATCH_SIZE);
 
-    for (const row of batch) {
-      try {
+    const contexts: PoiContext[] = [];
+    const failedRows: string[] = [];
+
+    const contextResults = await Promise.allSettled(
+      batch.map(async (row) => {
         const categorySlug = row.categorySlug ?? "";
         const poi: Poi = {
           id: row.id,
@@ -215,7 +224,7 @@ async function generateEmbeddings() {
           updatedAt: row.updatedAt,
         };
 
-        const [profile, poiTags, poiCuisineList, poiDishList, contact] =
+        const [profile, poiTagList, poiCuisineList, poiDishList, contact] =
           await Promise.all([
             loadProfile(poi.id, categorySlug),
             loadTags(poi.id),
@@ -227,45 +236,68 @@ async function generateEmbeddings() {
         const text = buildEmbeddingText({
           poi,
           profile: profile as ProfileUnion,
-          tags: poiTags,
+          tags: poiTagList,
           cuisines: poiCuisineList,
           dishes: poiDishList,
           contactInfo: contact,
         });
 
-        const embedding = await embedText(text);
-        const vectorStr = `[${embedding.join(",")}]`;
+        return { poi, text, profile: profile as ProfileUnion } satisfies PoiContext;
+      }),
+    );
 
-        await db.execute(
-          sql`UPDATE pois
-              SET embedding = ${vectorStr}::vector,
-                  search_vector = to_tsvector('simple', ${text}),
-                  updated_at = now()
-              WHERE id = ${poi.id}`,
-        );
-
-        const completeness = profileCompleteness(profile as ProfileUnion);
-        await db.insert(enrichmentLog).values({
-          poiId: poi.id,
-          source: "llm_embed",
-          status: "success",
-          fieldsUpdated: ["pois.embedding", "pois.search_vector"],
-          metadata: {
-            model: EMBED_MODEL,
-            textLength: text.length,
-            profileCompleteness: completeness.ratio,
-            embeddingDim: embedding.length,
-          },
-        });
-
-        processed++;
-      } catch (error) {
+    for (let j = 0; j < contextResults.length; j++) {
+      const result = contextResults[j];
+      if (result.status === "fulfilled") {
+        contexts.push(result.value);
+      } else {
         errors++;
-        console.error(
-          `[embeddings] Error for "${row.name}":`,
-          error instanceof Error ? error.message : error,
-        );
+        failedRows.push(batch[j].name);
+        console.error(`[embeddings] Context load failed for "${batch[j].name}": ${result.reason}`);
       }
+    }
+
+    if (contexts.length === 0) continue;
+
+    try {
+      const texts = contexts.map((c) => c.text);
+      const embeddings = await embedTexts(texts);
+
+      await Promise.all(
+        contexts.map(async (ctx, j) => {
+          const vectorStr = `[${embeddings[j].join(",")}]`;
+
+          await db.execute(
+            sql`UPDATE pois
+                SET embedding = ${vectorStr}::vector,
+                    search_vector = to_tsvector('simple', ${ctx.text}),
+                    updated_at = now()
+                WHERE id = ${ctx.poi.id}`,
+          );
+
+          const completeness = profileCompleteness(ctx.profile);
+          await db.insert(enrichmentLog).values({
+            poiId: ctx.poi.id,
+            source: "llm_embed",
+            status: "success",
+            fieldsUpdated: ["pois.embedding", "pois.search_vector"],
+            metadata: {
+              model: EMBED_MODEL,
+              textLength: ctx.text.length,
+              profileCompleteness: completeness.ratio,
+              embeddingDim: embeddings[j].length,
+            },
+          });
+
+          processed++;
+        }),
+      );
+    } catch (error) {
+      errors += contexts.length;
+      console.error(
+        `[embeddings] Batch embed failed:`,
+        error instanceof Error ? error.message : error,
+      );
     }
 
     console.log(

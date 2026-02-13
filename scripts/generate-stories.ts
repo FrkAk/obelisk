@@ -32,9 +32,11 @@ import type {
   Dish,
   ContactInfo as ContactInfoType,
 } from "../src/types";
+import { processWithConcurrency } from "./lib/concurrency";
 
 const STORY_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
 const BATCH_LIMIT = parseInt(process.env.STORY_BATCH_LIMIT || "20", 10);
+const CONCURRENCY = parseInt(process.env.STORY_CONCURRENCY || "3", 10);
 
 const CATEGORY_PROFILE_TABLE: Record<string, typeof foodProfiles | typeof historyProfiles | typeof architectureProfiles | typeof natureProfiles | typeof artCultureProfiles | typeof nightlifeProfiles | typeof shoppingProfiles | typeof viewpointProfiles> = {
   food: foodProfiles,
@@ -166,11 +168,13 @@ async function main() {
     process.exit(0);
   }
 
-  console.log(`[stories] Found ${poisWithoutRemarks.length} POIs without remarks`);
+  console.log(`[stories] Found ${poisWithoutRemarks.length} POIs without remarks (concurrency: ${CONCURRENCY})`);
 
   let savedCount = 0;
+  let failedCount = 0;
 
-  for (const row of poisWithoutRemarks) {
+  type PoiRow = (typeof poisWithoutRemarks)[number];
+  await processWithConcurrency<PoiRow, void>(poisWithoutRemarks, CONCURRENCY, async (row) => {
     try {
       const categorySlug = row.categorySlug ?? "hidden";
       const categoryName = row.categoryName ?? "Hidden Gems";
@@ -217,53 +221,53 @@ async function main() {
 
       const story = await generateStory(ctx, STORY_MODEL);
 
-      await db.insert(remarks).values({
-        poiId: poi.id,
-        locale: poi.locale,
-        version: 1,
-        isCurrent: true,
-        title: story.title.slice(0, 100),
-        teaser: story.teaser.slice(0, 100),
-        content: story.content,
-        localTip: story.localTip,
-        durationSeconds: story.durationSeconds,
-        modelId: story.modelId,
-        confidence: story.confidence,
-        contextSources: story.contextSources,
-      });
-
-      await db.insert(enrichmentLog).values({
-        poiId: poi.id,
-        source: "llm_story",
-        status: "success",
-        fieldsUpdated: [
-          "remarks.title",
-          "remarks.teaser",
-          "remarks.content",
-          "remarks.local_tip",
-        ],
-        metadata: {
-          model: story.modelId,
+      await Promise.all([
+        db.insert(remarks).values({
+          poiId: poi.id,
+          locale: poi.locale,
+          version: 1,
+          isCurrent: true,
+          title: story.title.slice(0, 100),
+          teaser: story.teaser.slice(0, 100),
+          content: story.content,
+          localTip: story.localTip,
+          durationSeconds: story.durationSeconds,
+          modelId: story.modelId,
           confidence: story.confidence,
           contextSources: story.contextSources,
-        },
-      });
+        }),
+        db.insert(enrichmentLog).values({
+          poiId: poi.id,
+          source: "llm_story",
+          status: "success",
+          fieldsUpdated: [
+            "remarks.title",
+            "remarks.teaser",
+            "remarks.content",
+            "remarks.local_tip",
+          ],
+          metadata: {
+            model: story.modelId,
+            confidence: story.confidence,
+            contextSources: story.contextSources,
+          },
+        }),
+      ]);
 
       savedCount++;
       console.log(
-        `[stories] [${savedCount}/${poisWithoutRemarks.length}] Saved: ${poi.name} (confidence: ${story.confidence})`,
+        `[stories] [${savedCount + failedCount}/${poisWithoutRemarks.length}] Saved: ${poi.name} (confidence: ${story.confidence})`,
       );
-
-      await new Promise((r) => setTimeout(r, 300));
     } catch (error) {
+      failedCount++;
       console.error(
         `[stories] Failed for ${row.name}:`,
         error instanceof Error ? error.message : error,
       );
     }
-  }
+  });
 
-  console.log(`[stories] Generated and saved ${savedCount} stories`);
+  console.log(`[stories] Generated and saved ${savedCount} stories (${failedCount} failed)`);
   console.log("[stories] Story generation complete!");
   process.exit(0);
 }

@@ -4,6 +4,9 @@ import {
   recordEngagement,
   getUserEngagementStats,
 } from "@/lib/db/queries/engagement";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("engagement");
 
 const engagementSchema = z.object({
   userId: z.string().uuid(),
@@ -35,7 +38,7 @@ export async function GET(request: NextRequest) {
     const stats = await getUserEngagementStats(userId);
     return NextResponse.json({ stats });
   } catch (error) {
-    console.error("Error fetching engagement stats:", error);
+    log.error("Error fetching engagement stats:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
     const engagement = await recordEngagement(parseResult.data);
     return NextResponse.json({ engagement }, { status: 201 });
   } catch (error) {
-    console.error("Error recording engagement:", error);
+    log.error("Error recording engagement:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

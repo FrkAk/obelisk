@@ -3,7 +3,7 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import Map, { type MapRef, type ViewStateChangeEvent, type MapMouseEvent } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { MUNICH_CENTER } from "@/types";
+import { MUNICH_CENTER } from "@/types/api";
 import { MapControls } from "./MapControls";
 
 interface PoiClickData {

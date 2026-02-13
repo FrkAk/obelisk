@@ -2,7 +2,7 @@
 
 import { Marker } from "react-map-gl/mapbox";
 import { motion } from "framer-motion";
-import type { GeoLocation } from "@/types";
+import type { GeoLocation } from "@/types/api";
 import { springTransitions } from "@/lib/ui/animations";
 
 interface UserLocationMarkerProps {

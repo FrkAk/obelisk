@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useGeolocation } from "./useGeolocation";
 import { haversineDistance } from "@/lib/geo/distance";
-import type { Remark, Poi, GeofenceConfig, Category } from "@/types";
-import { DEFAULT_GEOFENCE_CONFIG } from "@/types";
+import type { Remark, Poi, GeofenceConfig, Category } from "@/types/api";
+import { DEFAULT_GEOFENCE_CONFIG } from "@/types/api";
 
 type PoiWithCat = Poi & { category?: Category };
 

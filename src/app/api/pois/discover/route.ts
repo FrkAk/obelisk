@@ -6,6 +6,9 @@ import { pois, categories } from "@/lib/db/schema";
 import { z } from "zod";
 import { inArray } from "drizzle-orm";
 import type { CategorySlug } from "@/types";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("discover");
 
 const querySchema = z.object({
   lat: z.coerce.number().min(-90).max(90),
@@ -66,7 +69,7 @@ async function fetchPoisFromOverpass(
   for (let attempt = 0; attempt < OVERPASS_SERVERS.length; attempt++) {
     const server = OVERPASS_SERVERS[attempt];
     try {
-      console.log(`Trying Overpass server ${attempt + 1}/${OVERPASS_SERVERS.length}: ${server}`);
+      log.info(`Trying Overpass server ${attempt + 1}/${OVERPASS_SERVERS.length}: ${server}`);
 
       const response = await fetch(server, {
         method: "POST",
@@ -76,15 +79,15 @@ async function fetchPoisFromOverpass(
       });
 
       if (!response.ok) {
-        console.log(`Server ${server} returned ${response.status}: ${response.statusText}`);
+        log.warn(`Server ${server} returned ${response.status}: ${response.statusText}`);
         continue;
       }
 
       const data: OverpassResponse = await response.json();
-      console.log(`Found ${data.elements.length} elements from ${server}`);
+      log.success(`Found ${data.elements.length} elements from ${server}`);
       return data.elements;
     } catch (error) {
-      console.log(`Server ${server} failed:`, error instanceof Error ? error.message : error);
+      log.warn(`Server ${server} failed:`, error instanceof Error ? error.message : error);
       if (attempt === OVERPASS_SERVERS.length - 1) {
         throw new Error("All Overpass servers failed. Please try again later.");
       }
@@ -203,7 +206,7 @@ export async function POST(request: NextRequest) {
       total: insertedCount + existingOsmIds.size,
     });
   } catch (error) {
-    console.error("Error discovering POIs:", error);
+    log.error("Error discovering POIs:", error);
     return NextResponse.json(
       { error: "Failed to discover POIs", details: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }

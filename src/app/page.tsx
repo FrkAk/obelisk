@@ -11,7 +11,7 @@ import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
 import { useSearch } from "@/hooks/useSearch";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { Remark, Poi, Category } from "@/types";
+import type { Remark, Poi, Category } from "@/types/api";
 import type { SearchResult, ExternalPOI, ViewportBounds } from "@/lib/search/types";
 import { haversineDistance } from "@/lib/geo/distance";
 import { springTransitions } from "@/lib/ui/animations";

@@ -6,8 +6,8 @@ import { MapView, type MapBounds } from "./MapView";
 import { POIPin } from "./POIPin";
 import { ClusterPin } from "./ClusterPin";
 import { UserLocationMarker } from "./UserLocationMarker";
-import type { Remark, Poi, GeoLocation, CategorySlug, Category } from "@/types";
-import { CATEGORY_COLORS } from "@/types";
+import type { Remark, Poi, GeoLocation, CategorySlug, Category } from "@/types/api";
+import { CATEGORY_COLORS } from "@/types/api";
 import type { ViewportBounds } from "@/lib/search/types";
 
 type PoiWithCat = Poi & { category?: Category };

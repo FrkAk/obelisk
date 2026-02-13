@@ -5,6 +5,9 @@ import {
   savePoiForUser,
   removeSavedPoi,
 } from "@/lib/db/queries/users";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("users-saved");
 
 const saveSchema = z.object({
   userId: z.string().uuid(),
@@ -31,7 +34,7 @@ export async function GET(request: NextRequest) {
     const saved = await getUserSavedPoisList(userId);
     return NextResponse.json({ saved, total: saved.length });
   } catch (error) {
-    console.error("Error fetching saved POIs:", error);
+    log.error("Error fetching saved POIs:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -56,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ saved }, { status: 201 });
   } catch (error) {
-    console.error("Error saving POI:", error);
+    log.error("Error saving POI:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -88,7 +91,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error removing saved POI:", error);
+    log.error("Error removing saved POI:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

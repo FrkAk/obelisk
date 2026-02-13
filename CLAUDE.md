@@ -136,7 +136,9 @@ obelisk/
 │   │   └── logger.ts                 # Structured logging utility
 │   │
 │   └── types/
-│       └── index.ts                  # All types (Select/Insert for 30+ tables)
+│       ├── api.ts                    # Client-safe types (plain interfaces, no Drizzle)
+│       ├── db.ts                     # Server-only types (Drizzle Insert types)
+│       └── index.ts                  # Re-exports api.ts + db.ts
 │
 ├── scripts/
 │   ├── seed-regions.ts               # Seed regions (Germany -> Bavaria -> Munich)
@@ -507,6 +509,31 @@ Use **Google-style docstrings** for all functions, classes, and modules:
 - Strict TypeScript - no `any` types
 - Custom error types for error handling
 - Consistent naming: kebab-case for files/folders, PascalCase for components/types, camelCase for functions/variables
+
+---
+
+## Types Architecture
+
+Types are split into client-safe and server-only modules:
+
+- **`src/types/api.ts`** — Client-safe types. Plain TypeScript interfaces with NO Drizzle imports. All Select types, composite types, Zod schemas, geo types, constants. Import from `@/types/api` in components, hooks, and client code.
+- **`src/types/db.ts`** — Server-only types. Drizzle `InferInsertModel` types for DB writes. Only used in API routes, queries, and scripts.
+- **`src/types/index.ts`** — Re-exports both. Server files can import from `@/types`.
+
+No barrel exports exist in the codebase — always import directly from the source file (e.g., `@/components/ui/GlassCard`, not `@/components/ui`).
+
+---
+
+## Logging
+
+All API routes use `createLogger` from `@/lib/logger.ts` instead of raw `console.*`. Each route file creates a named logger:
+
+```typescript
+import { createLogger } from "@/lib/logger";
+const log = createLogger("route-name");
+log.info("message");
+log.error("message", error);
+```
 
 ---
 

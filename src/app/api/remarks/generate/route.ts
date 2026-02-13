@@ -8,6 +8,9 @@ import { generateStory } from "@/lib/ai/storyGenerator";
 import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { z } from "zod";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("generate");
 
 const bodySchema = z.object({
   lat: z.coerce.number().min(-90).max(90),
@@ -177,7 +180,7 @@ export async function POST(request: NextRequest) {
 
         await new Promise((r) => setTimeout(r, 300));
       } catch (error) {
-        console.error(`Failed to generate story for ${poi.name}:`, error);
+        log.error(`Failed to generate story for ${poi.name}:`, error);
       }
     }
 
@@ -186,7 +189,7 @@ export async function POST(request: NextRequest) {
       remarks: generatedRemarks,
     });
   } catch (error) {
-    console.error("Error generating remarks:", error);
+    log.error("Error generating remarks:", error);
     return NextResponse.json(
       {
         error: "Failed to generate stories",

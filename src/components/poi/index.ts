@@ -1,1 +1,0 @@
-export { POICard } from "./POICard";

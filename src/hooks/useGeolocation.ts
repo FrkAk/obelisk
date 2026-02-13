@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import type { GeoLocation } from "@/types";
-import { MUNICH_CENTER } from "@/types";
+import type { GeoLocation } from "@/types/api";
+import { MUNICH_CENTER } from "@/types/api";
 
 interface GeolocationState {
   location: GeoLocation | null;

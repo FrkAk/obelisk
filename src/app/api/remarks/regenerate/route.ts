@@ -8,6 +8,9 @@ import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { scrapeWebsite } from "@/lib/web/scraper";
 import { enrichPOIWithWebSearch } from "@/lib/web/webSearch";
 import { z } from "zod";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("regenerate");
 
 const bodySchema = z.object({
   remarkId: z.string().uuid(),
@@ -24,7 +27,7 @@ const bodySchema = z.object({
  *     The newly generated remark with version bumped.
  */
 export async function POST(request: NextRequest) {
-  console.log("[regenerate] === API CALLED ===");
+  log.info("=== API CALLED ===");
 
   try {
     const body = await request.json();
@@ -39,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     const { remarkId } = parseResult.data;
 
-    console.log(`[regenerate] Regenerating remark: ${remarkId}`);
+    log.info(`Regenerating remark: ${remarkId}`);
 
     const existingRemark = await getRemarkById(remarkId);
     if (!existingRemark) {
@@ -63,12 +66,10 @@ export async function POST(request: NextRequest) {
 
     let websiteContent = null;
     if (websiteUrl) {
-      console.log(`[regenerate] Scraping website: ${websiteUrl}`);
+      log.info(`Scraping website: ${websiteUrl}`);
       websiteContent = await scrapeWebsite(websiteUrl);
       if (websiteContent.error) {
-        console.log(
-          `[regenerate] Website scrape failed: ${websiteContent.error}`
-        );
+        log.warn(`Website scrape failed: ${websiteContent.error}`);
       }
     }
 
@@ -80,14 +81,12 @@ export async function POST(request: NextRequest) {
       address: existingRemark.poi.address,
     });
 
-    console.log(`[regenerate] Web search query: "${webSearchContext.query}"`);
-    console.log(
-      `[regenerate] Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`
+    log.info(`Web search query: "${webSearchContext.query}"`);
+    log.info(
+      `Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`
     );
 
-    console.log(
-      `[regenerate] Generating new story for: "${existingRemark.poi.name}"`
-    );
+    log.info(`Generating new story for: "${existingRemark.poi.name}"`);
 
     const storyCtx: StoryPoiContext = {
       poi: {
@@ -117,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     const story = await generateStory(storyCtx);
 
-    console.log(`[regenerate] Generated new story - Title: "${story.title}"`);
+    log.success(`Generated new story - Title: "${story.title}"`);
 
     const newRemark = await versionBumpRemark(remarkId, {
       poiId: existingRemark.poi.id,
@@ -150,7 +149,7 @@ export async function POST(request: NextRequest) {
       remark: remarkWithPoi,
     });
   } catch (error) {
-    console.error("Error regenerating story:", error);
+    log.error("Error regenerating story:", error);
     return NextResponse.json(
       {
         error: "Failed to regenerate story",

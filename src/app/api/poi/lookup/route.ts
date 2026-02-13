@@ -7,6 +7,9 @@ import { eq, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import type { ExternalPOI } from "@/lib/search/types";
 import type { CategorySlug } from "@/types";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("poi-lookup");
 import type { RemarkWithPoi } from "@/lib/db/queries/search";
 
 const bodySchema = z.object({
@@ -164,11 +167,11 @@ export async function POST(request: NextRequest) {
 
     const { name, latitude, longitude, category } = parseResult.data;
 
-    console.log(`[poi/lookup] Looking up: "${name}" at (${latitude}, ${longitude})`);
+    log.info(`Looking up: "${name}" at (${latitude}, ${longitude})`);
 
     const dbResult = await findInDatabase(name, latitude, longitude);
     if (dbResult) {
-      console.log(`[poi/lookup] Found in database: "${dbResult.poi.name}" with remark: ${dbResult.remark ? "yes" : "no"}`);
+      log.info(`Found in database: "${dbResult.poi.name}" with remark: ${dbResult.remark ? "yes" : "no"}`);
       return NextResponse.json({
         poi: dbResult.poi,
         remark: dbResult.remark,
@@ -178,7 +181,7 @@ export async function POST(request: NextRequest) {
 
     const nominatimResult = await lookupFromNominatim(name, latitude, longitude, category);
     if (nominatimResult) {
-      console.log(`[poi/lookup] Found via Nominatim: "${nominatimResult.name}" (osmId: ${nominatimResult.osmId})`);
+      log.info(`Found via Nominatim: "${nominatimResult.name}" (osmId: ${nominatimResult.osmId})`);
       return NextResponse.json({
         poi: nominatimResult,
         remark: null,
@@ -186,7 +189,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`[poi/lookup] Creating synthetic POI for: "${name}"`);
+    log.info(`Creating synthetic POI for: "${name}"`);
     const syntheticPoi = createSyntheticPoi(name, latitude, longitude, category);
     return NextResponse.json({
       poi: syntheticPoi,
@@ -194,7 +197,7 @@ export async function POST(request: NextRequest) {
       source: "synthetic",
     });
   } catch (error) {
-    console.error("Error looking up POI:", error);
+    log.error("Error looking up POI:", error);
     return NextResponse.json(
       { error: "Failed to lookup POI", details: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
@@ -374,7 +377,7 @@ async function lookupFromNominatim(
     const best = results[0];
     const extraTags = best.extratags || {};
 
-    console.log(`[poi/lookup] Nominatim extraTags for "${name}":`, JSON.stringify(extraTags));
+    log.info(`Nominatim extraTags for "${name}":`, JSON.stringify(extraTags));
 
     const category = mapOsmTypeToCategory(best.type, best.class, categoryHint, extraTags);
 
@@ -395,7 +398,7 @@ async function lookupFromNominatim(
       source: "nominatim",
     };
   } catch (error) {
-    console.error("Nominatim lookup failed:", error);
+    log.error("Nominatim lookup failed:", error);
     return null;
   }
 }

@@ -3,7 +3,7 @@ services:
     build:
       context: .
       target: dev
-    user: "1001:1001"
+    user: "1000:1000"
     network_mode: "host"
     volumes:
       - .:/app

@@ -6,6 +6,9 @@ import {
   createUser,
   updateUser,
 } from "@/lib/db/queries/users";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("users");
 
 const createUserSchema = z.object({
   email: z.string().email(),
@@ -44,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ user });
   } catch (error) {
-    console.error("Error fetching user:", error);
+    log.error("Error fetching user:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
     const user = await createUser(parseResult.data);
     return NextResponse.json({ user }, { status: 201 });
   } catch (error) {
-    console.error("Error creating user:", error);
+    log.error("Error creating user:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -105,7 +108,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ user });
   } catch (error) {
-    console.error("Error updating user:", error);
+    log.error("Error updating user:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

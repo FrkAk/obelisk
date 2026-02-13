@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import { springTransitions } from "@/lib/ui/animations";
-import { GlassButton } from "@/components/ui";
+import { GlassButton } from "@/components/ui/GlassButton";
 import type { SearchStage } from "@/hooks/useSearch";
 
 const STAGE_MESSAGES: Record<SearchStage, string> = {

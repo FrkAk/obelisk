@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { fetchPOIDetails } from "@/lib/search/overpass";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("poi-detail");
 
 const paramsSchema = z.object({
   osmId: z.coerce.number().int().positive(),
@@ -58,7 +61,7 @@ export async function GET(
       ...details,
     });
   } catch (error) {
-    console.error("Error fetching POI details:", error);
+    log.error("Error fetching POI details:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

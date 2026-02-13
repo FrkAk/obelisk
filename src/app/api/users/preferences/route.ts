@@ -4,6 +4,9 @@ import {
   getUserPreferences,
   updatePreferences,
 } from "@/lib/db/queries/users";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("users-prefs");
 
 const updatePrefsSchema = z.object({
   userId: z.string().uuid(),
@@ -34,7 +37,7 @@ export async function GET(request: NextRequest) {
     const prefs = await getUserPreferences(userId);
     return NextResponse.json({ preferences: prefs ?? null });
   } catch (error) {
-    console.error("Error fetching preferences:", error);
+    log.error("Error fetching preferences:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -59,7 +62,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ preferences: updated });
   } catch (error) {
-    console.error("Error updating preferences:", error);
+    log.error("Error updating preferences:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

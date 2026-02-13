@@ -9,6 +9,7 @@ RUN bun install --frozen-lockfile
 FROM base AS dev
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN mkdir -p .next && chown 1000:1000 .next
 EXPOSE 3000
 CMD ["bun", "run", "dev"]
 
@@ -23,4 +24,4 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 EXPOSE 3000
-CMD ["bun", "run", "server.js"]
+CMD ["bun", "server.js"]

@@ -1,8 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { Remark, Poi, CategorySlug, Category } from "@/types";
-import { CATEGORY_COLORS } from "@/types";
+import type { Remark, Poi, CategorySlug, Category } from "@/types/api";
+import { CATEGORY_COLORS } from "@/types/api";
 import { springTransitions, notificationVariants } from "@/lib/ui/animations";
 
 interface StoryNotificationProps {

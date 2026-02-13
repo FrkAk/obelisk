@@ -5,6 +5,9 @@ import {
   getBusinessAccount,
   getBusinessByUserId,
 } from "@/lib/db/queries/business";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("business");
 
 const createBusinessSchema = z.object({
   userId: z.string().uuid(),
@@ -42,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ account });
   } catch (error) {
-    console.error("Error fetching business account:", error);
+    log.error("Error fetching business account:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ account }, { status: 201 });
   } catch (error) {
-    console.error("Error creating business account:", error);
+    log.error("Error creating business account:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

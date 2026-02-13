@@ -6,6 +6,9 @@ import {
   getCampaignsByBusiness,
   getCampaignStats,
 } from "@/lib/db/queries/business";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("campaigns");
 
 const createCampaignSchema = z.object({
   businessId: z.string().uuid(),
@@ -55,7 +58,7 @@ export async function GET(request: NextRequest) {
       { status: 400 },
     );
   } catch (error) {
-    console.error("Error fetching campaigns:", error);
+    log.error("Error fetching campaigns:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -84,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ campaign }, { status: 201 });
   } catch (error) {
-    console.error("Error creating campaign:", error);
+    log.error("Error creating campaign:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

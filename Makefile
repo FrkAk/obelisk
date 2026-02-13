@@ -19,7 +19,7 @@ export OLLAMA_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_SEARCH_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_EMBED_MODEL ?= embeddinggemma:300m
 export TYPESENSE_API_KEY ?= obelisk_typesense_dev
-export SEED_RADIUS ?= 1000
+export SEED_RADIUS ?= 100
 
 help:
 	@printf "\n"

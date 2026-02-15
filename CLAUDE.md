@@ -286,21 +286,25 @@ Always use `bun` / `bunx` instead of `npm` / `pnpm` / `npx`.
 PostgreSQL 15 with pgvector and pg_trgm extensions. 30+ tables organized into 9 groups:
 
 ### 1. Core Tables
+
 - **regions** — Geographic hierarchy (country -> state -> city)
 - **categories** — POI categories (15 total: history, food, art, nature, architecture, hidden, views, culture, shopping, nightlife, sports, health, transport, education, services)
 - **pois** — Points of interest (10,000+ seeded in Munich) with embeddings (vector(768)), search vectors (tsvector), trigram index on name
 
 ### 2. Shared POI Tables (1:1 with pois)
+
 - **contact_info** — Phone[], email[], website[], social media, opening hours
 - **price_info** — Price level, admission fees, currency
 - **accessibility_info** — Wheelchair, elevator, stroller, dog, parking
 - **photos** — POI photos with captions and sort order
 
 ### 3. Tag System
+
 - **tags** — Reusable tags with groups (e.g., "pet-friendly" in group "amenities")
 - **poi_tags** — Many-to-many POI <-> tag
 
 ### 4. Category Profile Tables (1:1 with pois)
+
 - **food_profiles** — 60+ fields: establishment type, dietary options, ambiance, reservations, payment, kids, wifi, etc.
 - **history_profiles** — Year built/destroyed, key figures, events, heritage level, preservation status
 - **architecture_profiles** — Style, architect, materials, denomination, tower access
@@ -311,20 +315,24 @@ PostgreSQL 15 with pgvector and pg_trgm extensions. 30+ tables organized into 9 
 - **viewpoint_profiles** — Elevation, view direction, visible landmarks, best time
 
 ### 5. Food Domain Tables
+
 - **cuisines** — Hierarchical cuisine taxonomy (~100 entries with parent relationships)
 - **poi_cuisines** — Many-to-many POI <-> cuisine (with isPrimary flag)
 - **dishes** — Global dish catalog with dietary flags and allergens
 - **poi_dishes** — POI-specific dish offerings with prices and availability
 
 ### 6. Content Tables
+
 - **poi_translations** — Localized POI names, descriptions, review summaries
 - **remarks** — AI-generated stories with versioning (locale, version, isCurrent)
 - **events** — POI events with dates, types, and ticket info
 
 ### 7. Enrichment Pipeline
+
 - **enrichment_log** — Tracks enrichment source, status, and fields updated per POI
 
 ### 8. User Tables
+
 - **users** — User accounts with email, locale, role
 - **auth_providers** — OAuth/password auth (multi-provider per user)
 - **user_preferences** — Favorite categories, dietary needs, exploration style
@@ -333,6 +341,7 @@ PostgreSQL 15 with pgvector and pg_trgm extensions. 30+ tables organized into 9 
 - **user_sessions** — App sessions with device and location data
 
 ### 9. Monetization Tables
+
 - **business_accounts** — Business profiles linked to POIs
 - **ad_campaigns** — Campaigns with targeting, budgets, and scheduling
 - **ad_impressions** — Impression/click/conversion tracking
@@ -346,6 +355,7 @@ PostgreSQL 15 with pgvector and pg_trgm extensions. 30+ tables organized into 9 
 Three-engine hybrid search with Reciprocal Rank Fusion.
 
 **Query flow:** User query -> `queryParser` (230+ fast-path entries or LLM fallback) -> parallel search:
+
 1. **Typesense** — Keyword search with typo tolerance, geo-filtering, facets
 2. **pgvector** — Semantic similarity via cosine distance on embeddings
 3. **Obelisk DB** — Story text search on remarks table
@@ -374,6 +384,7 @@ The search system requires four sequential stages (run via `make search-setup`):
 The enrichment pipeline (`enrich-pois.ts`) depends on SearXNG for web searches, but SearXNG gets rate-limited by upstream engines, making large enrichment runs unreliable.
 
 **How it breaks:**
+
 - SearXNG queries upstream engines (Google, DuckDuckGo, Mojeek, etc.) on every search
 - After ~50-100 queries in quick succession, upstream engines start returning 429s or empty results
 - SearXNG has no built-in retry/backoff for upstream failures — it just returns 0 results
@@ -381,6 +392,7 @@ The enrichment pipeline (`enrich-pois.ts`) depends on SearXNG for web searches, 
 - A single enrichment pass for a food POI makes 3 SearXNG calls (general + reviews + awards), so 20 POIs = 60+ searches
 
 **Current state of mitigations in code:**
+
 - `INTER_BATCH_DELAY_MS = 2000` — 2s pause between batches of 20 POIs
 - `INTER_PASS_DELAY_MS = 500` — 500ms pause between enrichment passes per POI
 - `ENRICH_CONCURRENCY = 3` — max 3 POIs enriched in parallel
@@ -390,6 +402,7 @@ The enrichment pipeline (`enrich-pois.ts`) depends on SearXNG for web searches, 
 - Pipeline is resumable (checks `enrichment_log` before re-enriching a POI)
 
 **Why current mitigations are insufficient:**
+
 - 2s batch delay is too short — Google throttles after ~30s of sustained queries
 - No exponential backoff in `searxng.ts` — retries once after 1s then gives up
 - No detection of rate limiting vs genuine "no results" — both return empty arrays
@@ -397,6 +410,7 @@ The enrichment pipeline (`enrich-pois.ts`) depends on SearXNG for web searches, 
 - Re-runs help (resumable), but require manual intervention and waiting 10-30min between attempts
 
 **What needs to be solved:**
+
 - Add exponential backoff with jitter in `src/lib/web/searxng.ts` when receiving 429 or 0 results
 - Detect rate limiting (0 results from an engine that normally returns results) vs genuine empty results
 - Increase delays: `INTER_BATCH_DELAY_MS` to 5000-10000, `INTER_PASS_DELAY_MS` to 2000
@@ -406,6 +420,7 @@ The enrichment pipeline (`enrich-pois.ts`) depends on SearXNG for web searches, 
 - Consider a local search cache or pre-fetching strategy to reduce total queries needed
 
 **Key files:**
+
 - `src/lib/web/searxng.ts` — SearXNG client (retry logic lives here)
 - `scripts/enrich-pois.ts` — Pipeline orchestration (batching, concurrency, delays)
 - `searxng/settings.yml` — Engine configuration
@@ -429,12 +444,14 @@ Ollama runs on the host (not in Docker) at `http://localhost:11434`.
 ## Design System (Glassmorphism — iOS 26 Inspired)
 
 **Light Mode:**
+
 - Glass: `rgba(255,255,255,0.72)` + `backdrop-blur(20px)`
 - Border: `1px solid rgba(255,255,255,0.5)`
 - Radius: `16-24px`
 - Shadow: `0 8px 32px rgba(0,0,0,0.08)`
 
 **Dark Mode:**
+
 - Glass: `rgba(30,30,30,0.75)` + `backdrop-blur(20px)`
 - Background: `#000000` (true black for OLED)
 

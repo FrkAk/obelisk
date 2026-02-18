@@ -3,121 +3,19 @@ import {
   pois,
   categories,
   remarks,
-  tags,
-  poiTags,
-  cuisines,
-  poiCuisines,
-  poiDishes,
-  dishes,
-  contactInfo,
-  foodProfiles,
-  historyProfiles,
-  architectureProfiles,
-  natureProfiles,
-  artCultureProfiles,
-  nightlifeProfiles,
-  shoppingProfiles,
-  viewpointProfiles,
   enrichmentLog,
 } from "../src/lib/db/schema";
-import { eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { checkOllamaHealth } from "../src/lib/ai/ollama";
 import { generateStory } from "../src/lib/ai/storyGenerator";
 import type { StoryPoiContext, ProfileUnion } from "../src/lib/ai/storyGenerator";
-import type {
-  Poi,
-  Tag,
-  Cuisine,
-  PoiDish,
-  Dish,
-  ContactInfo as ContactInfoType,
-} from "../src/types";
+import type { Poi } from "../src/types";
 import { processWithConcurrency } from "./lib/concurrency";
+import { loadProfile, loadTags, loadCuisines, loadDishes, loadContactInfo } from "../src/lib/db/queries/pois";
 
 const STORY_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
 const BATCH_LIMIT = parseInt(process.env.STORY_BATCH_LIMIT || "20", 10);
 const CONCURRENCY = parseInt(process.env.STORY_CONCURRENCY || "3", 10);
-
-const CATEGORY_PROFILE_TABLE: Record<string, typeof foodProfiles | typeof historyProfiles | typeof architectureProfiles | typeof natureProfiles | typeof artCultureProfiles | typeof nightlifeProfiles | typeof shoppingProfiles | typeof viewpointProfiles> = {
-  food: foodProfiles,
-  history: historyProfiles,
-  architecture: architectureProfiles,
-  nature: natureProfiles,
-  art: artCultureProfiles,
-  culture: artCultureProfiles,
-  views: viewpointProfiles,
-  nightlife: nightlifeProfiles,
-  shopping: shoppingProfiles,
-};
-
-async function loadProfile(poiId: string, categorySlug: string) {
-  const table = CATEGORY_PROFILE_TABLE[categorySlug];
-  if (!table) return null;
-
-  const results = await db
-    .select()
-    .from(table)
-    .where(eq(table.poiId, poiId))
-    .limit(1);
-
-  return results[0] ?? null;
-}
-
-async function loadTags(poiId: string): Promise<Tag[]> {
-  const results = await db
-    .select({
-      id: tags.id,
-      name: tags.name,
-      slug: tags.slug,
-      group: tags.group,
-      displayOrder: tags.displayOrder,
-    })
-    .from(poiTags)
-    .innerJoin(tags, eq(poiTags.tagId, tags.id))
-    .where(eq(poiTags.poiId, poiId));
-
-  return results;
-}
-
-async function loadCuisines(poiId: string): Promise<Cuisine[]> {
-  const results = await db
-    .select({
-      id: cuisines.id,
-      slug: cuisines.slug,
-      name: cuisines.name,
-      region: cuisines.region,
-      parentSlug: cuisines.parentSlug,
-      icon: cuisines.icon,
-    })
-    .from(poiCuisines)
-    .innerJoin(cuisines, eq(poiCuisines.cuisineId, cuisines.id))
-    .where(eq(poiCuisines.poiId, poiId));
-
-  return results;
-}
-
-async function loadDishes(poiId: string): Promise<Array<PoiDish & { dish: Dish }>> {
-  const results = await db
-    .select()
-    .from(poiDishes)
-    .innerJoin(dishes, eq(poiDishes.dishId, dishes.id))
-    .where(eq(poiDishes.poiId, poiId));
-
-  return results.map((r) => ({
-    ...r.poi_dishes,
-    dish: r.dishes,
-  }));
-}
-
-async function loadContactInfo(poiId: string): Promise<ContactInfoType | null> {
-  const results = await db
-    .select()
-    .from(contactInfo)
-    .where(eq(contactInfo.poiId, poiId))
-    .limit(1);
-
-  return results[0] ?? null;
-}
 
 async function main() {
   console.log("[stories] Checking Ollama availability...");
@@ -160,7 +58,16 @@ async function main() {
       remarks,
       sql`${remarks.poiId} = ${pois.id} AND ${remarks.isCurrent} = true`,
     )
-    .where(isNull(remarks.id))
+    .where(
+      and(
+        isNull(remarks.id),
+        sql`${pois.id} IN (
+          SELECT ${enrichmentLog.poiId} FROM ${enrichmentLog}
+          WHERE ${enrichmentLog.source} = 'enrich'
+            AND ${enrichmentLog.status} IN ('success', 'success_fb')
+        )`
+      )
+    )
     .limit(BATCH_LIMIT);
 
   if (poisWithoutRemarks.length === 0) {

@@ -6,6 +6,10 @@ import {
   priceInfo,
   tags,
   poiTags,
+  cuisines,
+  poiCuisines,
+  dishes,
+  poiDishes,
   foodProfiles,
   historyProfiles,
   architectureProfiles,
@@ -16,7 +20,14 @@ import {
   viewpointProfiles,
 } from "../schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
-import type { CategorySlug } from "@/types";
+import type {
+  CategorySlug,
+  Tag,
+  Cuisine,
+  PoiDish,
+  Dish,
+  ContactInfo as ContactInfoType,
+} from "@/types";
 
 /**
  * Fetches POIs within a bounding box around a center point, with category data.
@@ -355,4 +366,113 @@ async function fetchProfileByCategory(
     default:
       return null;
   }
+}
+
+/**
+ * Loads the category-specific profile for a POI.
+ *
+ * Args:
+ *     poiId: The POI's UUID.
+ *     categorySlug: The category slug to determine which profile table to query.
+ *
+ * Returns:
+ *     The profile record, or null if none exists.
+ */
+export async function loadProfile(
+  poiId: string,
+  categorySlug: string
+): Promise<Record<string, unknown> | null> {
+  return fetchProfileByCategory(poiId, categorySlug as CategorySlug);
+}
+
+/**
+ * Loads all tags associated with a POI.
+ *
+ * Args:
+ *     poiId: The POI's UUID.
+ *
+ * Returns:
+ *     Array of tags, or empty array if none.
+ */
+export async function loadTags(poiId: string): Promise<Tag[]> {
+  return db
+    .select({
+      id: tags.id,
+      name: tags.name,
+      slug: tags.slug,
+      group: tags.group,
+      displayOrder: tags.displayOrder,
+    })
+    .from(poiTags)
+    .innerJoin(tags, eq(poiTags.tagId, tags.id))
+    .where(eq(poiTags.poiId, poiId));
+}
+
+/**
+ * Loads all cuisines associated with a POI.
+ *
+ * Args:
+ *     poiId: The POI's UUID.
+ *
+ * Returns:
+ *     Array of cuisines, or empty array if none.
+ */
+export async function loadCuisines(poiId: string): Promise<Cuisine[]> {
+  return db
+    .select({
+      id: cuisines.id,
+      slug: cuisines.slug,
+      name: cuisines.name,
+      region: cuisines.region,
+      parentSlug: cuisines.parentSlug,
+      icon: cuisines.icon,
+    })
+    .from(poiCuisines)
+    .innerJoin(cuisines, eq(poiCuisines.cuisineId, cuisines.id))
+    .where(eq(poiCuisines.poiId, poiId));
+}
+
+/**
+ * Loads all dishes offered at a POI with their dish details.
+ *
+ * Args:
+ *     poiId: The POI's UUID.
+ *
+ * Returns:
+ *     Array of POI dishes with nested dish data, or empty array if none.
+ */
+export async function loadDishes(
+  poiId: string
+): Promise<Array<PoiDish & { dish: Dish }>> {
+  const results = await db
+    .select()
+    .from(poiDishes)
+    .innerJoin(dishes, eq(poiDishes.dishId, dishes.id))
+    .where(eq(poiDishes.poiId, poiId));
+
+  return results.map((r) => ({
+    ...r.poi_dishes,
+    dish: r.dishes,
+  }));
+}
+
+/**
+ * Loads the contact info for a POI.
+ *
+ * Args:
+ *     poiId: The POI's UUID.
+ *
+ * Returns:
+ *     The contact info record, or null if none exists.
+ */
+export async function loadContactInfo(
+  poiId: string
+): Promise<ContactInfoType | null> {
+  const results = await db
+    .select()
+    .from(contactInfo)
+    .where(eq(contactInfo.poiId, poiId))
+    .limit(1);
+
+  return results[0] ?? null;
 }

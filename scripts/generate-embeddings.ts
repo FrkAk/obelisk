@@ -22,8 +22,7 @@ import {
   remarks,
 } from "../src/lib/db/schema";
 import { and, eq, isNull, sql, or } from "drizzle-orm";
-import { EMBED_MODEL, checkOllamaHealth, translateText } from "../src/lib/ai/ollama";
-import { getLanguageName } from "../src/lib/ai/localization";
+import { EMBED_MODEL, checkOllamaHealth } from "../src/lib/ai/ollama";
 import { buildEmbeddingText, profileCompleteness } from "../src/lib/ai/embeddingBuilder";
 import type { ProfileUnion } from "../src/lib/ai/embeddingBuilder";
 import type {
@@ -34,7 +33,6 @@ import type {
   Dish,
   ContactInfo,
 } from "../src/types";
-import { fetchWikipediaSummary } from "../src/lib/web/wikipedia";
 import { createLogger } from "../src/lib/logger";
 
 const log = createLogger("embeddings");
@@ -245,12 +243,18 @@ const POI_SELECT_FIELDS = {
  *     Array of POI rows with category slug.
  */
 async function fetchTargetPois(stale: boolean) {
+  const enrichedFilter = sql`${pois.id} IN (
+    SELECT ${enrichmentLog.poiId} FROM ${enrichmentLog}
+    WHERE ${enrichmentLog.source} = 'enrich'
+      AND ${enrichmentLog.status} IN ('success', 'success_fb')
+  )`;
+
   if (!stale) {
     return db
       .select(POI_SELECT_FIELDS)
       .from(pois)
       .leftJoin(categories, eq(pois.categoryId, categories.id))
-      .where(isNull(pois.embedding));
+      .where(and(isNull(pois.embedding), enrichedFilter));
   }
 
   const staleSubquery = db
@@ -266,9 +270,12 @@ async function fetchTargetPois(stale: boolean) {
     .from(pois)
     .leftJoin(categories, eq(pois.categoryId, categories.id))
     .where(
-      or(
-        isNull(pois.embedding),
-        sql`${pois.id} IN (${staleSubquery})`,
+      and(
+        enrichedFilter,
+        or(
+          isNull(pois.embedding),
+          sql`${pois.id} IN (${staleSubquery})`,
+        ),
       ),
     );
 }
@@ -282,6 +289,20 @@ async function generateEmbeddings() {
     log.error(`Ollama not available or model ${EMBED_MODEL} not loaded.`);
     log.info(`Run: ollama pull ${EMBED_MODEL}`);
     process.exit(1);
+  }
+
+  const cleaned = await db.execute<{ id: string }>(sql`
+    UPDATE pois
+    SET embedding = NULL, search_vector = NULL, updated_at = now()
+    WHERE embedding IS NOT NULL
+      AND id NOT IN (
+        SELECT poi_id FROM enrichment_log
+        WHERE source = 'enrich' AND status IN ('success', 'success_fb')
+      )
+    RETURNING id
+  `);
+  if (cleaned.length > 0) {
+    log.info(`Cleaned ${cleaned.length} low-quality embeddings from unenriched POIs`);
   }
 
   const targetPois = await fetchTargetPois(STALE_MODE);
@@ -335,20 +356,6 @@ async function generateEmbeddings() {
             loadCurrentRemark(poi.id),
           ]);
 
-        let wikipediaContent: string | undefined;
-        if (poi.wikipediaUrl) {
-          const summary = await fetchWikipediaSummary(poi.wikipediaUrl);
-          if (summary?.extract) {
-            const wikiLang = poi.wikipediaUrl.match(/\/\/([a-z]{2,3})\.wikipedia/)?.[1] ?? "en";
-            if (wikiLang !== "en") {
-              wikipediaContent = await translateText(summary.extract, getLanguageName(wikiLang))
-                .catch(() => summary.extract);
-            } else {
-              wikipediaContent = summary.extract;
-            }
-          }
-        }
-
         const text = buildEmbeddingText({
           poi,
           profile: profile as ProfileUnion,
@@ -359,7 +366,6 @@ async function generateEmbeddings() {
           description: translation?.description ?? undefined,
           reviewSummary: translation?.reviewSummary ?? undefined,
           remarkContent: remarkContent ?? undefined,
-          wikipediaContent,
         });
 
         return { poi, text, profile: profile as ProfileUnion } satisfies PoiContext;

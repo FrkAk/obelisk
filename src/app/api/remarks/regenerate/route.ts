@@ -3,8 +3,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRemarkById, versionBumpRemark } from "@/lib/db/queries/remarks";
 import { generateStory } from "@/lib/ai/storyGenerator";
-import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
+import type { StoryPoiContext, ProfileUnion } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
+import { loadProfile, loadTags, loadCuisines, loadDishes, loadContactInfo } from "@/lib/db/queries/pois";
 import { scrapeWebsite } from "@/lib/web/scraper";
 import { enrichPOIWithWebSearch, translateKeywords, FALLBACK_KEYWORDS } from "@/lib/web/webSearch";
 import { fetchWikipediaSummary } from "@/lib/web/wikipedia";
@@ -109,6 +110,15 @@ export async function POST(request: NextRequest) {
 
     log.info(`Generating new story for: "${existingRemark.poi.name}" (wikipedia: ${wikipediaSummary ? "yes" : "no"})`);
 
+    const [profile, poiTagList, cuisineList, dishList, contact] =
+      await Promise.all([
+        loadProfile(existingRemark.poi.id, categorySlug),
+        loadTags(existingRemark.poi.id),
+        loadCuisines(existingRemark.poi.id),
+        loadDishes(existingRemark.poi.id),
+        loadContactInfo(existingRemark.poi.id),
+      ]);
+
     const storyCtx: StoryPoiContext = {
       poi: {
         id: existingRemark.poi.id,
@@ -131,8 +141,11 @@ export async function POST(request: NextRequest) {
       },
       categorySlug,
       categoryName,
-      profile: null,
-      tags: [],
+      profile: profile as ProfileUnion,
+      tags: poiTagList,
+      cuisines: cuisineList,
+      dishes: dishList,
+      contactInfo: contact,
     };
 
     const story = await generateStory(storyCtx);

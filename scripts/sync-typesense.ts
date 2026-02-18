@@ -16,8 +16,9 @@ import {
   tags,
   poiDishes,
   dishes,
+  enrichmentLog,
 } from "../src/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { initCollection, upsertDocuments } from "../src/lib/search/typesense";
 import type { TypesensePoiDocument } from "../src/lib/search/typesense";
 import { createLogger } from "../src/lib/logger";
@@ -466,8 +467,8 @@ async function loadSignatureDishMap(): Promise<Map<string, string[]>> {
 async function syncTypesense() {
   log.info("Starting sync...");
 
-  await initCollection();
-  log.info("Collection initialized");
+  await initCollection(true);
+  log.info("Collection initialized (force recreated)");
 
   const allPois = await db
     .select({
@@ -481,7 +482,12 @@ async function syncTypesense() {
       categorySlug: categories.slug,
     })
     .from(pois)
-    .leftJoin(categories, eq(pois.categoryId, categories.id));
+    .leftJoin(categories, eq(pois.categoryId, categories.id))
+    .where(sql`${pois.id} IN (
+      SELECT ${enrichmentLog.poiId} FROM ${enrichmentLog}
+      WHERE ${enrichmentLog.source} = 'enrich'
+        AND ${enrichmentLog.status} IN ('success', 'success_fb')
+    )`);
 
   log.info(`Found ${allPois.length} POIs in database`);
 

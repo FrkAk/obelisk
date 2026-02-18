@@ -5,8 +5,9 @@ import { db } from "@/lib/db/client";
 import { pois, remarks, categories } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { generateStory } from "@/lib/ai/storyGenerator";
-import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
+import type { StoryPoiContext, ProfileUnion } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
+import { loadProfile, loadTags, loadCuisines, loadDishes, loadContactInfo } from "@/lib/db/queries/pois";
 import { scrapeWebsite } from "@/lib/web/scraper";
 import { enrichPOIWithWebSearch, translateKeywords, FALLBACK_KEYWORDS } from "@/lib/web/webSearch";
 import { fetchWikipediaSummary } from "@/lib/web/wikipedia";
@@ -348,6 +349,15 @@ async function generateAndSaveRemark(
     `Generating story for: "${poi.name}" with category: "${categoryName}" (wikipedia: ${wikipediaSummary ? "yes" : "no"})`
   );
 
+  const [profile, poiTagList, cuisineList, dishList, contact] =
+    await Promise.all([
+      loadProfile(poi.id, categorySlug),
+      loadTags(poi.id),
+      loadCuisines(poi.id),
+      loadDishes(poi.id),
+      loadContactInfo(poi.id),
+    ]);
+
   const storyCtx: StoryPoiContext = {
     poi: {
       id: poi.id,
@@ -370,8 +380,11 @@ async function generateAndSaveRemark(
     },
     categorySlug,
     categoryName,
-    profile: null,
-    tags: [],
+    profile: profile as ProfileUnion,
+    tags: poiTagList,
+    cuisines: cuisineList,
+    dishes: dishList,
+    contactInfo: contact,
   };
 
   const story = await generateStory(storyCtx);

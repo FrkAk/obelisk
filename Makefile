@@ -1,4 +1,4 @@
-.PHONY: help setup run run-local stop logs rebuild destroy download-pbf seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup finish-setup run run-local stop logs rebuild destroy download-pbf seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -27,7 +27,8 @@ help:
 	@printf "$(CYAN)Obelisk$(RESET) - Ambient Storytelling App\n"
 	@printf "\n"
 	@printf "$(GREEN)Commands:$(RESET)\n"
-	@printf "  $(CYAN)setup$(RESET)      First-time setup (deps, db, model, seed)\n"
+	@printf "  $(CYAN)setup$(RESET)          First-time setup (deps, db, model, seed)\n"
+	@printf "  $(CYAN)finish-setup$(RESET)   Continue setup after enrich (stories + search + embeddings)\n"
 	@printf "  $(CYAN)run$(RESET)        Start on localhost:3000\n"
 	@printf "  $(CYAN)run-local$(RESET)  Start exposed to local network (same WiFi)\n"
 	@printf "  $(CYAN)stop$(RESET)       Stop services (keeps data)\n"
@@ -186,5 +187,19 @@ db-restore:
 	@printf "$(CYAN)Syncing search index...$(RESET)\n"
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
 	@printf "$(GREEN)Search index synced$(RESET)\n"
+
+finish-setup:
+	@printf "$(GREEN)Finishing setup (stories + search + embeddings)...$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)[10/12]$(RESET) Generating stories...\n"
+	$(COMPOSE) exec app bun scripts/generate-stories.ts || true
+	@printf "\n"
+	@printf "$(CYAN)[11/12]$(RESET) Syncing search index...\n"
+	$(COMPOSE) exec app bun scripts/sync-typesense.ts
+	@printf "\n"
+	@printf "$(CYAN)[12/12]$(RESET) Generating vector embeddings...\n"
+	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
+	@printf "\n"
+	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
 search-setup: seed-pois enrich-pois sync-search generate-embeddings

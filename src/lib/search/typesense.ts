@@ -96,10 +96,13 @@ interface TypesenseSearchFilters {
 /**
  * Initializes the Typesense POI collection, recreating it if the schema has changed.
  *
+ * Args:
+ *     force: If true, drop and recreate the collection regardless of schema changes.
+ *
  * Returns:
  *     The collection info object from Typesense.
  */
-export async function initCollection(): Promise<unknown> {
+export async function initCollection(force = false): Promise<unknown> {
   try {
     const existing = await client.collections(COLLECTION_NAME).retrieve();
     const existingFieldNames = new Set(
@@ -111,8 +114,8 @@ export async function initCollection(): Promise<unknown> {
       schemaFieldNames.size !== existingFieldNames.size ||
       [...schemaFieldNames].some((name) => !existingFieldNames.has(name));
 
-    if (hasSchemaChange) {
-      log.warn("Schema changed, recreating collection");
+    if (hasSchemaChange || force) {
+      log.warn(force ? "Force recreating collection" : "Schema changed, recreating collection");
       await client.collections(COLLECTION_NAME).delete();
       return client.collections().create(poiSchema);
     }

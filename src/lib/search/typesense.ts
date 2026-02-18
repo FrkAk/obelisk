@@ -38,6 +38,15 @@ interface TypesensePoiDocument {
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
   address?: string;
+  dietVegetarian?: string;
+  dietVegan?: string;
+  dietHalal?: string;
+  michelinStars?: number;
+  establishmentType?: string;
+  profileSummary?: string;
+  tags?: string[];
+  signatureDishes?: string[];
+  ambiance?: string;
 }
 
 const poiSchema = {
@@ -58,6 +67,15 @@ const poiSchema = {
     { name: "hasOutdoorSeating", type: "bool" as const, optional: true as const },
     { name: "hasWifi", type: "bool" as const, optional: true as const },
     { name: "address", type: "string" as const, optional: true as const },
+    { name: "dietVegetarian", type: "string" as const, facet: true as const, optional: true as const },
+    { name: "dietVegan", type: "string" as const, facet: true as const, optional: true as const },
+    { name: "dietHalal", type: "string" as const, facet: true as const, optional: true as const },
+    { name: "michelinStars", type: "int32" as const, facet: true as const, optional: true as const },
+    { name: "establishmentType", type: "string" as const, facet: true as const, optional: true as const },
+    { name: "profileSummary", type: "string" as const, optional: true as const },
+    { name: "tags", type: "string[]" as const, optional: true as const },
+    { name: "signatureDishes", type: "string[]" as const, optional: true as const },
+    { name: "ambiance", type: "string" as const, optional: true as const },
   ],
   default_sorting_field: "" as const,
   token_separators: ["-", "/"],
@@ -69,6 +87,10 @@ interface TypesenseSearchFilters {
   hasStory?: boolean;
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
+  dietVegetarian?: string;
+  dietVegan?: string;
+  dietHalal?: string;
+  establishmentType?: string;
 }
 
 /**
@@ -146,11 +168,23 @@ export async function searchPOIs(
   if (filters?.hasWifi) {
     filterParts.push(`hasWifi:=true`);
   }
+  if (filters?.dietVegetarian) {
+    filterParts.push(`dietVegetarian:=${filters.dietVegetarian}`);
+  }
+  if (filters?.dietVegan) {
+    filterParts.push(`dietVegan:=${filters.dietVegan}`);
+  }
+  if (filters?.dietHalal) {
+    filterParts.push(`dietHalal:=${filters.dietHalal}`);
+  }
+  if (filters?.establishmentType) {
+    filterParts.push(`establishmentType:=${filters.establishmentType}`);
+  }
 
   const searchParameters = {
     q: query,
-    query_by: "name,description,reviewSummary,cuisine,amenityType",
-    query_by_weights: "5,3,2,2,1",
+    query_by: "name,profileSummary,description,reviewSummary,tags,cuisine,amenityType",
+    query_by_weights: "5,4,3,2,2,2,1",
     filter_by: filterParts.length > 0 ? filterParts.join(" && ") : undefined,
     sort_by: location
       ? `location(${location.latitude},${location.longitude}):asc`

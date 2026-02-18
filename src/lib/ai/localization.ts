@@ -1,3 +1,40 @@
+const LANG_CODE_TO_NAME: Record<string, string> = {
+  en: "English",
+  de: "German",
+  fr: "French",
+  es: "Spanish",
+  it: "Italian",
+  nl: "Dutch",
+  pt: "Portuguese",
+  tr: "Turkish",
+  el: "Greek",
+  ja: "Japanese",
+  pl: "Polish",
+  cs: "Czech",
+  hu: "Hungarian",
+  sv: "Swedish",
+  da: "Danish",
+  fi: "Finnish",
+  no: "Norwegian",
+  ru: "Russian",
+  ko: "Korean",
+  zh: "Chinese",
+  ar: "Arabic",
+};
+
+/**
+ * Maps a language code to its human-readable name.
+ *
+ * Args:
+ *     code: ISO 639-1 language code (e.g., "de", "fr").
+ *
+ * Returns:
+ *     Language name (e.g., "German"), or "English" if code is unknown.
+ */
+export function getLanguageName(code: string): string {
+  return LANG_CODE_TO_NAME[code] ?? "English";
+}
+
 export interface LocaleInfo {
   language: string;
   country: string;

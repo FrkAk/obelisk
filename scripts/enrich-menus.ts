@@ -14,6 +14,7 @@ import { extractMenuDishes } from "../src/lib/enrichment/extractors";
 import type { MenuDishExtraction } from "../src/lib/enrichment/extractors";
 import { createLogger } from "../src/lib/logger";
 import { isWithinRadius } from "../src/lib/geo/distance";
+import { extractCity } from "../src/lib/geo/address";
 
 const log = createLogger("enrich-menus");
 
@@ -22,20 +23,6 @@ const ENRICH_RADIUS = parseInt(process.env.ENRICH_RADIUS || process.env.SEED_RAD
 
 const BATCH_SIZE = 3;
 const BATCH_DELAY_MS = 3000;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function extractCity(address?: string | null): string {
-  if (!address) return "Munich";
-  const parts = address.split(",").map((p) => p.trim());
-  if (parts.length >= 2) {
-    const cityPart = parts[parts.length - 2];
-    return cityPart.replace(/^\d{4,5}\s*/, "").trim() || "Munich";
-  }
-  return "Munich";
-}
 
 function slugify(name: string): string {
   return name
@@ -82,10 +69,6 @@ async function logMenuEnrichment(
     metadata,
   });
 }
-
-// ---------------------------------------------------------------------------
-// Dish upsert
-// ---------------------------------------------------------------------------
 
 async function findOrCreateDish(
   extracted: MenuDishExtraction,
@@ -157,10 +140,6 @@ async function upsertPoiDish(
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Enrich a single food POI's menu
-// ---------------------------------------------------------------------------
-
 async function enrichPoiMenu(poi: {
   id: string;
   name: string;
@@ -168,7 +147,7 @@ async function enrichPoiMenu(poi: {
   website: string[] | null;
 }): Promise<{ dishesAdded: number; status: string }> {
   const { id, name, address, website } = poi;
-  const city = extractCity(address);
+  const city = extractCity(address, "Munich");
   const primaryWebsite = website?.[0] ?? null;
 
   let menuText = "";
@@ -193,9 +172,9 @@ async function enrichPoiMenu(poi: {
 
   if (!menuText) {
     const searchQuery = `${name} ${city} menu speisekarte`;
-    const results = await webSearch(searchQuery, 3);
+    const searchResponse = await webSearch(searchQuery, 3);
 
-    for (const result of results) {
+    for (const result of searchResponse.results) {
       const content = await scrapeMenuPage(result.url);
       if (
         !content.error &&
@@ -253,10 +232,6 @@ async function enrichPoiMenu(poi: {
 
   return { dishesAdded, status: "success" };
 }
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
 
 async function main() {
   log.info("Starting menu enrichment pipeline...");

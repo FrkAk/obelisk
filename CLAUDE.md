@@ -366,65 +366,146 @@ Results are fused via RRF scoring, geo-penalized by distance, boosted for POIs w
 
 ---
 
+## `make setup` — Full Bootstrap (12 steps)
+
+| Step | Command | What it does |
+|------|---------|-------------|
+| 1/12 | `docker compose up -d --build` | Build + start postgres, typesense, searxng, app containers |
+| 2/12 | `drizzle-kit push` | Enable pgvector + pg_trgm extensions, apply schema migrations |
+| 3/12 | `ollama pull` x4 | Pull gemma3:4b-it-qat, embeddinggemma:300m, translategemma:4b |
+| 4/12 | `seed-regions.ts` | Seed regions: Germany → Bavaria → Munich |
+| 5/12 | `seed-cuisines.ts` | Seed ~100 cuisine taxonomy entries |
+| 6/12 | `seed-tags.ts` | Seed tags across all groups |
+| 7/12 | `download-pbf` | Download Munich OSM PBF extract (~100MB from bbbike.org) |
+| 8/12 | `seed-pois.ts` | Parse OSM PBF, upsert POIs within `SEED_RADIUS` of Munich center |
+| 9/12 | `enrich-pois.ts` | **Slowest step** — web search + scrape + translate + LLM extract |
+| 10/12 | `generate-stories.ts` | Batch LLM story generation (non-blocking, `\|\| true`) |
+| 11/12 | `sync-typesense.ts` | Sync PostgreSQL → Typesense search index |
+| 12/12 | `generate-embeddings.ts` | Generate 768-dim vectors via embeddinggemma into pgvector |
+
+`SEED_RADIUS` defaults to `100` (meters) in the Makefile for quick first-time setup. Increase for production runs.
+
+---
+
 ## Data Pipeline
 
-The search system requires four sequential stages (run via `make search-setup`):
+Four sequential stages (run via `make search-setup`):
 
 1. **Seed POIs** (`seed-pois.ts`) — Extract from local OSM PBF, 10 query groups, `SEED_RADIUS` from Munich center, batch upsert with dedup
-2. **Enrich POIs** (`enrich-pois.ts`) — Web search via SearXNG + scrape + LLM extraction into category profiles. Resumable (checks enrichment_log). Runs multi-pass per category.
-3. **Sync Typesense** (`sync-typesense.ts`) — Full PostgreSQL -> Typesense sync with weighted fields
+2. **Enrich POIs** (`enrich-pois.ts`) — Two-phase per batch to minimize Ollama model swaps. Resumable (checks `enrichment_log`). See Enrichment Pipeline below.
+3. **Sync Typesense** (`sync-typesense.ts`) — Full PostgreSQL → Typesense sync with weighted fields
 4. **Generate Embeddings** (`generate-embeddings.ts`) — 768-dim vectors via embeddinggemma:300m into pgvector. Resumable.
 
 ---
 
-## Known Issues
+## Enrichment Pipeline (`scripts/enrich-pois.ts`)
 
-### P0: SearXNG Rate Limiting — Blocks Enrichment Pipeline
+### Overview
 
-The enrichment pipeline (`enrich-pois.ts`) depends on SearXNG for web searches, but SearXNG gets rate-limited by upstream engines, making large enrichment runs unreliable.
+Enriches POIs with web-sourced data and LLM-extracted structured profiles. Processes POIs in batches of `BATCH_SIZE` (default 20). Each batch runs in **two phases** to minimize GPU model swapping.
 
-**How it breaks:**
+### Two-Phase Batch Architecture
 
-- SearXNG queries upstream engines (Google, DuckDuckGo, Mojeek, etc.) on every search
-- After ~50-100 queries in quick succession, upstream engines start returning 429s or empty results
-- SearXNG has no built-in retry/backoff for upstream failures — it just returns 0 results
-- The enrichment script sees 0 results and logs the POI as "failed" (no data extracted)
-- A single enrichment pass for a food POI makes 3 SearXNG calls (general + reviews + awards), so 20 POIs = 60+ searches
+The pipeline uses two Ollama models: **translategemma:4b** (translation) and **gemma3:4b-it-qat** (extraction). Loading a model into GPU takes 3-10s. By grouping all work by model, we swap only once per batch instead of twice per POI.
 
-**Current state of mitigations in code:**
+**Phase 1 — `gatherEnrichmentData()` (translategemma stays loaded):**
 
-- `INTER_BATCH_DELAY_MS = 2000` — 2s pause between batches of 20 POIs
-- `INTER_PASS_DELAY_MS = 500` — 500ms pause between enrichment passes per POI
-- `ENRICH_CONCURRENCY = 3` — max 3 POIs enriched in parallel
-- `MAX_SCRAPE_PER_PASS = 2` — scrape at most 2 URLs per search pass
-- 7 SearXNG engines enabled to distribute load across providers
-- SearXNG's built-in rate limiter is **disabled** (`limiter: false` in `searxng/settings.yml`)
-- Pipeline is resumable (checks `enrichment_log` before re-enriching a POI)
+For each POI in the batch, sequentially:
+1. **Wikipedia fetch** (HTTP) — If POI has `wikipediaUrl`, fetch summary via Wikipedia API
+2. **Website scrape** (HTTP) — If POI has website in `contact_info`, scrape main content
+3. **Translate keywords** (translategemma) — English `FALLBACK_KEYWORDS` for category → native language
+4. **Web search** (SearXNG HTTP) — Query: `"POI_NAME City" translated_keywords`
+5. **Scrape top results** (HTTP) — Scrape up to 2 URLs from search results
+6. **Translate content** (translategemma) — Translate all scraped text to English
 
-**Why current mitigations are insufficient:**
+**Phase 2 — `extractAndSaveProfile()` (gemma3 stays loaded):**
 
-- 2s batch delay is too short — Google throttles after ~30s of sustained queries
-- No exponential backoff in `searxng.ts` — retries once after 1s then gives up
-- No detection of rate limiting vs genuine "no results" — both return empty arrays
-- Concurrency of 3 means 3 POIs x 2-3 passes = 6-9 near-simultaneous SearXNG calls
-- Re-runs help (resumable), but require manual intervention and waiting 10-30min between attempts
+For each POI in the batch, sequentially:
+7. **LLM extraction** (gemma3) — Category-specific structured extraction via `chatExtract()` with JSON format
+8. **DB writes** — Upsert into category profile table (null-only update), null out embedding for re-generation, log to `enrichment_log`
 
-**What needs to be solved:**
+**Model swap count:** 1 per batch (translategemma → gemma3), not 2 per POI.
 
-- Add exponential backoff with jitter in `src/lib/web/searxng.ts` when receiving 429 or 0 results
-- Detect rate limiting (0 results from an engine that normally returns results) vs genuine empty results
-- Increase delays: `INTER_BATCH_DELAY_MS` to 5000-10000, `INTER_PASS_DELAY_MS` to 2000
-- Reduce `ENRICH_CONCURRENCY` to 1 for large runs (>50 POIs)
-- Consider enabling SearXNG's built-in rate limiter (`limiter: true`) with appropriate per-engine limits
-- Consider caching SearXNG results to avoid re-querying on pipeline re-runs
-- Consider a local search cache or pre-fetching strategy to reduce total queries needed
+### Search Keywords
 
-**Key files:**
+Keywords are **predefined in English** per category (`FALLBACK_KEYWORDS` in `webSearch.ts`), then translated to the POI's native language via translategemma. This replaced LLM-generated keywords which were unreliable (wrong cities, repeated POI names, truncated words).
 
-- `src/lib/web/searxng.ts` — SearXNG client (retry logic lives here)
-- `scripts/enrich-pois.ts` — Pipeline orchestration (batching, concurrency, delays)
-- `searxng/settings.yml` — Engine configuration
-- `searxng/limiter.toml` — Rate limiter config (currently a no-op)
+```
+food → "tradition cuisine local" → (de) "Tradition Küche lokal"
+history → "heritage significance events" → (de) "Erbe Bedeutung Ereignisse"
+```
+
+### Translation
+
+Uses **translategemma:4b** with the correct prompt format (full system prompt with source/target language names and codes, two blank lines before text). Handles bidirectional translation: native → English (scraped content) and English → native (keywords). Long texts (>2500 chars) split at `\n---` section delimiters.
+
+### Resumability
+
+- Checks `enrichment_log` table before each POI — skips if enriched in last 24 hours
+- Safe to re-run: `make enrich-pois` picks up where it left off
+- Failed POIs logged as `rate_limited`, `no_results`, or `extract_empty` — re-eligible after 24h
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `scripts/enrich-pois.ts` | Pipeline orchestration (batching, two-phase, throttle) |
+| `src/lib/web/webSearch.ts` | `translateKeywords()`, `FALLBACK_KEYWORDS`, `enrichPOIWithWebSearch()` |
+| `src/lib/web/searxng.ts` | SearXNG client with retry, backoff, caching, rate limit detection |
+| `src/lib/web/ollamaSearch.ts` | Ollama cloud web search API fallback (requires `OLLAMA_API_KEY`) |
+| `src/lib/ai/ollama.ts` | `translateText()`, `generateText()`, `chatExtract()` |
+| `src/lib/enrichment/extractors.ts` | Category-specific LLM extraction prompts |
+| `searxng/settings.yml` | SearXNG engine configuration |
+
+---
+
+## Rate Limiting & Search Reliability
+
+### Web Search Fallback Chain
+
+```
+SearXNG (self-hosted, free) → Ollama cloud search (external, needs OLLAMA_API_KEY) → empty results
+```
+
+### SearXNG Rate Limit Handling (`src/lib/web/searxng.ts`)
+
+**Detection** — `detectRateLimit()` triggers on:
+- HTTP 429 from SearXNG
+- 4+ unresponsive engines (out of 4 total)
+
+**Retry** — Exponential backoff with jitter:
+- Up to 4 retries, base delay 1500ms × 2^attempt × random(0.5–1.5)
+- Capped at 12s max delay
+- Non-retryable errors (non-network, non-429) break immediately
+
+**Caching** — In-memory cache with 1-hour TTL. Same query returns cached result.
+
+**Engine selection** — Only 4 engines that tolerate automated queries:
+- `wikipedia`, `wikidata` — free APIs, generous limits
+- `mojeek` — independent search engine
+- `mwmbl` — community search engine
+- Removed: `yep` (UTF-8 crashes), DuckDuckGo/Brave/Google (aggressive rate limiting)
+
+### Enrichment Script Throttle (`scripts/enrich-pois.ts`)
+
+**Adaptive throttle** — `ThrottleController` class:
+- Starts at `INTER_BATCH_DELAY_MS` (default 8s) between batches
+- On rate limit: doubles delay (up to 60s cap)
+- On success: reduces delay by 25% (down to baseline)
+- After 3 consecutive rate limits: 2-minute cooldown pause
+
+### Ollama Cloud Fallback (`src/lib/web/ollamaSearch.ts`)
+
+- Calls `https://ollama.com/api/web_search` (real web search, not LLM-generated)
+- Requires `OLLAMA_API_KEY` environment variable
+- Free tier has undocumented "generous" limits; paid plans ($20/mo Pro, $100/mo Max) have higher limits
+- Rate limits not publicly documented — need empirical testing
+
+### Remaining Risks
+
+- SearXNG returns 0 results with HTTP 200 when soft-rate-limited — indistinguishable from genuine "no results"
+- SearXNG's built-in rate limiter disabled (`limiter: false`) — could be enabled per-engine
+- No cross-process result caching — re-runs query the same URLs if cache expired
 
 ---
 
@@ -509,6 +590,10 @@ Use **Google-style docstrings** for all functions, classes, and modules:
 - **NO inline comments** unless explaining a genuinely complex algorithm
 - Code must be self-documenting through clear naming
 - If you need a comment to explain what code does, refactor the code instead
+
+### Breaking Changes Policy
+
+This project is in **active development** (pre-production). Breaking changes to interfaces, return types, function signatures, and APIs are encouraged when they improve the codebase. Do NOT add backward-compatibility shims, wrapper functions, re-exports, or deprecation layers. Just change the code and update all callers. Every file is fair game.
 
 ### Design Principles
 

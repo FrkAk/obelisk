@@ -8,7 +8,8 @@ import { generateStory } from "@/lib/ai/storyGenerator";
 import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { scrapeWebsite } from "@/lib/web/scraper";
-import { enrichPOIWithWebSearch } from "@/lib/web/webSearch";
+import { enrichPOIWithWebSearch, translateKeywords, FALLBACK_KEYWORDS } from "@/lib/web/webSearch";
+import { fetchWikipediaSummary } from "@/lib/web/wikipedia";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
 import type { CategorySlug } from "@/types";
@@ -193,6 +194,7 @@ async function findPoiByOsmId(osmId: number) {
       latitude: pois.latitude,
       longitude: pois.longitude,
       address: pois.address,
+      locale: pois.locale,
       wikipediaUrl: pois.wikipediaUrl,
       imageUrl: pois.imageUrl,
       osmTags: pois.osmTags,
@@ -270,6 +272,7 @@ async function generateAndSaveRemark(
     id: string;
     name: string;
     address: string | null;
+    locale: string;
     wikipediaUrl: string | null;
     osmTags: Record<string, string> | null;
     latitude: number;
@@ -293,6 +296,16 @@ async function generateAndSaveRemark(
     );
   }
 
+  let wikipediaSummary = null;
+  if (poi.wikipediaUrl) {
+    wikipediaSummary = await fetchWikipediaSummary(poi.wikipediaUrl);
+    if (wikipediaSummary) {
+      log.success(`Wikipedia: "${wikipediaSummary.title}" — ${wikipediaSummary.description}`);
+    } else {
+      log.warn(`Wikipedia fetch failed for: ${poi.wikipediaUrl}`);
+    }
+  }
+
   let websiteContent = null;
   if (websiteUrl) {
     log.info(`Scraping website: ${websiteUrl}`);
@@ -309,20 +322,30 @@ async function generateAndSaveRemark(
   }
 
   const categoryName = poi.categoryName || "Hidden Gems";
+  const categorySlug = poi.categorySlug ?? "hidden";
+  const poiLang = poi.locale?.split("-")[0] ?? "en";
 
-  const webSearchContext = await enrichPOIWithWebSearch({
-    name: poi.name,
-    category: categoryName,
-    address: poi.address,
-  });
+  const englishKeywords = FALLBACK_KEYWORDS[categorySlug] ?? "interesting facts information";
+  const translatedKeywords = poiLang !== "en"
+    ? await translateKeywords(englishKeywords, poiLang)
+    : englishKeywords;
 
-  log.info(`Web search query: "${webSearchContext.query}"`);
+  const webSearchContext = await enrichPOIWithWebSearch(
+    { name: poi.name, category: categoryName, address: poi.address },
+    true,
+    { language: poiLang, keywords: translatedKeywords },
+  );
+
+  log.info(`Web search query: "${webSearchContext.query}" (source: ${webSearchContext.meta.source})`);
   log.info(
     `Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`
   );
+  if (webSearchContext.meta.rateLimited) {
+    log.warn("Search was rate limited");
+  }
 
   log.info(
-    `Generating story for: "${poi.name}" with category: "${categoryName}"`
+    `Generating story for: "${poi.name}" with category: "${categoryName}" (wikipedia: ${wikipediaSummary ? "yes" : "no"})`
   );
 
   const storyCtx: StoryPoiContext = {
@@ -335,7 +358,7 @@ async function generateAndSaveRemark(
       latitude: poi.latitude,
       longitude: poi.longitude,
       address: poi.address,
-      locale: "de-DE",
+      locale: poi.locale,
       osmType: null,
       osmTags: poi.osmTags,
       wikipediaUrl: poi.wikipediaUrl,
@@ -345,7 +368,7 @@ async function generateAndSaveRemark(
       createdAt: poi.createdAt,
       updatedAt: null,
     },
-    categorySlug: poi.categorySlug ?? "hidden",
+    categorySlug,
     categoryName,
     profile: null,
     tags: [],
@@ -392,6 +415,7 @@ async function generateAndSaveRemark(
       latitude: poi.latitude,
       longitude: poi.longitude,
       address: poi.address,
+      locale: poi.locale,
       wikipediaUrl: poi.wikipediaUrl,
       imageUrl: poi.imageUrl,
       osmTags: poi.osmTags,

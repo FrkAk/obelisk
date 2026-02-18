@@ -18,9 +18,12 @@ import {
   shoppingProfiles,
   viewpointProfiles,
   enrichmentLog,
+  poiTranslations,
+  remarks,
 } from "../src/lib/db/schema";
-import { eq, isNull, sql } from "drizzle-orm";
-import { EMBED_MODEL, checkOllamaHealth } from "../src/lib/ai/ollama";
+import { and, eq, isNull, sql, or } from "drizzle-orm";
+import { EMBED_MODEL, checkOllamaHealth, translateText } from "../src/lib/ai/ollama";
+import { getLanguageName } from "../src/lib/ai/localization";
 import { buildEmbeddingText, profileCompleteness } from "../src/lib/ai/embeddingBuilder";
 import type { ProfileUnion } from "../src/lib/ai/embeddingBuilder";
 import type {
@@ -31,14 +34,28 @@ import type {
   Dish,
   ContactInfo,
 } from "../src/types";
+import { fetchWikipediaSummary } from "../src/lib/web/wikipedia";
+import { createLogger } from "../src/lib/logger";
+
+const log = createLogger("embeddings");
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
 const BATCH_SIZE = parseInt(process.env.EMBED_BATCH_SIZE || "25", 10);
+const STALE_MODE = process.argv.includes("--stale");
 
 interface EmbedResponse {
   embeddings: number[][];
 }
 
+/**
+ * Sends texts to Ollama for embedding generation.
+ *
+ * Args:
+ *     texts: Array of text strings to embed.
+ *
+ * Returns:
+ *     Array of embedding vectors.
+ */
 async function embedTexts(texts: string[]): Promise<number[][]> {
   const response = await fetch(`${OLLAMA_URL}/api/embed`, {
     method: "POST",
@@ -144,62 +161,145 @@ async function loadContactInfo(poiId: string): Promise<ContactInfo | null> {
   return results[0] ?? null;
 }
 
+/**
+ * Loads translation data (description, reviewSummary) for a POI.
+ *
+ * Args:
+ *     poiId: The POI UUID.
+ *     locale: The POI locale for matching translations.
+ *
+ * Returns:
+ *     Object with description and reviewSummary, or null if no translation exists.
+ */
+async function loadTranslation(
+  poiId: string,
+  locale: string,
+): Promise<{ description: string | null; reviewSummary: string | null } | null> {
+  const results = await db
+    .select({
+      description: poiTranslations.description,
+      reviewSummary: poiTranslations.reviewSummary,
+    })
+    .from(poiTranslations)
+    .where(and(eq(poiTranslations.poiId, poiId), eq(poiTranslations.locale, locale)))
+    .limit(1);
+
+  return results[0] ?? null;
+}
+
+/**
+ * Loads the current remark content for a POI.
+ *
+ * Args:
+ *     poiId: The POI UUID.
+ *
+ * Returns:
+ *     The remark content string, or null if no current remark exists.
+ */
+async function loadCurrentRemark(poiId: string): Promise<string | null> {
+  const results = await db
+    .select({ content: remarks.content })
+    .from(remarks)
+    .where(and(eq(remarks.poiId, poiId), eq(remarks.isCurrent, true)))
+    .limit(1);
+
+  return results[0]?.content ?? null;
+}
+
 interface PoiContext {
   poi: Poi;
   text: string;
   profile: ProfileUnion;
 }
 
+const POI_SELECT_FIELDS = {
+  id: pois.id,
+  osmId: pois.osmId,
+  name: pois.name,
+  categoryId: pois.categoryId,
+  regionId: pois.regionId,
+  latitude: pois.latitude,
+  longitude: pois.longitude,
+  address: pois.address,
+  locale: pois.locale,
+  osmType: pois.osmType,
+  osmTags: pois.osmTags,
+  wikipediaUrl: pois.wikipediaUrl,
+  imageUrl: pois.imageUrl,
+  embedding: pois.embedding,
+  searchVector: pois.searchVector,
+  createdAt: pois.createdAt,
+  updatedAt: pois.updatedAt,
+  categorySlug: categories.slug,
+} as const;
+
+/**
+ * Fetches POIs that need embedding generation.
+ * In default mode, selects POIs without embeddings.
+ * In stale mode, also includes POIs whose enrichment_log has newer entries than pois.updatedAt.
+ *
+ * Args:
+ *     stale: Whether to include stale embeddings.
+ *
+ * Returns:
+ *     Array of POI rows with category slug.
+ */
+async function fetchTargetPois(stale: boolean) {
+  if (!stale) {
+    return db
+      .select(POI_SELECT_FIELDS)
+      .from(pois)
+      .leftJoin(categories, eq(pois.categoryId, categories.id))
+      .where(isNull(pois.embedding));
+  }
+
+  const staleSubquery = db
+    .select({ poiId: enrichmentLog.poiId })
+    .from(enrichmentLog)
+    .where(
+      sql`${enrichmentLog.createdAt} > (SELECT updated_at FROM pois WHERE pois.id = ${enrichmentLog.poiId})`,
+    )
+    .groupBy(enrichmentLog.poiId);
+
+  return db
+    .select(POI_SELECT_FIELDS)
+    .from(pois)
+    .leftJoin(categories, eq(pois.categoryId, categories.id))
+    .where(
+      or(
+        isNull(pois.embedding),
+        sql`${pois.id} IN (${staleSubquery})`,
+      ),
+    );
+}
+
 async function generateEmbeddings() {
-  console.log("[embeddings] Starting embedding generation from profile data...");
+  const modeLabel = STALE_MODE ? "stale + missing" : "missing only";
+  log.info(`Starting embedding generation (mode: ${modeLabel})...`);
 
   const healthy = await checkOllamaHealth(EMBED_MODEL);
   if (!healthy) {
-    console.error(`[embeddings] Ollama not available or model ${EMBED_MODEL} not loaded.`);
-    console.log(`Run: ollama pull ${EMBED_MODEL}`);
+    log.error(`Ollama not available or model ${EMBED_MODEL} not loaded.`);
+    log.info(`Run: ollama pull ${EMBED_MODEL}`);
     process.exit(1);
   }
 
-  const unembeddedPois = await db
-    .select({
-      id: pois.id,
-      osmId: pois.osmId,
-      name: pois.name,
-      categoryId: pois.categoryId,
-      regionId: pois.regionId,
-      latitude: pois.latitude,
-      longitude: pois.longitude,
-      address: pois.address,
-      locale: pois.locale,
-      osmType: pois.osmType,
-      osmTags: pois.osmTags,
-      wikipediaUrl: pois.wikipediaUrl,
-      imageUrl: pois.imageUrl,
-      embedding: pois.embedding,
-      searchVector: pois.searchVector,
-      createdAt: pois.createdAt,
-      updatedAt: pois.updatedAt,
-      categorySlug: categories.slug,
-    })
-    .from(pois)
-    .leftJoin(categories, eq(pois.categoryId, categories.id))
-    .where(isNull(pois.embedding));
+  const targetPois = await fetchTargetPois(STALE_MODE);
 
-  console.log(`[embeddings] Found ${unembeddedPois.length} POIs without embeddings (batch size: ${BATCH_SIZE})`);
+  log.info(`Found ${targetPois.length} POIs to embed (batch size: ${BATCH_SIZE})`);
 
-  if (unembeddedPois.length === 0) {
-    console.log("[embeddings] Nothing to do");
+  if (targetPois.length === 0) {
+    log.info("Nothing to do");
     process.exit(0);
   }
 
   let processed = 0;
   let errors = 0;
 
-  for (let i = 0; i < unembeddedPois.length; i += BATCH_SIZE) {
-    const batch = unembeddedPois.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < targetPois.length; i += BATCH_SIZE) {
+    const batch = targetPois.slice(i, i + BATCH_SIZE);
 
     const contexts: PoiContext[] = [];
-    const failedRows: string[] = [];
 
     const contextResults = await Promise.allSettled(
       batch.map(async (row) => {
@@ -224,14 +324,30 @@ async function generateEmbeddings() {
           updatedAt: row.updatedAt,
         };
 
-        const [profile, poiTagList, poiCuisineList, poiDishList, contact] =
+        const [profile, poiTagList, poiCuisineList, poiDishList, contact, translation, remarkContent] =
           await Promise.all([
             loadProfile(poi.id, categorySlug),
             loadTags(poi.id),
             loadCuisines(poi.id),
             loadDishes(poi.id),
             loadContactInfo(poi.id),
+            loadTranslation(poi.id, poi.locale),
+            loadCurrentRemark(poi.id),
           ]);
+
+        let wikipediaContent: string | undefined;
+        if (poi.wikipediaUrl) {
+          const summary = await fetchWikipediaSummary(poi.wikipediaUrl);
+          if (summary?.extract) {
+            const wikiLang = poi.wikipediaUrl.match(/\/\/([a-z]{2,3})\.wikipedia/)?.[1] ?? "en";
+            if (wikiLang !== "en") {
+              wikipediaContent = await translateText(summary.extract, getLanguageName(wikiLang))
+                .catch(() => summary.extract);
+            } else {
+              wikipediaContent = summary.extract;
+            }
+          }
+        }
 
         const text = buildEmbeddingText({
           poi,
@@ -240,6 +356,10 @@ async function generateEmbeddings() {
           cuisines: poiCuisineList,
           dishes: poiDishList,
           contactInfo: contact,
+          description: translation?.description ?? undefined,
+          reviewSummary: translation?.reviewSummary ?? undefined,
+          remarkContent: remarkContent ?? undefined,
+          wikipediaContent,
         });
 
         return { poi, text, profile: profile as ProfileUnion } satisfies PoiContext;
@@ -252,8 +372,7 @@ async function generateEmbeddings() {
         contexts.push(result.value);
       } else {
         errors++;
-        failedRows.push(batch[j].name);
-        console.error(`[embeddings] Context load failed for "${batch[j].name}": ${result.reason}`);
+        log.error(`Context load failed for "${batch[j].name}": ${result.reason}`);
       }
     }
 
@@ -286,6 +405,7 @@ async function generateEmbeddings() {
               textLength: ctx.text.length,
               profileCompleteness: completeness.ratio,
               embeddingDim: embeddings[j].length,
+              staleMode: STALE_MODE,
             },
           });
 
@@ -294,22 +414,22 @@ async function generateEmbeddings() {
       );
     } catch (error) {
       errors += contexts.length;
-      console.error(
-        `[embeddings] Batch embed failed:`,
+      log.error(
+        "Batch embed failed:",
         error instanceof Error ? error.message : error,
       );
     }
 
-    console.log(
-      `[embeddings] Progress: ${processed + errors}/${unembeddedPois.length} (${errors} errors)`,
+    log.info(
+      `Progress: ${processed + errors}/${targetPois.length} (${errors} errors)`,
     );
   }
 
-  console.log(`[embeddings] Done! Processed: ${processed}, Errors: ${errors}`);
+  log.success(`Done! Processed: ${processed}, Errors: ${errors}`);
   process.exit(0);
 }
 
 generateEmbeddings().catch((error) => {
-  console.error("[embeddings] Fatal error:", error);
+  log.error("Fatal error:", error);
   process.exit(1);
 });

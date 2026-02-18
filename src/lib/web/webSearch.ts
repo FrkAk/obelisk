@@ -1,5 +1,12 @@
 import { scrapeWebsite, scrapeWithOptions, type WebsiteContent } from "./scraper";
-import { searxngSearch, type SearXNGSearchOptions } from "./searxng";
+import {
+  searxngSearch,
+  type SearXNGSearchOptions,
+  type SearXNGResult,
+} from "./searxng";
+import { ollamaWebSearch } from "./ollamaSearch";
+import { extractCity } from "@/lib/geo/address";
+import { translateText, TRANSLATE_MODEL } from "@/lib/ai/ollama";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("webSearch");
@@ -16,35 +23,80 @@ export interface ScrapedContent {
   content: string | null;
 }
 
+export interface WebSearchMeta {
+  source: "searxng" | "ollama" | "none";
+  rateLimited: boolean;
+  query: string;
+}
+
+export interface WebSearchResponse {
+  results: WebSearchResult[];
+  meta: WebSearchMeta;
+}
+
 export interface WebSearchContext {
   query: string;
   results: WebSearchResult[];
   scrapedContent?: ScrapedContent[];
+  meta: WebSearchMeta;
 }
 
-const MAX_SCRAPE_RESULTS = 2;
+const MAX_SCRAPE_RESULTS = 3;
+
+export const FALLBACK_KEYWORDS: Record<string, string> = {
+  food: "tradition cuisine local",
+  history: "heritage significance events",
+  architecture: "style architect construction",
+  nature: "trails wildlife facilities",
+  art: "exhibitions collection artists",
+  culture: "events performances program",
+  nightlife: "atmosphere music reviews",
+  shopping: "products specialties brands",
+  views: "panorama landmarks photography",
+  hidden: "secret local unique",
+  sports: "athletes history competitions",
+  health: "wellness history community",
+  transport: "history infrastructure significance",
+  education: "academic history notable",
+  services: "community history significance",
+};
 
 /**
- * Extracts city name from an address string.
+ * Translates English keywords to a target language using translategemma.
+ * Uses newline-separated format for clean 1:1 word translation.
  *
  * Args:
- *     address: Full address string (e.g., "Neuhauser Str. 2, 80331 Munich, Germany").
+ *     keywords: English keywords (e.g., "tradition cuisine local").
+ *     targetLangCode: Target language code (e.g., "de", "fr").
  *
  * Returns:
- *     City name if found, empty string otherwise.
+ *     Translated keywords as space-separated string, or original English keywords on failure.
  */
-function extractCity(address?: string | null): string {
-  if (!address) return "";
+export async function translateKeywords(
+  keywords: string,
+  targetLangCode: string,
+): Promise<string> {
+  if (targetLangCode === "en") return keywords;
 
-  const parts = address.split(",").map((p) => p.trim());
+  try {
+    const words = keywords.split(/\s+/).filter(Boolean);
+    const input = words.join("\n");
 
-  if (parts.length >= 2) {
-    const cityPart = parts[parts.length - 2];
-    const cityWithoutPostal = cityPart.replace(/^\d{4,5}\s*/, "");
-    return cityWithoutPostal.trim();
+    const result = await translateText(input, "English", targetLangCode, TRANSLATE_MODEL);
+
+    const translated = result
+      .split("\n")
+      .map((line) => line.trim().split(/\s+/)[0]?.replace(/,/g, ""))
+      .filter(Boolean);
+
+    if (translated.length === 0) return keywords;
+
+    return translated.join(" ");
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    log.warn(`Keyword translation failed (en → ${targetLangCode}): ${msg}`);
+    return keywords;
   }
-
-  return "";
 }
 
 /**
@@ -107,144 +159,85 @@ export function buildSearchQuery(poi: {
   return `${name} ${location} interesting facts`.trim();
 }
 
-// ---------------------------------------------------------------------------
-// Enrichment-specific search queries
-// ---------------------------------------------------------------------------
-
-export type EnrichmentPass = "general" | "reviews" | "menu" | "awards" | "history" | "architecture" | "nature" | "art" | "nightlife" | "shopping" | "viewpoint";
-
 /**
- * Builds enrichment-specific search queries for a POI by category and pass type.
+ * Builds a consolidated search query from POI name, city, and keywords.
  *
  * Args:
  *     poiName: Name of the POI.
  *     city: City name for location context.
- *     categorySlug: The POI's category slug.
- *     pass: The specific enrichment pass to build a query for.
+ *     keywords: Space-separated search keywords (LLM-generated or fallback).
  *
  * Returns:
- *     Search query string optimized for the enrichment pass.
+ *     Consolidated search query string.
  */
-export function buildEnrichmentQuery(
+export function buildConsolidatedQuery(
   poiName: string,
   city: string,
-  categorySlug: string,
-  pass: EnrichmentPass,
+  keywords: string,
 ): string {
-  const base = `${poiName} ${city}`.trim();
+  return `"${poiName} ${city}" ${keywords}`;
+}
 
-  const passQueries: Record<string, Record<string, string>> = {
-    food: {
-      general: `"${base}" restaurant review`,
-      reviews: `"${base}" erfahrungen bewertung OR review`,
-      menu: `"${base}" speisekarte OR menu`,
-      awards: `"${base}" michelin bib gourmand OR "best restaurants Munich"`,
-    },
-    history: {
-      general: `"${base}" history wikipedia`,
-      history: `"${base}" Geschichte historische Bedeutung OR "historical significance"`,
-      architecture: `"${base}" heritage Denkmalschutz OR UNESCO preservation`,
-    },
-    architecture: {
-      general: `"${base}" architecture architect style Architektur`,
-      architecture: `"${base}" interior tour highlights Rundgang`,
-      history: `"${base}" construction history Baugeschichte wikipedia`,
-    },
-    nature: {
-      general: `"${base}" trails activities visitors Natur`,
-      nature: `"${base}" facilities playground amenities Ausstattung`,
-      reviews: `"${base}" visitor guide Tipps`,
-    },
-    art: {
-      general: `"${base}" exhibitions collection Ausstellung museum`,
-      art: `"${base}" notable works Kunstwerke highlights`,
-      reviews: `"${base}" tickets tours visit guide Besuch`,
-    },
-    culture: {
-      general: `"${base}" cultural events Veranstaltungen program`,
-      reviews: `"${base}" tickets tours Erlebnis experience`,
-      art: `"${base}" notable performers Kuenstler history`,
-    },
-    nightlife: {
-      general: `"${base}" reviews nightlife bar club`,
-      nightlife: `"${base}" events DJ lineup Programm music`,
-      reviews: `"${base}" drinks atmosphere Stimmung`,
-    },
-    shopping: {
-      general: `"${base}" products reviews shop store Angebot`,
-      shopping: `"${base}" brands specialties Sortiment`,
-      reviews: `"${base}" shopping experience visitor tips`,
-    },
-    views: {
-      general: `"${base}" viewpoint panorama photos Aussicht`,
-      viewpoint: `"${base}" panorama visible landmarks Aussichtspunkt`,
-      reviews: `"${base}" visitor experience tips photography`,
-    },
-  };
-
-  const categoryQueries = passQueries[categorySlug];
-  if (categoryQueries && categoryQueries[pass]) {
-    return categoryQueries[pass];
-  }
-  if (categoryQueries?.general) {
-    return categoryQueries.general;
-  }
-  return `${base} interesting facts information`;
+function toWebSearchResults(results: SearXNGResult[]): WebSearchResult[] {
+  return results.map((r) => ({
+    title: r.title,
+    url: r.url,
+    snippet: r.content,
+  }));
 }
 
 /**
- * Returns the ordered list of enrichment passes for a given category.
- *
- * Args:
- *     categorySlug: The POI's category slug.
- *
- * Returns:
- *     Array of enrichment pass names to execute in order.
- */
-export function getEnrichmentPasses(categorySlug: string): EnrichmentPass[] {
-  const passMap: Record<string, EnrichmentPass[]> = {
-    food: ["general", "reviews", "awards"],
-    history: ["general", "history"],
-    architecture: ["general", "architecture"],
-    nature: ["general", "nature"],
-    art: ["general", "art", "reviews"],
-    culture: ["general", "reviews"],
-    nightlife: ["general", "nightlife"],
-    shopping: ["general", "shopping"],
-    views: ["general", "viewpoint"],
-  };
-  return passMap[categorySlug] || ["general"];
-}
-
-/**
- * Performs web search using self-hosted SearXNG instance.
+ * Searches the web with SearXNG as primary and Ollama cloud as fallback.
  *
  * Args:
  *     query: Search query string.
  *     maxResults: Maximum number of results to return.
- *     options: Optional SearXNG search parameters (engines, language, etc).
+ *     options: Optional SearXNG search parameters.
  *
  * Returns:
- *     Array of search results with title, URL, and snippet.
+ *     Web search response with results and metadata about the source used.
  */
 export async function webSearch(
   query: string,
   maxResults: number = 5,
   options: SearXNGSearchOptions = {},
-): Promise<WebSearchResult[]> {
+): Promise<WebSearchResponse> {
   try {
-    const results = await searxngSearch(query, maxResults, options);
+    const searxngResponse = await searxngSearch(query, maxResults, options);
 
-    return results.map((r) => ({
-      title: r.title,
-      url: r.url,
-      snippet: r.content,
-    }));
+    if (!searxngResponse.meta.rateLimited && searxngResponse.results.length > 0) {
+      return {
+        results: toWebSearchResults(searxngResponse.results),
+        meta: { source: "searxng", rateLimited: false, query },
+      };
+    }
+
+    if (searxngResponse.meta.rateLimited) {
+      log.warn(`SearXNG rate limited, falling back to Ollama for: ${query.slice(0, 60)}`);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    log.error(`Search failed: ${message}`);
-    return [];
+    log.error(`SearXNG failed, falling back to Ollama: ${message}`);
   }
+
+  try {
+    const ollamaResults = await ollamaWebSearch(query, maxResults);
+
+    if (ollamaResults.length > 0) {
+      return {
+        results: toWebSearchResults(ollamaResults),
+        meta: { source: "ollama", rateLimited: true, query },
+      };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    log.error(`Ollama search also failed: ${message}`);
+  }
+
+  return {
+    results: [],
+    meta: { source: "none", rateLimited: true, query },
+  };
 }
 
 /**
@@ -287,9 +280,10 @@ export async function scrapeTopResults(
  * Args:
  *     poi: Object containing name, category, and optional address.
  *     scrapeResults: Whether to also scrape top result URLs.
+ *     options: Optional language and pre-generated keywords for native-language search.
  *
  * Returns:
- *     Web search context including query, results, and optional scraped content.
+ *     Web search context including query, results, metadata, and optional scraped content.
  */
 export async function enrichPOIWithWebSearch(
   poi: {
@@ -297,23 +291,32 @@ export async function enrichPOIWithWebSearch(
     category: string;
     address?: string | null;
   },
-  scrapeResults: boolean = true
+  scrapeResults: boolean = true,
+  options?: { language?: string; keywords?: string },
 ): Promise<WebSearchContext> {
-  const query = buildSearchQuery(poi);
+  const query = options?.keywords
+    ? buildConsolidatedQuery(poi.name, extractCity(poi.address, "Munich"), options.keywords)
+    : buildSearchQuery(poi);
 
   log.info(`Query: "${query}"`);
 
-  const results = await webSearch(query);
+  const searchOptions: SearXNGSearchOptions = {};
+  if (options?.language) {
+    searchOptions.language = options.language;
+  }
 
-  log.info(`Results: ${results.length}`);
+  const response = await webSearch(query, 5, searchOptions);
+
+  log.info(`Results: ${response.results.length} (source: ${response.meta.source})`);
 
   const context: WebSearchContext = {
     query,
-    results,
+    results: response.results,
+    meta: response.meta,
   };
 
-  if (scrapeResults && results.length > 0) {
-    const scrapedContent = await scrapeTopResults(results);
+  if (scrapeResults && response.results.length > 0) {
+    const scrapedContent = await scrapeTopResults(response.results);
     context.scrapedContent = scrapedContent;
     log.info(`Scraped: ${scrapedContent.length}`);
   }

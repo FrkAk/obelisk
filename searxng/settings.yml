@@ -1,13 +1,10 @@
 use_default_settings:
   engines:
     keep_only:
-      - duckduckgo
-      - google
       - wikipedia
       - wikidata
       - mojeek
       - mwmbl
-      - yep
 
 server:
   secret_key: "obelisk_searxng_dev_key"
@@ -20,42 +17,37 @@ server:
 search:
   safe_search: 0
   autocomplete: ""
-  default_lang: "en"
+  default_lang: "auto"
   formats:
     - html
     - json
 
 outgoing:
-  request_timeout: 8.0
+  request_timeout: 10.0
   max_request_timeout: 15.0
-  useragent_suffix: "obelisk-dev"
-  pool_connections: 100
-  pool_maxsize: 20
+  useragent_suffix: ""
+  pool_connections: 50
+  pool_maxsize: 10
   enable_http2: true
-  retries: 1
+  retries: 2
   max_redirects: 10
 
 engines:
-  - name: duckduckgo
-    engine: duckduckgo
-    shortcut: ddg
-    disabled: false
-    timeout: 12.0
-
-  - name: google
-    engine: google
-    shortcut: g
-    disabled: false
-
   - name: wikipedia
     engine: wikipedia
     shortcut: wp
     disabled: false
+    display_type:
+      - infobox
+      - list
 
   - name: wikidata
     engine: wikidata
     shortcut: wd
     disabled: false
+    display_type:
+      - infobox
+      - list
 
   - name: mojeek
     engine: mojeek
@@ -67,7 +59,4 @@ engines:
     shortcut: mw
     disabled: false
 
-  - name: yep
-    engine: yep
-    shortcut: yp
-    disabled: false
+

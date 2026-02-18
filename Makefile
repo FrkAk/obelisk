@@ -18,6 +18,7 @@ export OLLAMA_URL ?= http://127.0.0.1:11434
 export OLLAMA_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_SEARCH_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_EMBED_MODEL ?= embeddinggemma:300m
+export OLLAMA_TRANSLATE_MODEL ?= translategemma:4b
 export TYPESENSE_API_KEY ?= obelisk_typesense_dev
 export SEED_RADIUS ?= 100
 
@@ -69,6 +70,7 @@ setup:
 	ollama pull $(OLLAMA_MODEL)
 	ollama pull $(OLLAMA_SEARCH_MODEL)
 	ollama pull $(OLLAMA_EMBED_MODEL)
+	ollama pull $(OLLAMA_TRANSLATE_MODEL)
 	@printf "\n"
 	@printf "$(CYAN)[4/12]$(RESET) Seeding regions...\n"
 	$(COMPOSE) exec app bun scripts/seed-regions.ts
@@ -116,7 +118,7 @@ run-local:
 	printf "  Network: http://$$LOCAL_IP:3000\n"; \
 	printf "\n"; \
 	printf "Press Ctrl+C to stop\n"
-	docker compose -f docker-compose.yml -f docker-compose.local.yml up
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.local.yml up
 
 stop:
 	@printf "Stopping services...\n"

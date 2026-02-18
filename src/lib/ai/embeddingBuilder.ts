@@ -26,13 +26,18 @@ export type ProfileUnion =
   | ViewpointProfile
   | null;
 
-interface EmbeddingContext {
+export interface EmbeddingContext {
   poi: Poi;
   profile: ProfileUnion;
   tags: Tag[];
   cuisines?: Cuisine[];
   dishes?: Array<PoiDish & { dish: Dish }>;
   contactInfo?: ContactInfo | null;
+  wikipediaContent?: string;
+  description?: string;
+  reviewSummary?: string;
+  remarkContent?: string;
+  reviews?: string;
 }
 
 /**
@@ -165,6 +170,11 @@ function buildFoodText(ctx: EmbeddingContext): string {
     tagNames,
     poi.address,
     contactInfo?.openingHoursDisplay,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
   ]);
 }
 
@@ -197,6 +207,11 @@ function buildHistoryText(ctx: EmbeddingContext): string {
     hp.inscription && `Inscription: ${hp.inscription}`,
     tagNames,
     poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
   ]);
 }
 
@@ -225,6 +240,11 @@ function buildArchitectureText(ctx: EmbeddingContext): string {
     ap.notableFeatures,
     tagNames,
     poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
   ]);
 }
 
@@ -257,6 +277,11 @@ function buildNatureText(ctx: EmbeddingContext): string {
     np.notableFeatures,
     tagNames,
     poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
   ]);
 }
 
@@ -289,6 +314,11 @@ function buildArtCultureText(ctx: EmbeddingContext): string {
     ac.vibe,
     tagNames,
     poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
   ]);
 }
 
@@ -320,6 +350,11 @@ function buildNightlifeText(ctx: EmbeddingContext): string {
     nl.vibe,
     nl.capacity ? `Capacity: ${nl.capacity}` : null,
     poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
   ]);
 }
 
@@ -346,6 +381,11 @@ function buildShoppingText(ctx: EmbeddingContext): string {
     sp.vibe,
     tagNames,
     poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
   ]);
 }
 
@@ -374,18 +414,30 @@ function buildViewpointText(ctx: EmbeddingContext): string {
     vp.crowdLevel && `Crowd: ${vp.crowdLevel}`,
     tagNames,
     poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
   ]);
 }
 
 function buildGenericText(ctx: EmbeddingContext): string {
   const { poi, tags } = ctx;
   const tagNames = tags.map((t) => t.name).join(", ");
+  const osmTags = poi.osmTags as Record<string, string> | null;
 
   return joinParts([
     poi.name,
     tagNames,
     poi.address,
-    poi.wikipediaUrl && "Wikipedia article available",
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
+    osmTags?.cuisine,
+    osmTags?.opening_hours,
   ]);
 }
 

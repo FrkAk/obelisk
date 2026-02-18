@@ -26,6 +26,7 @@ export type RemarkWithPoi = {
     latitude: number;
     longitude: number;
     address: string | null;
+    locale: string;
     wikipediaUrl: string | null;
     imageUrl: string | null;
     osmTags: Record<string, string> | null;
@@ -63,6 +64,7 @@ function remarkPoiSelect() {
     poiLatitude: pois.latitude,
     poiLongitude: pois.longitude,
     poiAddress: pois.address,
+    poiLocale: pois.locale,
     poiWikipediaUrl: pois.wikipediaUrl,
     poiImageUrl: pois.imageUrl,
     poiOsmTags: pois.osmTags,
@@ -97,6 +99,7 @@ interface RemarkPoiRow {
   poiLatitude: number;
   poiLongitude: number;
   poiAddress: string | null;
+  poiLocale: string;
   poiWikipediaUrl: string | null;
   poiImageUrl: string | null;
   poiOsmTags: Record<string, string> | null;
@@ -132,6 +135,7 @@ function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
       latitude: row.poiLatitude,
       longitude: row.poiLongitude,
       address: row.poiAddress,
+      locale: row.poiLocale,
       wikipediaUrl: row.poiWikipediaUrl,
       imageUrl: row.poiImageUrl,
       osmTags: row.poiOsmTags,

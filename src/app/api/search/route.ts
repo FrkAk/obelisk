@@ -155,13 +155,16 @@ export async function POST(request: NextRequest) {
     log.info(`Query: "${query}", category: ${intent.category}`);
 
     const radiusKm = radius / 1000;
+    const keywordsWithCuisine = [
+      ...intent.keywords,
+      ...(intent.cuisineTypes ?? []),
+    ];
+    const uniqueKeywords = [...new Set(keywordsWithCuisine)];
     const searchQuery =
-      intent.keywords.length > 0 ? intent.keywords.join(" ") : query;
+      uniqueKeywords.length > 0 ? uniqueKeywords.join(" ") : query;
 
     const typesenseFilters: Parameters<typeof searchPOIs>[3] = {};
     if (intent.category) typesenseFilters.category = intent.category;
-    if (intent.cuisineTypes?.[0])
-      typesenseFilters.cuisine = intent.cuisineTypes[0];
     if (intent.filters.wifi) typesenseFilters.hasWifi = true;
     if (intent.filters.outdoor) typesenseFilters.hasOutdoorSeating = true;
 
@@ -186,7 +189,7 @@ export async function POST(request: NextRequest) {
         (async () => {
           const semStart = Date.now();
           const hits = await semanticSearch(
-            query,
+            searchQuery,
             location.latitude,
             location.longitude,
             radius,
@@ -197,7 +200,7 @@ export async function POST(request: NextRequest) {
         (async () => {
           const obStart = Date.now();
           const hits = await searchRemarksByText(
-            query,
+            searchQuery,
             location.latitude,
             location.longitude,
             radius,

@@ -45,7 +45,7 @@ export function rankResults(input: RankingInput): SearchResult[] {
 
   for (let rank = 0; rank < input.semanticResults.length; rank++) {
     const sem = input.semanticResults[rank];
-    const rrfScore = 1 / (RRF_K + rank);
+    const rrfScore = (1 / (RRF_K + rank)) * sem.similarity;
     scoreMap.set(sem.poiId, (scoreMap.get(sem.poiId) ?? 0) + rrfScore);
 
     if (!itemMap.has(sem.poiId)) {

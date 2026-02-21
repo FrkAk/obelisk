@@ -4,6 +4,7 @@ import { haversineDistance } from "@/lib/geo/distance";
 import { EMBED_MODEL } from "@/lib/ai/ollama";
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
+const MIN_SIMILARITY = 0.7;
 
 interface EmbedResponse {
   embeddings: number[][];
@@ -102,6 +103,7 @@ export async function semanticSearch(
     WHERE p.embedding IS NOT NULL
       AND p.latitude BETWEEN ${minLat} AND ${maxLat}
       AND p.longitude BETWEEN ${minLon} AND ${maxLon}
+      AND 1 - (p.embedding <=> ${vectorStr}::vector) > ${MIN_SIMILARITY}
     ORDER BY p.embedding <=> ${vectorStr}::vector
     LIMIT ${limit}
   `);

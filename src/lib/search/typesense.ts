@@ -193,7 +193,9 @@ export async function searchPOIs(
       ? `location(${location.latitude},${location.longitude}):asc`
       : undefined,
     per_page: limit,
+    num_typos: 2,
     typo_tokens_threshold: 1,
+    drop_tokens_threshold: 1,
   };
 
   const response = await client

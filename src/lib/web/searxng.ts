@@ -85,7 +85,7 @@ function setCache(key: string, response: SearXNGSearchResponse): void {
 function detectRateLimit(
   httpStatus: number | null,
   unresponsiveEngines: Array<[string, string]>,
-  resultCount: number,
+  _resultCount: number,
 ): boolean {
   if (httpStatus === 429) return true;
   if (unresponsiveEngines.length >= RATE_LIMIT_ENGINE_THRESHOLD) return true;

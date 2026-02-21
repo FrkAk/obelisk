@@ -240,9 +240,8 @@ export function buildLanguagePrompt(locale: LocaleInfo): string {
   return `LANGUAGE & LOCAL FLAVOR: This place is in ${locale.country} where people speak ${locale.language}. Any background info may be in ${locale.language} — read and understand all of it fully.
 
 Write primarily in English, but sound like a real bilingual local:
-- Use well-known ${locale.language} words where they fit naturally, like: ${expressionSample}
-- You can reference local sayings like: ${idiomSample}
-- These are just examples — use your own knowledge of ${locale.language} expressions and cultural references too
+- Use well-known ${locale.language} words where they fit naturally
+- Use your own knowledge of ${locale.language} expressions and cultural references too
 - Keep local terms that have no good English translation (food names, cultural concepts, greetings)
 - Proper nouns stay in their original language
 - Don't force it — only use local words where a bilingual person naturally would`;

@@ -484,7 +484,7 @@ Fields to extract:
 - michelin_stars: integer 0 to 3
 
 TEXT:
-${scrapedText.slice(0, 4000)}`;
+${scrapedText.slice(0, 6000)}`;
 }
 
 function buildHistoryUserPrompt(poiName: string, scrapedText: string): string {
@@ -504,7 +504,7 @@ Fields to extract:
 - construction_materials: array of material names (max 5)
 
 TEXT:
-${scrapedText.slice(0, 4000)}`;
+${scrapedText.slice(0, 6000)}`;
 }
 
 function buildArchitectureUserPrompt(poiName: string, scrapedText: string): string {
@@ -527,7 +527,7 @@ Fields to extract:
 - best_photo_angle: photography tip
 
 TEXT:
-${scrapedText.slice(0, 4000)}`;
+${scrapedText.slice(0, 6000)}`;
 }
 
 function buildNatureUserPrompt(poiName: string, scrapedText: string): string {
@@ -550,7 +550,7 @@ Fields to extract:
 - entry_points: array of entry point descriptions (max 5)
 
 TEXT:
-${scrapedText.slice(0, 4000)}`;
+${scrapedText.slice(0, 6000)}`;
 }
 
 function buildArtCultureUserPrompt(poiName: string, scrapedText: string): string {
@@ -573,7 +573,7 @@ Fields to extract:
 - vibe: one descriptive sentence
 
 TEXT:
-${scrapedText.slice(0, 4000)}`;
+${scrapedText.slice(0, 6000)}`;
 }
 
 function buildNightlifeUserPrompt(poiName: string, scrapedText: string): string {
@@ -598,7 +598,7 @@ Fields to extract:
 - music_genres: array of genre names (max 5, e.g. "techno", "house", "jazz")
 
 TEXT:
-${scrapedText.slice(0, 4000)}`;
+${scrapedText.slice(0, 6000)}`;
 }
 
 function buildShoppingUserPrompt(poiName: string, scrapedText: string): string {
@@ -616,7 +616,7 @@ Fields to extract:
 - vibe: one descriptive sentence
 
 TEXT:
-${scrapedText.slice(0, 4000)}`;
+${scrapedText.slice(0, 6000)}`;
 }
 
 function buildViewpointUserPrompt(poiName: string, scrapedText: string): string {
@@ -637,7 +637,7 @@ Fields to extract:
 - crowd_level: "low" | "moderate" | "high" | "very_high"
 
 TEXT:
-${scrapedText.slice(0, 4000)}`;
+${scrapedText.slice(0, 6000)}`;
 }
 
 function buildMenuUserPrompt(poiName: string, scrapedText: string, currency: string): string {

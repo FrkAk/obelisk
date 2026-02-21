@@ -1,14 +1,14 @@
 "use server";
 
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { getRemarkById, versionBumpRemark } from "@/lib/db/queries/remarks";
 import { generateStory } from "@/lib/ai/storyGenerator";
 import type { StoryPoiContext, ProfileUnion } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { loadProfile, loadTags, loadCuisines, loadDishes, loadContactInfo } from "@/lib/db/queries/pois";
-import { scrapeWebsite } from "@/lib/web/scraper";
-import { enrichPOIWithWebSearch, translateKeywords, FALLBACK_KEYWORDS } from "@/lib/web/webSearch";
-import { fetchWikipediaSummary } from "@/lib/web/wikipedia";
+import { enrichPoi } from "@/lib/enrichment/pipeline";
+import { syncPoiSearchIndex } from "@/lib/enrichment/postprocess";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
 
@@ -62,53 +62,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let wikipediaSummary = null;
-    if (existingRemark.poi.wikipediaUrl) {
-      wikipediaSummary = await fetchWikipediaSummary(existingRemark.poi.wikipediaUrl);
-      if (wikipediaSummary) {
-        log.success(`Wikipedia: "${wikipediaSummary.title}" — ${wikipediaSummary.description}`);
-      } else {
-        log.warn(`Wikipedia fetch failed for: ${existingRemark.poi.wikipediaUrl}`);
-      }
-    }
+    const categoryName = existingRemark.poi.category?.name || "Hidden Gems";
+    const categorySlug = existingRemark.poi.category?.slug ?? "hidden";
 
     const websiteUrl =
       existingRemark.poi.osmTags?.website ||
-      existingRemark.poi.osmTags?.["contact:website"];
+      existingRemark.poi.osmTags?.["contact:website"] ||
+      null;
 
-    let websiteContent = null;
-    if (websiteUrl) {
-      log.info(`Scraping website: ${websiteUrl}`);
-      websiteContent = await scrapeWebsite(websiteUrl);
-      if (websiteContent.error) {
-        log.warn(`Website scrape failed: ${websiteContent.error}`);
-      }
-    }
+    await enrichPoi({
+      id: existingRemark.poi.id,
+      name: existingRemark.poi.name,
+      address: existingRemark.poi.address,
+      categorySlug,
+      websiteUrl,
+      wikipediaUrl: existingRemark.poi.wikipediaUrl,
+      locale: existingRemark.poi.locale,
+    });
 
-    const categoryName = existingRemark.poi.category?.name || "Hidden Gems";
-    const categorySlug = existingRemark.poi.category?.slug ?? "hidden";
-    const poiLang = existingRemark.poi.locale?.split("-")[0] ?? "en";
-
-    const englishKeywords = FALLBACK_KEYWORDS[categorySlug] ?? "interesting facts information";
-    const translatedKeywords = poiLang !== "en"
-      ? await translateKeywords(englishKeywords, poiLang)
-      : englishKeywords;
-
-    const webSearchContext = await enrichPOIWithWebSearch(
-      { name: existingRemark.poi.name, category: categoryName, address: existingRemark.poi.address },
-      true,
-      { language: poiLang, keywords: translatedKeywords },
-    );
-
-    log.info(`Web search query: "${webSearchContext.query}" (source: ${webSearchContext.meta.source})`);
-    log.info(
-      `Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`
-    );
-    if (webSearchContext.meta.rateLimited) {
-      log.warn("Search was rate limited");
-    }
-
-    log.info(`Generating new story for: "${existingRemark.poi.name}" (wikipedia: ${wikipediaSummary ? "yes" : "no"})`);
+    log.info(`Generating new story for: "${existingRemark.poi.name}"`);
 
     const [profile, poiTagList, cuisineList, dishList, contact] =
       await Promise.all([
@@ -178,6 +150,10 @@ export async function POST(request: NextRequest) {
       confidence: newRemark.confidence,
       poi: existingRemark.poi,
     };
+
+    after(async () => {
+      await syncPoiSearchIndex(existingRemark.poi.id, categorySlug);
+    });
 
     return NextResponse.json({
       remark: remarkWithPoi,

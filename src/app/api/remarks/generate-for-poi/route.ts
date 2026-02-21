@@ -1,6 +1,7 @@
 "use server";
 
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { db } from "@/lib/db/client";
 import { pois, remarks, categories } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -8,9 +9,8 @@ import { generateStory } from "@/lib/ai/storyGenerator";
 import type { StoryPoiContext, ProfileUnion } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { loadProfile, loadTags, loadCuisines, loadDishes, loadContactInfo } from "@/lib/db/queries/pois";
-import { scrapeWebsite } from "@/lib/web/scraper";
-import { enrichPOIWithWebSearch, translateKeywords, FALLBACK_KEYWORDS } from "@/lib/web/webSearch";
-import { fetchWikipediaSummary } from "@/lib/web/wikipedia";
+import { enrichPoi } from "@/lib/enrichment/pipeline";
+import { syncPoiSearchIndex } from "@/lib/enrichment/postprocess";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
 import type { CategorySlug } from "@/types";
@@ -34,6 +34,7 @@ const externalPoiSchema = z.object({
   hasWifi: z.boolean().optional(),
   hasOutdoorSeating: z.boolean().optional(),
   imageUrl: z.string().optional(),
+  wikipediaUrl: z.string().optional(),
   source: z.enum(["nominatim", "overpass"]),
 });
 
@@ -239,6 +240,7 @@ async function createPoiFromExternal(
       latitude: externalPoi.latitude,
       longitude: externalPoi.longitude,
       address: externalPoi.address ?? null,
+      wikipediaUrl: externalPoi.wikipediaUrl ?? null,
       imageUrl: externalPoi.imageUrl ?? null,
       osmTags: Object.keys(osmTags).length > 0 ? osmTags : null,
     })
@@ -297,57 +299,21 @@ async function generateAndSaveRemark(
     );
   }
 
-  let wikipediaSummary = null;
-  if (poi.wikipediaUrl) {
-    wikipediaSummary = await fetchWikipediaSummary(poi.wikipediaUrl);
-    if (wikipediaSummary) {
-      log.success(`Wikipedia: "${wikipediaSummary.title}" — ${wikipediaSummary.description}`);
-    } else {
-      log.warn(`Wikipedia fetch failed for: ${poi.wikipediaUrl}`);
-    }
-  }
-
-  let websiteContent = null;
-  if (websiteUrl) {
-    log.info(`Scraping website: ${websiteUrl}`);
-    websiteContent = await scrapeWebsite(websiteUrl);
-    if (websiteContent.error) {
-      log.warn(`Website scrape failed: ${websiteContent.error}`);
-    } else {
-      log.success(
-        `Scraped content — Title: "${websiteContent.title}", Desc: "${websiteContent.description?.slice(0, 100)}..."`
-      );
-    }
-  } else {
-    log.info(`No website URL provided for: "${poi.name}"`);
-  }
-
   const categoryName = poi.categoryName || "Hidden Gems";
   const categorySlug = poi.categorySlug ?? "hidden";
-  const poiLang = poi.locale?.split("-")[0] ?? "en";
 
-  const englishKeywords = FALLBACK_KEYWORDS[categorySlug] ?? "interesting facts information";
-  const translatedKeywords = poiLang !== "en"
-    ? await translateKeywords(englishKeywords, poiLang)
-    : englishKeywords;
+  const enrichWebsiteUrl = websiteUrl ?? poi.osmTags?.website ?? null;
+  await enrichPoi({
+    id: poi.id,
+    name: poi.name,
+    address: poi.address,
+    categorySlug,
+    websiteUrl: enrichWebsiteUrl,
+    wikipediaUrl: poi.wikipediaUrl,
+    locale: poi.locale,
+  });
 
-  const webSearchContext = await enrichPOIWithWebSearch(
-    { name: poi.name, category: categoryName, address: poi.address },
-    true,
-    { language: poiLang, keywords: translatedKeywords },
-  );
-
-  log.info(`Web search query: "${webSearchContext.query}" (source: ${webSearchContext.meta.source})`);
-  log.info(
-    `Web results: ${webSearchContext.results.length}, scraped: ${webSearchContext.scrapedContent?.length || 0}`
-  );
-  if (webSearchContext.meta.rateLimited) {
-    log.warn("Search was rate limited");
-  }
-
-  log.info(
-    `Generating story for: "${poi.name}" with category: "${categoryName}" (wikipedia: ${wikipediaSummary ? "yes" : "no"})`
-  );
+  log.info(`Generating story for: "${poi.name}" with category: "${categoryName}"`);
 
   const [profile, poiTagList, cuisineList, dishList, contact] =
     await Promise.all([
@@ -444,6 +410,10 @@ async function generateAndSaveRemark(
         : undefined,
     },
   };
+
+  after(async () => {
+    await syncPoiSearchIndex(poi.id, categorySlug);
+  });
 
   return NextResponse.json({
     remark: remarkWithPoi,

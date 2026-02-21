@@ -2,207 +2,29 @@ import { db } from "../src/lib/db/client";
 import {
   pois,
   categories,
-  tags,
-  poiTags,
-  cuisines,
-  poiCuisines,
-  poiDishes,
-  dishes,
-  contactInfo,
-  foodProfiles,
-  historyProfiles,
-  architectureProfiles,
-  natureProfiles,
-  artCultureProfiles,
-  nightlifeProfiles,
-  shoppingProfiles,
-  viewpointProfiles,
   enrichmentLog,
-  poiTranslations,
-  remarks,
 } from "../src/lib/db/schema";
 import { and, eq, isNull, sql, or } from "drizzle-orm";
 import { EMBED_MODEL, checkOllamaHealth } from "../src/lib/ai/ollama";
 import { buildEmbeddingText, profileCompleteness } from "../src/lib/ai/embeddingBuilder";
 import type { ProfileUnion } from "../src/lib/ai/embeddingBuilder";
-import type {
-  Poi,
-  Tag,
-  Cuisine,
-  PoiDish,
-  Dish,
-  ContactInfo,
-} from "../src/types";
+import { embedTexts } from "../src/lib/ai/embeddings";
+import {
+  loadProfile,
+  loadTags,
+  loadCuisines,
+  loadDishes,
+  loadContactInfo,
+  loadTranslation,
+  loadCurrentRemark,
+} from "../src/lib/db/queries/pois";
+import type { Poi } from "../src/types";
 import { createLogger } from "../src/lib/logger";
 
 const log = createLogger("embeddings");
 
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
 const BATCH_SIZE = parseInt(process.env.EMBED_BATCH_SIZE || "25", 10);
 const STALE_MODE = process.argv.includes("--stale");
-
-interface EmbedResponse {
-  embeddings: number[][];
-}
-
-/**
- * Sends texts to Ollama for embedding generation.
- *
- * Args:
- *     texts: Array of text strings to embed.
- *
- * Returns:
- *     Array of embedding vectors.
- */
-async function embedTexts(texts: string[]): Promise<number[][]> {
-  const response = await fetch(`${OLLAMA_URL}/api/embed`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: EMBED_MODEL,
-      input: texts,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    throw new Error(`Ollama embed error: ${response.status} - ${errorText}`);
-  }
-
-  const data: EmbedResponse = await response.json();
-
-  if (!data.embeddings || data.embeddings.length === 0) {
-    throw new Error("Ollama returned empty embeddings");
-  }
-
-  return data.embeddings;
-}
-
-const CATEGORY_PROFILE_TABLE: Record<string, typeof foodProfiles | typeof historyProfiles | typeof architectureProfiles | typeof natureProfiles | typeof artCultureProfiles | typeof nightlifeProfiles | typeof shoppingProfiles | typeof viewpointProfiles> = {
-  food: foodProfiles,
-  history: historyProfiles,
-  architecture: architectureProfiles,
-  nature: natureProfiles,
-  art: artCultureProfiles,
-  culture: artCultureProfiles,
-  views: viewpointProfiles,
-  nightlife: nightlifeProfiles,
-  shopping: shoppingProfiles,
-};
-
-async function loadProfile(poiId: string, categorySlug: string) {
-  const table = CATEGORY_PROFILE_TABLE[categorySlug];
-  if (!table) return null;
-
-  const results = await db
-    .select()
-    .from(table)
-    .where(eq(table.poiId, poiId))
-    .limit(1);
-
-  return results[0] ?? null;
-}
-
-async function loadTags(poiId: string): Promise<Tag[]> {
-  const results = await db
-    .select({
-      id: tags.id,
-      name: tags.name,
-      slug: tags.slug,
-      group: tags.group,
-      displayOrder: tags.displayOrder,
-    })
-    .from(poiTags)
-    .innerJoin(tags, eq(poiTags.tagId, tags.id))
-    .where(eq(poiTags.poiId, poiId));
-
-  return results;
-}
-
-async function loadCuisines(poiId: string): Promise<Cuisine[]> {
-  const results = await db
-    .select({
-      id: cuisines.id,
-      slug: cuisines.slug,
-      name: cuisines.name,
-      region: cuisines.region,
-      parentSlug: cuisines.parentSlug,
-      icon: cuisines.icon,
-    })
-    .from(poiCuisines)
-    .innerJoin(cuisines, eq(poiCuisines.cuisineId, cuisines.id))
-    .where(eq(poiCuisines.poiId, poiId));
-
-  return results;
-}
-
-async function loadDishes(poiId: string): Promise<Array<PoiDish & { dish: Dish }>> {
-  const results = await db
-    .select()
-    .from(poiDishes)
-    .innerJoin(dishes, eq(poiDishes.dishId, dishes.id))
-    .where(eq(poiDishes.poiId, poiId));
-
-  return results.map((r) => ({
-    ...r.poi_dishes,
-    dish: r.dishes,
-  }));
-}
-
-async function loadContactInfo(poiId: string): Promise<ContactInfo | null> {
-  const results = await db
-    .select()
-    .from(contactInfo)
-    .where(eq(contactInfo.poiId, poiId))
-    .limit(1);
-
-  return results[0] ?? null;
-}
-
-/**
- * Loads translation data (description, reviewSummary) for a POI.
- *
- * Args:
- *     poiId: The POI UUID.
- *     locale: The POI locale for matching translations.
- *
- * Returns:
- *     Object with description and reviewSummary, or null if no translation exists.
- */
-async function loadTranslation(
-  poiId: string,
-  locale: string,
-): Promise<{ description: string | null; reviewSummary: string | null } | null> {
-  const results = await db
-    .select({
-      description: poiTranslations.description,
-      reviewSummary: poiTranslations.reviewSummary,
-    })
-    .from(poiTranslations)
-    .where(and(eq(poiTranslations.poiId, poiId), eq(poiTranslations.locale, locale)))
-    .limit(1);
-
-  return results[0] ?? null;
-}
-
-/**
- * Loads the current remark content for a POI.
- *
- * Args:
- *     poiId: The POI UUID.
- *
- * Returns:
- *     The remark content string, or null if no current remark exists.
- */
-async function loadCurrentRemark(poiId: string): Promise<string | null> {
-  const results = await db
-    .select({ content: remarks.content })
-    .from(remarks)
-    .where(and(eq(remarks.poiId, poiId), eq(remarks.isCurrent, true)))
-    .limit(1);
-
-  return results[0]?.content ?? null;
-}
 
 interface PoiContext {
   poi: Poi;

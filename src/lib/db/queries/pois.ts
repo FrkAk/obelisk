@@ -18,6 +18,8 @@ import {
   nightlifeProfiles,
   shoppingProfiles,
   viewpointProfiles,
+  poiTranslations,
+  remarks,
 } from "../schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import type {
@@ -475,4 +477,49 @@ export async function loadContactInfo(
     .limit(1);
 
   return results[0] ?? null;
+}
+
+/**
+ * Loads translation data (description, reviewSummary) for a POI.
+ *
+ * Args:
+ *     poiId: The POI UUID.
+ *     locale: The POI locale for matching translations.
+ *
+ * Returns:
+ *     Object with description and reviewSummary, or null if no translation exists.
+ */
+export async function loadTranslation(
+  poiId: string,
+  locale: string,
+): Promise<{ description: string | null; reviewSummary: string | null } | null> {
+  const results = await db
+    .select({
+      description: poiTranslations.description,
+      reviewSummary: poiTranslations.reviewSummary,
+    })
+    .from(poiTranslations)
+    .where(and(eq(poiTranslations.poiId, poiId), eq(poiTranslations.locale, locale)))
+    .limit(1);
+
+  return results[0] ?? null;
+}
+
+/**
+ * Loads the current remark content for a POI.
+ *
+ * Args:
+ *     poiId: The POI UUID.
+ *
+ * Returns:
+ *     The remark content string, or null if no current remark exists.
+ */
+export async function loadCurrentRemark(poiId: string): Promise<string | null> {
+  const results = await db
+    .select({ content: remarks.content })
+    .from(remarks)
+    .where(and(eq(remarks.poiId, poiId), eq(remarks.isCurrent, true)))
+    .limit(1);
+
+  return results[0]?.content ?? null;
 }

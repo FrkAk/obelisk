@@ -130,6 +130,22 @@ async function executeFetch(
   return summary;
 }
 
+/**
+ * Builds a full Wikipedia URL from an OSM wikipedia tag value.
+ *
+ * Args:
+ *     osmTag: OSM wikipedia tag (format: "lang:Title", e.g. "de:Maximilianeum").
+ *
+ * Returns:
+ *     Full Wikipedia URL with correct language subdomain, or undefined if the tag is malformed.
+ */
+export function buildWikipediaUrl(osmTag: string): string | undefined {
+  const match = osmTag.match(/^([a-z]{2,3}):(.+)$/);
+  if (!match) return undefined;
+  const [, lang, title] = match;
+  return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
+}
+
 class WikipediaNotFoundError extends Error {
   constructor(title: string) {
     super(`Wikipedia article not found: ${title}`);

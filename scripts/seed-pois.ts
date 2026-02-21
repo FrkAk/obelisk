@@ -23,6 +23,7 @@ import { eq, sql } from "drizzle-orm";
 import type { CategorySlug } from "../src/types";
 import { readPoisFromPbf } from "./lib/pbf-reader";
 import { processWithConcurrency } from "./lib/concurrency";
+import { buildWikipediaUrl } from "../src/lib/web/wikipedia";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -561,7 +562,7 @@ async function main() {
       : null;
 
     const wikipediaUrl = osmTags.wikipedia
-      ? `https://en.wikipedia.org/wiki/${osmTags.wikipedia.split(":").pop()}`
+      ? buildWikipediaUrl(osmTags.wikipedia) ?? null
       : null;
 
     const [insertedPoi] = await db

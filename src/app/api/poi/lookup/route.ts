@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { ExternalPOI } from "@/lib/search/types";
 import type { CategorySlug } from "@/types";
 import { createLogger } from "@/lib/logger";
+import { buildWikipediaUrl } from "@/lib/web/wikipedia";
 
 const log = createLogger("poi-lookup");
 import type { RemarkWithPoi } from "@/lib/db/queries/search";
@@ -395,6 +396,9 @@ async function lookupFromNominatim(
       openingHours: extraTags.opening_hours,
       cuisine: extraTags.cuisine,
       hasOutdoorSeating: extraTags.outdoor_seating === "yes",
+      wikipediaUrl: extraTags.wikipedia
+        ? buildWikipediaUrl(extraTags.wikipedia)
+        : undefined,
       source: "nominatim",
     };
   } catch (error) {

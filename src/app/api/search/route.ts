@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
     const intent = await parseQueryIntent(query);
     const parseMs = Date.now() - parseStart;
 
-    if (intent.type === "discovery" || intent.isDiscovery) {
+    if (intent.isDiscovery) {
       const randomRemark = await getRandomRemark(
         location.latitude,
         location.longitude,
@@ -155,13 +155,6 @@ export async function POST(request: NextRequest) {
     log.info(`Query: "${query}", category: ${intent.category}`);
 
     const radiusKm = radius / 1000;
-    const keywordsWithCuisine = [
-      ...intent.keywords,
-      ...(intent.cuisineTypes ?? []),
-    ];
-    const uniqueKeywords = [...new Set(keywordsWithCuisine)];
-    const searchQuery =
-      uniqueKeywords.length > 0 ? uniqueKeywords.join(" ") : query;
 
     const typesenseFilters: Parameters<typeof searchPOIs>[3] = {};
     if (intent.category) typesenseFilters.category = intent.category;
@@ -172,12 +165,16 @@ export async function POST(request: NextRequest) {
     if (intent.filters.dogFriendly) typesenseFilters.dogFriendly = true;
     if (intent.filters.freeEntry) typesenseFilters.freeEntry = true;
 
+    const hasFacets = !!(intent.category || intent.cuisineTypes?.length);
+    const hasKeywords = intent.keywords.length > 0;
+    const typesenseQuery = hasFacets && !hasKeywords ? "*" : query;
+
     const [typesenseSettled, semanticSettled, obeliskSettled] =
       await Promise.allSettled([
         (async () => {
           const tsStart = Date.now();
           const hits = await searchPOIs(
-            searchQuery,
+            typesenseQuery,
             location,
             radiusKm,
             typesenseFilters,
@@ -204,7 +201,7 @@ export async function POST(request: NextRequest) {
         (async () => {
           const obStart = Date.now();
           const hits = await searchRemarksByText(
-            searchQuery,
+            query,
             location.latitude,
             location.longitude,
             radius,

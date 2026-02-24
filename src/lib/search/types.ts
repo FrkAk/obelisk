@@ -1,20 +1,8 @@
 import type { CategorySlug, Remark, Poi, Category } from "@/types";
 
-export type SearchQueryType =
-  | "simple"
-  | "contextual"
-  | "complex"
-  | "discovery"
-  | "route";
-
-export type SearchMode = "name" | "keyword" | "conversational";
-
 export interface ParsedIntent {
-  type?: SearchQueryType;
-  mode?: SearchMode;
   category?: CategorySlug;
   keywords: string[];
-  placeName?: string;
   cuisineTypes?: string[];
   filters: SearchFilters;
   isDiscovery?: boolean;

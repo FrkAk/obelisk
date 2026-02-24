@@ -35,6 +35,7 @@ const externalPoiSchema = z.object({
   hasOutdoorSeating: z.boolean().optional(),
   imageUrl: z.string().optional(),
   wikipediaUrl: z.string().optional(),
+  extraTags: z.record(z.string(), z.string()).optional(),
   source: z.enum(["nominatim", "overpass"]),
 });
 
@@ -223,7 +224,9 @@ async function createPoiFromExternal(
   const allCategories = await db.select().from(categories);
   const category = allCategories.find((c) => c.slug === categorySlug);
 
-  const osmTags: Record<string, string> = {};
+  const osmTags: Record<string, string> = {
+    ...(externalPoi.extraTags ?? {}),
+  };
   if (externalPoi.openingHours) osmTags.opening_hours = externalPoi.openingHours;
   if (externalPoi.phone) osmTags.phone = externalPoi.phone;
   if (externalPoi.website) osmTags.website = externalPoi.website;
@@ -311,6 +314,7 @@ async function generateAndSaveRemark(
     websiteUrl: enrichWebsiteUrl,
     wikipediaUrl: poi.wikipediaUrl,
     locale: poi.locale,
+    osmTags: poi.osmTags,
   });
 
   log.info(`Generating story for: "${poi.name}" with category: "${categoryName}"`);

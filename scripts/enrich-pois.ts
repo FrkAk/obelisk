@@ -236,6 +236,7 @@ async function main() {
         websiteUrl: poi.website?.[0] ?? null,
         wikipediaUrl: poi.wikipediaUrl,
         locale: poi.locale,
+        osmTags: poi.osmTags,
       };
 
       try {

@@ -138,6 +138,7 @@ export interface ExternalPOI {
   hasOutdoorSeating?: boolean;
   imageUrl?: string;
   wikipediaUrl?: string;
+  extraTags?: Record<string, string>;
   source: "nominatim" | "overpass" | "obelisk-db";
 }
 

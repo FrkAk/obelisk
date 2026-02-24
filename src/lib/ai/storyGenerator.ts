@@ -13,6 +13,11 @@ import type {
   NightlifeProfile,
   ShoppingProfile,
   ViewpointProfile,
+  TransportProfile,
+  EducationProfile,
+  HealthProfile,
+  SportsProfile,
+  ServicesProfile,
   Cuisine,
   PoiDish,
   Dish,
@@ -28,6 +33,11 @@ export type ProfileUnion =
   | NightlifeProfile
   | ShoppingProfile
   | ViewpointProfile
+  | TransportProfile
+  | EducationProfile
+  | HealthProfile
+  | SportsProfile
+  | ServicesProfile
   | null;
 
 export interface StoryPoiContext {
@@ -109,6 +119,31 @@ const CATEGORY_PERSONAS: Record<string, CategoryPersona> = {
     perspective: "Focus on the atmosphere, the drinks, the crowd, and what makes this spot stand out after dark.",
     tipStyle: "Share a nightlife insider tip - best nights to go, signature drinks, or how to get past the door.",
   },
+  transport: {
+    voice: "You're the friend who knows every bus line, metro connection, and shortcut through the city. You appreciate the engineering behind transit systems and know which stations have stories to tell.",
+    perspective: "Focus on the transit experience - the connections, the architecture of the station, its role in the city's mobility. What makes this stop more than just a place to wait?",
+    tipStyle: "Share a transit insider tip - best connections, off-peak times, or interesting features of this station.",
+  },
+  education: {
+    voice: "You're the intellectually curious friend who loves campus walks and library visits. You know which institutions shaped the city's academic identity and where knowledge comes alive.",
+    perspective: "Focus on the academic and intellectual significance - what's taught or researched here, who walked these halls, what makes this institution special.",
+    tipStyle: "Share an education insider tip - public lectures, library access, campus tours, or notable spots to visit.",
+  },
+  health: {
+    voice: "You're the wellness-minded friend who knows every spa, clinic, and healing spot in town. You value places that care for body and mind.",
+    perspective: "Focus on the care and wellness aspect - what services are offered, the atmosphere, the history of healing at this location.",
+    tipStyle: "Share a practical health tip - booking advice, what to expect, or hidden wellness features.",
+  },
+  sports: {
+    voice: "You're the sports enthusiast who knows every pitch, pool, and arena. You live for match days and morning runs, and you know the stories behind the venues.",
+    perspective: "Focus on the sporting experience - the atmosphere, the history of competitions here, what activities are available.",
+    tipStyle: "Share a sports insider tip - best times to visit, equipment rental, or the best spot to watch a match.",
+  },
+  services: {
+    voice: "You're the practical friend who knows how the city works. You've navigated every bureaucracy and know which service points have surprising histories.",
+    perspective: "Focus on what makes this service point noteworthy beyond its function - its architecture, history, or role in the community.",
+    tipStyle: "Share a practical tip - best times to avoid queues, online alternatives, or an interesting historical detail.",
+  },
 };
 
 const DEFAULT_PERSONA: CategoryPersona = {
@@ -121,25 +156,39 @@ function getPersona(categorySlug: string): CategoryPersona {
   return CATEGORY_PERSONAS[categorySlug] ?? DEFAULT_PERSONA;
 }
 
+/**
+ * Scores POI data richness to determine story generation confidence level.
+ * Considers profile completeness, OSM tags, Wikipedia, tags, and cuisines.
+ *
+ * @param ctx - Full POI context with profile and metadata.
+ * @returns Confidence level: "high" (score >= 5), "medium" (>= 2), or "low".
+ */
 function assessConfidence(ctx: StoryPoiContext): "high" | "medium" | "low" {
   const { ratio } = profileCompleteness(ctx.profile);
-  const hasTags = ctx.tags.length > 0;
-  const hasCuisines = (ctx.cuisines?.length ?? 0) > 0;
-  const hasDishes = (ctx.dishes?.length ?? 0) > 0;
-  const hasContact = ctx.contactInfo != null;
+  let score = ratio * 4;
 
-  let score = ratio * 5;
-  if (hasTags) score += 1;
-  if (hasCuisines) score += 1;
-  if (hasDishes) score += 1;
-  if (hasContact) score += 1;
-  if (ctx.poi.wikipediaUrl) score += 1;
+  const osmTagCount = Object.keys(ctx.poi.osmTags ?? {}).length;
+  if (osmTagCount >= 5) score += 1;
+  if (osmTagCount >= 10) score += 1;
+
+  if (ctx.poi.wikipediaUrl) score += 2;
+
+  if (ctx.tags.length > 0) score += 1;
+  if (ctx.contactInfo != null) score += 1;
+
+  if ((ctx.cuisines?.length ?? 0) > 0) score += 1;
 
   if (score >= 5) return "high";
   if (score >= 2) return "medium";
   return "low";
 }
 
+/**
+ * Builds a metadata object summarizing the data sources used for story generation.
+ *
+ * @param ctx - Full POI context with profile and metadata.
+ * @returns Metadata record with profile stats, tag/cuisine/dish counts, and flags.
+ */
 function buildContextSources(ctx: StoryPoiContext): Record<string, unknown> {
   const completeness = profileCompleteness(ctx.profile);
   return {
@@ -381,6 +430,129 @@ function buildViewpointContext(ctx: StoryPoiContext): string {
   return parts.length > 0 ? parts.join("\n") : "Limited viewpoint profile data.";
 }
 
+/**
+ * Builds a human-readable context string from a transport profile for the LLM prompt.
+ *
+ * @param ctx - Story POI context with a transport profile.
+ * @returns Newline-separated profile summary string.
+ */
+function buildTransportContext(ctx: StoryPoiContext): string {
+  const tp = ctx.profile as TransportProfile;
+  if (!tp) return "No profile data available.";
+
+  const parts: string[] = [];
+  if (tp.subtype) parts.push(`Type: ${tp.subtype}`);
+  if (tp.lines?.length) parts.push(`Lines: ${tp.lines.join(", ")}`);
+  if (tp.operator) parts.push(`Operator: ${tp.operator}`);
+  if (tp.yearOpened != null) parts.push(`Opened: ${tp.yearOpened}`);
+  if (tp.dailyRidership) parts.push(`Daily ridership: ${tp.dailyRidership}`);
+  if (tp.isInterchange) parts.push("Major interchange");
+  if (tp.hasElevator) parts.push("Elevator access");
+  if (tp.hasBikeParking) parts.push("Bike parking");
+  if (tp.notableFeatures) parts.push(`Notable: ${tp.notableFeatures}`);
+  if (tp.nearbyConnections?.length) parts.push(`Connections: ${tp.nearbyConnections.join(", ")}`);
+
+  return parts.length > 0 ? parts.join("\n") : "Limited transport profile data.";
+}
+
+/**
+ * Builds a human-readable context string from an education profile for the LLM prompt.
+ *
+ * @param ctx - Story POI context with an education profile.
+ * @returns Newline-separated profile summary string.
+ */
+function buildEducationContext(ctx: StoryPoiContext): string {
+  const ep = ctx.profile as EducationProfile;
+  if (!ep) return "No profile data available.";
+
+  const parts: string[] = [];
+  if (ep.subtype) parts.push(`Type: ${ep.subtype}`);
+  if (ep.foundedYear != null) parts.push(`Founded: ${ep.foundedYear}`);
+  if (ep.specialization) parts.push(`Specialization: ${ep.specialization}`);
+  if (ep.notableAlumni?.length) parts.push(`Notable alumni: ${ep.notableAlumni.join(", ")}`);
+  if (ep.studentCount) parts.push(`Students: ${ep.studentCount}`);
+  if (ep.isPublic) parts.push("Public institution");
+  if (ep.hasPublicAccess) parts.push("Public access available");
+  if (ep.hasLibrary) parts.push("Has library");
+  if (ep.architecturalNote) parts.push(`Architecture: ${ep.architecturalNote}`);
+  if (ep.notableFeatures) parts.push(`Notable: ${ep.notableFeatures}`);
+
+  return parts.length > 0 ? parts.join("\n") : "Limited education profile data.";
+}
+
+/**
+ * Builds a human-readable context string from a health profile for the LLM prompt.
+ *
+ * @param ctx - Story POI context with a health profile.
+ * @returns Newline-separated profile summary string.
+ */
+function buildHealthContext(ctx: StoryPoiContext): string {
+  const hp = ctx.profile as HealthProfile;
+  if (!hp) return "No profile data available.";
+
+  const parts: string[] = [];
+  if (hp.subtype) parts.push(`Type: ${hp.subtype}`);
+  if (hp.specialization) parts.push(`Specialization: ${hp.specialization}`);
+  if (hp.foundedYear != null) parts.push(`Founded: ${hp.foundedYear}`);
+  if (hp.isEmergency) parts.push("Emergency services");
+  if (hp.spokenLanguages?.length) parts.push(`Languages: ${hp.spokenLanguages.join(", ")}`);
+  if (hp.facilities?.length) parts.push(`Facilities: ${hp.facilities.join(", ")}`);
+  if (hp.notableFeatures) parts.push(`Notable: ${hp.notableFeatures}`);
+  if (hp.vibe) parts.push(`Vibe: ${hp.vibe}`);
+
+  return parts.length > 0 ? parts.join("\n") : "Limited health profile data.";
+}
+
+/**
+ * Builds a human-readable context string from a sports profile for the LLM prompt.
+ *
+ * @param ctx - Story POI context with a sports profile.
+ * @returns Newline-separated profile summary string.
+ */
+function buildSportsContext(ctx: StoryPoiContext): string {
+  const sp = ctx.profile as SportsProfile;
+  if (!sp) return "No profile data available.";
+
+  const parts: string[] = [];
+  if (sp.subtype) parts.push(`Type: ${sp.subtype}`);
+  if (sp.sports?.length) parts.push(`Sports: ${sp.sports.join(", ")}`);
+  if (sp.homeTeam) parts.push(`Home team: ${sp.homeTeam}`);
+  if (sp.capacity) parts.push(`Capacity: ${sp.capacity}`);
+  if (sp.yearBuilt != null) parts.push(`Built: ${sp.yearBuilt}`);
+  if (sp.isPublicAccess) parts.push("Public access");
+  if (sp.hasEquipmentRental) parts.push("Equipment rental");
+  if (sp.hasCoaching) parts.push("Coaching available");
+  if (sp.notableEvents?.length) parts.push(`Events: ${sp.notableEvents.join(", ")}`);
+  if (sp.notableFeatures) parts.push(`Notable: ${sp.notableFeatures}`);
+  if (sp.vibe) parts.push(`Vibe: ${sp.vibe}`);
+
+  return parts.length > 0 ? parts.join("\n") : "Limited sports profile data.";
+}
+
+/**
+ * Builds a human-readable context string from a services profile for the LLM prompt.
+ *
+ * @param ctx - Story POI context with a services profile.
+ * @returns Newline-separated profile summary string.
+ */
+function buildServicesContext(ctx: StoryPoiContext): string {
+  const sv = ctx.profile as ServicesProfile;
+  if (!sv) return "No profile data available.";
+
+  const parts: string[] = [];
+  if (sv.subtype) parts.push(`Type: ${sv.subtype}`);
+  if (sv.serviceType) parts.push(`Service: ${sv.serviceType}`);
+  if (sv.operator) parts.push(`Operator: ${sv.operator}`);
+  if (sv.foundedYear != null) parts.push(`Founded: ${sv.foundedYear}`);
+  if (sv.hasOnlineBooking) parts.push("Online booking available");
+  if (sv.spokenLanguages?.length) parts.push(`Languages: ${sv.spokenLanguages.join(", ")}`);
+  if (sv.waitTimeNote) parts.push(`Wait time: ${sv.waitTimeNote}`);
+  if (sv.historicalNote) parts.push(`History: ${sv.historicalNote}`);
+  if (sv.notableFeatures) parts.push(`Notable: ${sv.notableFeatures}`);
+
+  return parts.length > 0 ? parts.join("\n") : "Limited services profile data.";
+}
+
 const CONTEXT_BUILDERS: Record<string, (ctx: StoryPoiContext) => string> = {
   food: buildFoodContext,
   history: buildHistoryContext,
@@ -391,6 +563,11 @@ const CONTEXT_BUILDERS: Record<string, (ctx: StoryPoiContext) => string> = {
   views: buildViewpointContext,
   nightlife: buildNightlifeContext,
   shopping: buildShoppingContext,
+  transport: buildTransportContext,
+  education: buildEducationContext,
+  health: buildHealthContext,
+  sports: buildSportsContext,
+  services: buildServicesContext,
 };
 
 function buildProfileContextString(ctx: StoryPoiContext): string {

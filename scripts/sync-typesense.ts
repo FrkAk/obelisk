@@ -11,6 +11,11 @@ import {
   nightlifeProfiles,
   shoppingProfiles,
   viewpointProfiles,
+  transportProfiles,
+  educationProfiles,
+  healthProfiles,
+  sportsProfiles,
+  servicesProfiles,
   poiTranslations,
   poiTags,
   tags,
@@ -168,6 +173,103 @@ async function loadViewpointProfiles() {
 }
 
 /**
+ * Loads transport profile fields for all POIs from the database.
+ *
+ * @returns Array of transport profile rows with search-relevant fields.
+ */
+async function loadTransportProfiles() {
+  return db
+    .select({
+      poiId: transportProfiles.poiId,
+      subtype: transportProfiles.subtype,
+      lines: transportProfiles.lines,
+      operator: transportProfiles.operator,
+      yearOpened: transportProfiles.yearOpened,
+      dailyRidership: transportProfiles.dailyRidership,
+      isInterchange: transportProfiles.isInterchange,
+      hasElevator: transportProfiles.hasElevator,
+      hasBikeParking: transportProfiles.hasBikeParking,
+    })
+    .from(transportProfiles);
+}
+
+/**
+ * Loads education profile fields for all POIs from the database.
+ *
+ * @returns Array of education profile rows with search-relevant fields.
+ */
+async function loadEducationProfiles() {
+  return db
+    .select({
+      poiId: educationProfiles.poiId,
+      subtype: educationProfiles.subtype,
+      foundedYear: educationProfiles.foundedYear,
+      specialization: educationProfiles.specialization,
+      notableAlumni: educationProfiles.notableAlumni,
+      isPublic: educationProfiles.isPublic,
+      hasPublicAccess: educationProfiles.hasPublicAccess,
+      hasLibrary: educationProfiles.hasLibrary,
+    })
+    .from(educationProfiles);
+}
+
+/**
+ * Loads health profile fields for all POIs from the database.
+ *
+ * @returns Array of health profile rows with search-relevant fields.
+ */
+async function loadHealthProfiles() {
+  return db
+    .select({
+      poiId: healthProfiles.poiId,
+      subtype: healthProfiles.subtype,
+      specialization: healthProfiles.specialization,
+      isEmergency: healthProfiles.isEmergency,
+      spokenLanguages: healthProfiles.spokenLanguages,
+      facilities: healthProfiles.facilities,
+    })
+    .from(healthProfiles);
+}
+
+/**
+ * Loads sports profile fields for all POIs from the database.
+ *
+ * @returns Array of sports profile rows with search-relevant fields.
+ */
+async function loadSportsProfiles() {
+  return db
+    .select({
+      poiId: sportsProfiles.poiId,
+      subtype: sportsProfiles.subtype,
+      sports: sportsProfiles.sports,
+      homeTeam: sportsProfiles.homeTeam,
+      capacity: sportsProfiles.capacity,
+      isPublicAccess: sportsProfiles.isPublicAccess,
+      hasEquipmentRental: sportsProfiles.hasEquipmentRental,
+      hasCoaching: sportsProfiles.hasCoaching,
+    })
+    .from(sportsProfiles);
+}
+
+/**
+ * Loads services profile fields for all POIs from the database.
+ *
+ * @returns Array of services profile rows with search-relevant fields.
+ */
+async function loadServicesProfiles() {
+  return db
+    .select({
+      poiId: servicesProfiles.poiId,
+      subtype: servicesProfiles.subtype,
+      serviceType: servicesProfiles.serviceType,
+      operator: servicesProfiles.operator,
+      hasOnlineBooking: servicesProfiles.hasOnlineBooking,
+      spokenLanguages: servicesProfiles.spokenLanguages,
+    })
+    .from(servicesProfiles);
+}
+
+/**
  * Loads all POI tags as a map from poiId to tag name array.
  *
  * Returns:
@@ -278,6 +380,7 @@ async function syncTypesense() {
   const [
     foodRows, historyRows, architectureRows, natureRows,
     artCultureRows, nightlifeRows, shoppingRows, viewpointRows,
+    transportRows, educationRows, healthRows, sportsRows, servicesRows,
   ] = await Promise.all([
     loadFoodProfiles(),
     loadHistoryProfiles(),
@@ -287,6 +390,11 @@ async function syncTypesense() {
     loadNightlifeProfiles(),
     loadShoppingProfiles(),
     loadViewpointProfiles(),
+    loadTransportProfiles(),
+    loadEducationProfiles(),
+    loadHealthProfiles(),
+    loadSportsProfiles(),
+    loadServicesProfiles(),
   ]);
 
   const profileMaps: Record<string, Map<string, Record<string, unknown>>> = {
@@ -299,6 +407,11 @@ async function syncTypesense() {
     nightlife: new Map(nightlifeRows.map((r) => [r.poiId, r as Record<string, unknown>])),
     shopping: new Map(shoppingRows.map((r) => [r.poiId, r as Record<string, unknown>])),
     views: new Map(viewpointRows.map((r) => [r.poiId, r as Record<string, unknown>])),
+    transport: new Map(transportRows.map((r) => [r.poiId, r as Record<string, unknown>])),
+    education: new Map(educationRows.map((r) => [r.poiId, r as Record<string, unknown>])),
+    health: new Map(healthRows.map((r) => [r.poiId, r as Record<string, unknown>])),
+    sports: new Map(sportsRows.map((r) => [r.poiId, r as Record<string, unknown>])),
+    services: new Map(servicesRows.map((r) => [r.poiId, r as Record<string, unknown>])),
   };
 
   log.info("Loading tags and dishes...");

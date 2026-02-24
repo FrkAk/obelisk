@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
       websiteUrl,
       wikipediaUrl: existingRemark.poi.wikipediaUrl,
       locale: existingRemark.poi.locale,
+      osmTags: existingRemark.poi.osmTags,
     });
 
     log.info(`Generating new story for: "${existingRemark.poi.name}"`);

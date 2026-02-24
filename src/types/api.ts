@@ -295,6 +295,81 @@ export interface ViewpointProfile {
   confidenceScore: number | null;
 }
 
+export interface TransportProfile {
+  poiId: string;
+  subtype: string | null;
+  lines: string[] | null;
+  operator: string | null;
+  yearOpened: number | null;
+  dailyRidership: number | null;
+  isInterchange: boolean | null;
+  hasElevator: boolean | null;
+  hasBikeParking: boolean | null;
+  notableFeatures: string | null;
+  nearbyConnections: string[] | null;
+  confidenceScore: number | null;
+}
+
+export interface EducationProfile {
+  poiId: string;
+  subtype: string | null;
+  foundedYear: number | null;
+  specialization: string | null;
+  notableAlumni: string[] | null;
+  studentCount: number | null;
+  isPublic: boolean | null;
+  hasPublicAccess: boolean | null;
+  hasLibrary: boolean | null;
+  architecturalNote: string | null;
+  notableFeatures: string | null;
+  confidenceScore: number | null;
+}
+
+export interface HealthProfile {
+  poiId: string;
+  subtype: string | null;
+  specialization: string | null;
+  foundedYear: number | null;
+  isEmergency: boolean | null;
+  acceptsInsurance: boolean | null;
+  hasAppointmentBooking: boolean | null;
+  spokenLanguages: string[] | null;
+  facilities: string[] | null;
+  notableFeatures: string | null;
+  vibe: string | null;
+  confidenceScore: number | null;
+}
+
+export interface SportsProfile {
+  poiId: string;
+  subtype: string | null;
+  sports: string[] | null;
+  homeTeam: string | null;
+  capacity: number | null;
+  yearBuilt: number | null;
+  isPublicAccess: boolean | null;
+  hasEquipmentRental: boolean | null;
+  hasCoaching: boolean | null;
+  notableEvents: string[] | null;
+  notableFeatures: string | null;
+  vibe: string | null;
+  confidenceScore: number | null;
+}
+
+export interface ServicesProfile {
+  poiId: string;
+  subtype: string | null;
+  serviceType: string | null;
+  operator: string | null;
+  foundedYear: number | null;
+  hasOnlineBooking: boolean | null;
+  spokenLanguages: string[] | null;
+  waitTimeNote: string | null;
+  historicalNote: string | null;
+  notableFeatures: string | null;
+  confidenceScore: number | null;
+}
+
 export interface Cuisine {
   id: string;
   slug: string;
@@ -569,6 +644,11 @@ export type PoiWithProfile = Poi & {
   nightlifeProfile: NightlifeProfile | null;
   shoppingProfile: ShoppingProfile | null;
   viewpointProfile: ViewpointProfile | null;
+  transportProfile: TransportProfile | null;
+  educationProfile: EducationProfile | null;
+  healthProfile: HealthProfile | null;
+  sportsProfile: SportsProfile | null;
+  servicesProfile: ServicesProfile | null;
 };
 
 export type RemarkWithPoi = Remark & { poi: Poi & { category?: Category } };

@@ -399,6 +399,7 @@ async function lookupFromNominatim(
       wikipediaUrl: extraTags.wikipedia
         ? buildWikipediaUrl(extraTags.wikipedia)
         : undefined,
+      extraTags,
       source: "nominatim",
     };
   } catch (error) {

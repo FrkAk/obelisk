@@ -243,6 +243,76 @@ export interface ViewpointExtraction {
   confidence_score?: number;
 }
 
+export interface TransportExtraction {
+  subtype?: string;
+  lines?: string[];
+  operator?: string;
+  year_opened?: number;
+  daily_ridership?: number;
+  is_interchange?: boolean;
+  has_elevator?: boolean;
+  has_bike_parking?: boolean;
+  notable_features?: string;
+  nearby_connections?: string[];
+  confidence_score?: number;
+}
+
+export interface EducationExtraction {
+  subtype?: string;
+  founded_year?: number;
+  specialization?: string;
+  notable_alumni?: string[];
+  student_count?: number;
+  is_public?: boolean;
+  has_public_access?: boolean;
+  has_library?: boolean;
+  architectural_note?: string;
+  notable_features?: string;
+  confidence_score?: number;
+}
+
+export interface HealthExtraction {
+  subtype?: string;
+  specialization?: string;
+  founded_year?: number;
+  is_emergency?: boolean;
+  accepts_insurance?: boolean;
+  has_appointment_booking?: boolean;
+  spoken_languages?: string[];
+  facilities?: string[];
+  notable_features?: string;
+  vibe?: string;
+  confidence_score?: number;
+}
+
+export interface SportsExtraction {
+  subtype?: string;
+  sports?: string[];
+  home_team?: string;
+  capacity?: number;
+  year_built?: number;
+  is_public_access?: boolean;
+  has_equipment_rental?: boolean;
+  has_coaching?: boolean;
+  notable_events?: string[];
+  notable_features?: string;
+  vibe?: string;
+  confidence_score?: number;
+}
+
+export interface ServicesExtraction {
+  subtype?: string;
+  service_type?: string;
+  operator?: string;
+  founded_year?: number;
+  has_online_booking?: boolean;
+  spoken_languages?: string[];
+  wait_time_note?: string;
+  historical_note?: string;
+  notable_features?: string;
+  confidence_score?: number;
+}
+
 export interface MenuDishExtraction {
   name: string;
   local_name?: string;
@@ -448,6 +518,121 @@ function validateViewpointExtraction(raw: ViewpointExtraction): Partial<Viewpoin
   return stripNulls(result);
 }
 
+/**
+ * Validates and sanitizes raw transport extraction output from LLM.
+ *
+ * @param raw - Raw LLM extraction result.
+ * @returns Sanitized partial transport extraction with only valid fields.
+ */
+function validateTransportExtraction(raw: TransportExtraction): Partial<TransportExtraction> {
+  const result: Partial<TransportExtraction> = {};
+
+  result.subtype = truncate(raw.subtype, 50);
+  if (typeof raw.operator === "string") result.operator = truncate(raw.operator, 200);
+  result.year_opened = clampInt(raw.year_opened, 0, 2100);
+  result.daily_ridership = clampInt(raw.daily_ridership, 0, 100000000);
+  if (typeof raw.is_interchange === "boolean") result.is_interchange = raw.is_interchange;
+  if (typeof raw.has_elevator === "boolean") result.has_elevator = raw.has_elevator;
+  if (typeof raw.has_bike_parking === "boolean") result.has_bike_parking = raw.has_bike_parking;
+  if (typeof raw.notable_features === "string") result.notable_features = raw.notable_features;
+  if (Array.isArray(raw.lines)) result.lines = raw.lines.slice(0, 10);
+  if (Array.isArray(raw.nearby_connections)) result.nearby_connections = raw.nearby_connections.slice(0, 5);
+
+  return stripNulls(result);
+}
+
+/**
+ * Validates and sanitizes raw education extraction output from LLM.
+ *
+ * @param raw - Raw LLM extraction result.
+ * @returns Sanitized partial education extraction with only valid fields.
+ */
+function validateEducationExtraction(raw: EducationExtraction): Partial<EducationExtraction> {
+  const result: Partial<EducationExtraction> = {};
+
+  result.subtype = truncate(raw.subtype, 50);
+  if (typeof raw.specialization === "string") result.specialization = truncate(raw.specialization, 200);
+  result.founded_year = clampInt(raw.founded_year, 0, 2100);
+  result.student_count = clampInt(raw.student_count, 0, 1000000);
+  if (typeof raw.is_public === "boolean") result.is_public = raw.is_public;
+  if (typeof raw.has_public_access === "boolean") result.has_public_access = raw.has_public_access;
+  if (typeof raw.has_library === "boolean") result.has_library = raw.has_library;
+  if (typeof raw.architectural_note === "string") result.architectural_note = raw.architectural_note;
+  if (typeof raw.notable_features === "string") result.notable_features = raw.notable_features;
+  if (Array.isArray(raw.notable_alumni)) result.notable_alumni = raw.notable_alumni.slice(0, 5);
+
+  return stripNulls(result);
+}
+
+/**
+ * Validates and sanitizes raw health extraction output from LLM.
+ *
+ * @param raw - Raw LLM extraction result.
+ * @returns Sanitized partial health extraction with only valid fields.
+ */
+function validateHealthExtraction(raw: HealthExtraction): Partial<HealthExtraction> {
+  const result: Partial<HealthExtraction> = {};
+
+  result.subtype = truncate(raw.subtype, 50);
+  if (typeof raw.specialization === "string") result.specialization = truncate(raw.specialization, 200);
+  result.founded_year = clampInt(raw.founded_year, 0, 2100);
+  if (typeof raw.is_emergency === "boolean") result.is_emergency = raw.is_emergency;
+  if (typeof raw.accepts_insurance === "boolean") result.accepts_insurance = raw.accepts_insurance;
+  if (typeof raw.has_appointment_booking === "boolean") result.has_appointment_booking = raw.has_appointment_booking;
+  if (typeof raw.notable_features === "string") result.notable_features = raw.notable_features;
+  if (typeof raw.vibe === "string") result.vibe = raw.vibe;
+  if (Array.isArray(raw.spoken_languages)) result.spoken_languages = raw.spoken_languages.slice(0, 5);
+  if (Array.isArray(raw.facilities)) result.facilities = raw.facilities.slice(0, 5);
+
+  return stripNulls(result);
+}
+
+/**
+ * Validates and sanitizes raw sports extraction output from LLM.
+ *
+ * @param raw - Raw LLM extraction result.
+ * @returns Sanitized partial sports extraction with only valid fields.
+ */
+function validateSportsExtraction(raw: SportsExtraction): Partial<SportsExtraction> {
+  const result: Partial<SportsExtraction> = {};
+
+  result.subtype = truncate(raw.subtype, 50);
+  if (typeof raw.home_team === "string") result.home_team = truncate(raw.home_team, 200);
+  result.capacity = clampInt(raw.capacity, 0, 500000);
+  result.year_built = clampInt(raw.year_built, 0, 2100);
+  if (typeof raw.is_public_access === "boolean") result.is_public_access = raw.is_public_access;
+  if (typeof raw.has_equipment_rental === "boolean") result.has_equipment_rental = raw.has_equipment_rental;
+  if (typeof raw.has_coaching === "boolean") result.has_coaching = raw.has_coaching;
+  if (typeof raw.notable_features === "string") result.notable_features = raw.notable_features;
+  if (typeof raw.vibe === "string") result.vibe = raw.vibe;
+  if (Array.isArray(raw.sports)) result.sports = raw.sports.slice(0, 5);
+  if (Array.isArray(raw.notable_events)) result.notable_events = raw.notable_events.slice(0, 5);
+
+  return stripNulls(result);
+}
+
+/**
+ * Validates and sanitizes raw services extraction output from LLM.
+ *
+ * @param raw - Raw LLM extraction result.
+ * @returns Sanitized partial services extraction with only valid fields.
+ */
+function validateServicesExtraction(raw: ServicesExtraction): Partial<ServicesExtraction> {
+  const result: Partial<ServicesExtraction> = {};
+
+  result.subtype = truncate(raw.subtype, 50);
+  if (typeof raw.service_type === "string") result.service_type = truncate(raw.service_type, 100);
+  if (typeof raw.operator === "string") result.operator = truncate(raw.operator, 200);
+  result.founded_year = clampInt(raw.founded_year, 0, 2100);
+  if (typeof raw.has_online_booking === "boolean") result.has_online_booking = raw.has_online_booking;
+  if (typeof raw.wait_time_note === "string") result.wait_time_note = raw.wait_time_note;
+  if (typeof raw.historical_note === "string") result.historical_note = raw.historical_note;
+  if (typeof raw.notable_features === "string") result.notable_features = raw.notable_features;
+  if (Array.isArray(raw.spoken_languages)) result.spoken_languages = raw.spoken_languages.slice(0, 5);
+
+  return stripNulls(result);
+}
+
 // ---------------------------------------------------------------------------
 // User prompt builders
 // ---------------------------------------------------------------------------
@@ -635,6 +820,136 @@ Fields to extract:
 - steps_count: integer
 - photography_tips: one sentence tip
 - crowd_level: "low" | "moderate" | "high" | "very_high"
+
+TEXT:
+${scrapedText.slice(0, 6000)}`;
+}
+
+/**
+ * Builds an LLM user prompt for extracting transport hub profile data.
+ *
+ * @param poiName - Name of the POI for prompt context.
+ * @param scrapedText - Scraped text to extract from (truncated to 6000 chars).
+ * @returns Formatted prompt string with field definitions.
+ */
+function buildTransportUserPrompt(poiName: string, scrapedText: string): string {
+  return `Extract structured transport hub data from the following text about "${poiName}".
+
+Fields to extract:
+- subtype: string (max 50 chars, e.g. "metro_station", "bus_stop", "tram_stop", "train_station", "ferry")
+- lines: array of line names/numbers (max 10)
+- operator: operator name
+- year_opened: integer
+- daily_ridership: integer
+- is_interchange: boolean
+- has_elevator: boolean
+- has_bike_parking: boolean
+- notable_features: one descriptive sentence
+- nearby_connections: array of nearby transport connections (max 5)
+
+TEXT:
+${scrapedText.slice(0, 6000)}`;
+}
+
+/**
+ * Builds an LLM user prompt for extracting education institution profile data.
+ *
+ * @param poiName - Name of the POI for prompt context.
+ * @param scrapedText - Scraped text to extract from (truncated to 6000 chars).
+ * @returns Formatted prompt string with field definitions.
+ */
+function buildEducationUserPrompt(poiName: string, scrapedText: string): string {
+  return `Extract structured education institution data from the following text about "${poiName}".
+
+Fields to extract:
+- subtype: string (max 50 chars, e.g. "university", "school", "library", "research_institute", "academy")
+- founded_year: integer
+- specialization: field of study or focus
+- notable_alumni: array of notable alumni names (max 5)
+- student_count: integer
+- is_public: boolean
+- has_public_access: boolean
+- has_library: boolean
+- architectural_note: one sentence about the building
+- notable_features: one descriptive sentence
+
+TEXT:
+${scrapedText.slice(0, 6000)}`;
+}
+
+/**
+ * Builds an LLM user prompt for extracting health facility profile data.
+ *
+ * @param poiName - Name of the POI for prompt context.
+ * @param scrapedText - Scraped text to extract from (truncated to 6000 chars).
+ * @returns Formatted prompt string with field definitions.
+ */
+function buildHealthUserPrompt(poiName: string, scrapedText: string): string {
+  return `Extract structured health facility data from the following text about "${poiName}".
+
+Fields to extract:
+- subtype: string (max 50 chars, e.g. "hospital", "clinic", "pharmacy", "dental", "spa", "wellness_center")
+- specialization: medical specialty or focus
+- founded_year: integer
+- is_emergency: boolean
+- accepts_insurance: boolean
+- has_appointment_booking: boolean
+- spoken_languages: array of languages spoken (max 5)
+- facilities: array of available facilities (max 5)
+- notable_features: one descriptive sentence
+- vibe: one descriptive sentence
+
+TEXT:
+${scrapedText.slice(0, 6000)}`;
+}
+
+/**
+ * Builds an LLM user prompt for extracting sports venue profile data.
+ *
+ * @param poiName - Name of the POI for prompt context.
+ * @param scrapedText - Scraped text to extract from (truncated to 6000 chars).
+ * @returns Formatted prompt string with field definitions.
+ */
+function buildSportsUserPrompt(poiName: string, scrapedText: string): string {
+  return `Extract structured sports venue data from the following text about "${poiName}".
+
+Fields to extract:
+- subtype: string (max 50 chars, e.g. "stadium", "gym", "sports_center", "swimming_pool", "tennis_court", "climbing_wall")
+- sports: array of sports played/available (max 5)
+- home_team: name of home team if applicable
+- capacity: integer seating/visitor capacity
+- year_built: integer
+- is_public_access: boolean
+- has_equipment_rental: boolean
+- has_coaching: boolean
+- notable_events: array of notable events held here (max 5)
+- notable_features: one descriptive sentence
+- vibe: one descriptive sentence
+
+TEXT:
+${scrapedText.slice(0, 6000)}`;
+}
+
+/**
+ * Builds an LLM user prompt for extracting public service profile data.
+ *
+ * @param poiName - Name of the POI for prompt context.
+ * @param scrapedText - Scraped text to extract from (truncated to 6000 chars).
+ * @returns Formatted prompt string with field definitions.
+ */
+function buildServicesUserPrompt(poiName: string, scrapedText: string): string {
+  return `Extract structured public service data from the following text about "${poiName}".
+
+Fields to extract:
+- subtype: string (max 50 chars, e.g. "post_office", "bank", "police_station", "fire_station", "embassy", "government_office")
+- service_type: string (max 100 chars, type of service provided)
+- operator: operator or governing body
+- founded_year: integer
+- has_online_booking: boolean
+- spoken_languages: array of languages spoken (max 5)
+- wait_time_note: typical wait time description
+- historical_note: historical significance note
+- notable_features: one descriptive sentence
 
 TEXT:
 ${scrapedText.slice(0, 6000)}`;
@@ -924,6 +1239,166 @@ export async function extractViewpointProfile(
 }
 
 /**
+ * Extracts transport profile data from scraped text using LLM.
+ *
+ * Args:
+ *     scrapedText: Unstructured text from web scraping.
+ *     poiName: Name of the POI for context.
+ *     textLength: Full scraped text length before truncation, for confidence calculation.
+ *
+ * Returns:
+ *     Partial transport profile data with confidence score, or null on failure.
+ */
+export async function extractTransportProfile(
+  scrapedText: string,
+  poiName: string,
+  textLength?: number,
+): Promise<Partial<TransportExtraction> | null> {
+  const raw = await chatExtract<TransportExtraction>(
+    EXTRACTION_SYSTEM_PROMPT,
+    buildTransportUserPrompt(poiName, scrapedText),
+  );
+  if (!raw) return null;
+
+  const validated = validateTransportExtraction(raw);
+  validated.confidence_score = calculateConfidence(
+    validated as Record<string, unknown>,
+    10,
+    ["subtype", "lines"],
+    textLength ?? scrapedText.length,
+  );
+  return validated;
+}
+
+/**
+ * Extracts education profile data from scraped text using LLM.
+ *
+ * Args:
+ *     scrapedText: Unstructured text from web scraping.
+ *     poiName: Name of the POI for context.
+ *     textLength: Full scraped text length before truncation, for confidence calculation.
+ *
+ * Returns:
+ *     Partial education profile data with confidence score, or null on failure.
+ */
+export async function extractEducationProfile(
+  scrapedText: string,
+  poiName: string,
+  textLength?: number,
+): Promise<Partial<EducationExtraction> | null> {
+  const raw = await chatExtract<EducationExtraction>(
+    EXTRACTION_SYSTEM_PROMPT,
+    buildEducationUserPrompt(poiName, scrapedText),
+  );
+  if (!raw) return null;
+
+  const validated = validateEducationExtraction(raw);
+  validated.confidence_score = calculateConfidence(
+    validated as Record<string, unknown>,
+    10,
+    ["subtype", "founded_year"],
+    textLength ?? scrapedText.length,
+  );
+  return validated;
+}
+
+/**
+ * Extracts health profile data from scraped text using LLM.
+ *
+ * Args:
+ *     scrapedText: Unstructured text from web scraping.
+ *     poiName: Name of the POI for context.
+ *     textLength: Full scraped text length before truncation, for confidence calculation.
+ *
+ * Returns:
+ *     Partial health profile data with confidence score, or null on failure.
+ */
+export async function extractHealthProfile(
+  scrapedText: string,
+  poiName: string,
+  textLength?: number,
+): Promise<Partial<HealthExtraction> | null> {
+  const raw = await chatExtract<HealthExtraction>(
+    EXTRACTION_SYSTEM_PROMPT,
+    buildHealthUserPrompt(poiName, scrapedText),
+  );
+  if (!raw) return null;
+
+  const validated = validateHealthExtraction(raw);
+  validated.confidence_score = calculateConfidence(
+    validated as Record<string, unknown>,
+    10,
+    ["subtype", "specialization"],
+    textLength ?? scrapedText.length,
+  );
+  return validated;
+}
+
+/**
+ * Extracts sports profile data from scraped text using LLM.
+ *
+ * Args:
+ *     scrapedText: Unstructured text from web scraping.
+ *     poiName: Name of the POI for context.
+ *     textLength: Full scraped text length before truncation, for confidence calculation.
+ *
+ * Returns:
+ *     Partial sports profile data with confidence score, or null on failure.
+ */
+export async function extractSportsProfile(
+  scrapedText: string,
+  poiName: string,
+  textLength?: number,
+): Promise<Partial<SportsExtraction> | null> {
+  const raw = await chatExtract<SportsExtraction>(
+    EXTRACTION_SYSTEM_PROMPT,
+    buildSportsUserPrompt(poiName, scrapedText),
+  );
+  if (!raw) return null;
+
+  const validated = validateSportsExtraction(raw);
+  validated.confidence_score = calculateConfidence(
+    validated as Record<string, unknown>,
+    11,
+    ["subtype", "sports"],
+    textLength ?? scrapedText.length,
+  );
+  return validated;
+}
+
+/**
+ * Extracts services profile data from scraped text using LLM.
+ *
+ * Args:
+ *     scrapedText: Unstructured text from web scraping.
+ *     poiName: Name of the POI for context.
+ *     textLength: Full scraped text length before truncation, for confidence calculation.
+ *
+ * Returns:
+ *     Partial services profile data with confidence score, or null on failure.
+ */
+export async function extractServicesProfile(
+  scrapedText: string,
+  poiName: string,
+  textLength?: number,
+): Promise<Partial<ServicesExtraction> | null> {
+  const raw = await chatExtract<ServicesExtraction>(
+    EXTRACTION_SYSTEM_PROMPT,
+    buildServicesUserPrompt(poiName, scrapedText),
+  );
+  if (!raw) return null;
+
+  const validated = validateServicesExtraction(raw);
+  validated.confidence_score = calculateConfidence(
+    validated as Record<string, unknown>,
+    9,
+    ["subtype", "service_type"],
+    textLength ?? scrapedText.length,
+  );
+  return validated;
+}
+
+/**
  * Extracts menu/dish data from scraped menu page text using LLM.
  *
  * Args:
@@ -985,6 +1460,16 @@ export async function extractProfileByCategory(
       return (await extractShoppingProfile(scrapedText, poiName, textLength)) as Record<string, unknown> | null;
     case "views":
       return (await extractViewpointProfile(scrapedText, poiName, textLength)) as Record<string, unknown> | null;
+    case "transport":
+      return (await extractTransportProfile(scrapedText, poiName, textLength)) as Record<string, unknown> | null;
+    case "education":
+      return (await extractEducationProfile(scrapedText, poiName, textLength)) as Record<string, unknown> | null;
+    case "health":
+      return (await extractHealthProfile(scrapedText, poiName, textLength)) as Record<string, unknown> | null;
+    case "sports":
+      return (await extractSportsProfile(scrapedText, poiName, textLength)) as Record<string, unknown> | null;
+    case "services":
+      return (await extractServicesProfile(scrapedText, poiName, textLength)) as Record<string, unknown> | null;
     default:
       log.warn(`No extractor for category: ${categorySlug}`);
       return null;

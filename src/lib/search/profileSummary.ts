@@ -161,6 +161,111 @@ function buildViewpointSummary(vp: Record<string, unknown>): string | undefined 
   return parts.length > 0 ? parts.join(", ") : undefined;
 }
 
+/**
+ * Builds a comma-separated summary string from a transport profile.
+ *
+ * @param tp - Transport profile record.
+ * @returns Summary string, or undefined if no data.
+ */
+function buildTransportSummary(tp: Record<string, unknown>): string | undefined {
+  const parts: string[] = [];
+
+  if (tp.subtype) parts.push(capitalize(tp.subtype as string));
+  if (tp.lines && (tp.lines as string[]).length > 0) parts.push(`Lines: ${(tp.lines as string[]).slice(0, 4).join(", ")}`);
+  if (tp.operator) parts.push(`Operator: ${tp.operator}`);
+  if (tp.yearOpened) parts.push(`Opened ${tp.yearOpened}`);
+  if (tp.isInterchange) parts.push("Interchange");
+  if (tp.hasElevator) parts.push("Elevator");
+  if (tp.hasBikeParking) parts.push("Bike parking");
+  if (tp.dailyRidership) parts.push(`${tp.dailyRidership} daily riders`);
+
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+/**
+ * Builds a comma-separated summary string from an education profile.
+ *
+ * @param ep - Education profile record.
+ * @returns Summary string, or undefined if no data.
+ */
+function buildEducationSummary(ep: Record<string, unknown>): string | undefined {
+  const parts: string[] = [];
+
+  if (ep.subtype) parts.push(capitalize(ep.subtype as string));
+  if (ep.foundedYear) parts.push(`Founded ${ep.foundedYear}`);
+  if (ep.specialization) parts.push(ep.specialization as string);
+  if (ep.isPublic) parts.push("Public");
+  if (ep.hasPublicAccess) parts.push("Public access");
+  if (ep.hasLibrary) parts.push("Library");
+  if (ep.notableAlumni && (ep.notableAlumni as string[]).length > 0) {
+    parts.push(`Alumni: ${(ep.notableAlumni as string[]).slice(0, 3).join(", ")}`);
+  }
+
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+/**
+ * Builds a comma-separated summary string from a health profile.
+ *
+ * @param hp - Health profile record.
+ * @returns Summary string, or undefined if no data.
+ */
+function buildHealthSummary(hp: Record<string, unknown>): string | undefined {
+  const parts: string[] = [];
+
+  if (hp.subtype) parts.push(capitalize(hp.subtype as string));
+  if (hp.specialization) parts.push(hp.specialization as string);
+  if (hp.isEmergency) parts.push("Emergency");
+  if (hp.spokenLanguages && (hp.spokenLanguages as string[]).length > 0) {
+    parts.push(`Languages: ${(hp.spokenLanguages as string[]).slice(0, 3).join(", ")}`);
+  }
+  if (hp.facilities && (hp.facilities as string[]).length > 0) {
+    parts.push((hp.facilities as string[]).slice(0, 4).join(", "));
+  }
+
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+/**
+ * Builds a comma-separated summary string from a sports profile.
+ *
+ * @param sp - Sports profile record.
+ * @returns Summary string, or undefined if no data.
+ */
+function buildSportsSummary(sp: Record<string, unknown>): string | undefined {
+  const parts: string[] = [];
+
+  if (sp.subtype) parts.push(capitalize(sp.subtype as string));
+  if (sp.sports && (sp.sports as string[]).length > 0) parts.push((sp.sports as string[]).slice(0, 4).join(", "));
+  if (sp.homeTeam) parts.push(`Home: ${sp.homeTeam}`);
+  if (sp.capacity) parts.push(`Capacity: ${sp.capacity}`);
+  if (sp.isPublicAccess) parts.push("Public access");
+  if (sp.hasEquipmentRental) parts.push("Equipment rental");
+  if (sp.hasCoaching) parts.push("Coaching");
+
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+/**
+ * Builds a comma-separated summary string from a services profile.
+ *
+ * @param sv - Services profile record.
+ * @returns Summary string, or undefined if no data.
+ */
+function buildServicesSummary(sv: Record<string, unknown>): string | undefined {
+  const parts: string[] = [];
+
+  if (sv.subtype) parts.push(capitalize(sv.subtype as string));
+  if (sv.serviceType) parts.push(sv.serviceType as string);
+  if (sv.operator) parts.push(`Operator: ${sv.operator}`);
+  if (sv.hasOnlineBooking) parts.push("Online booking");
+  if (sv.spokenLanguages && (sv.spokenLanguages as string[]).length > 0) {
+    parts.push(`Languages: ${(sv.spokenLanguages as string[]).slice(0, 3).join(", ")}`);
+  }
+
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
 const SUMMARY_BUILDERS: Record<string, (profile: Record<string, unknown>) => string | undefined> = {
   food: buildFoodSummary,
   history: buildHistorySummary,
@@ -171,6 +276,11 @@ const SUMMARY_BUILDERS: Record<string, (profile: Record<string, unknown>) => str
   nightlife: buildNightlifeSummary,
   shopping: buildShoppingSummary,
   views: buildViewpointSummary,
+  transport: buildTransportSummary,
+  education: buildEducationSummary,
+  health: buildHealthSummary,
+  sports: buildSportsSummary,
+  services: buildServicesSummary,
 };
 
 /**

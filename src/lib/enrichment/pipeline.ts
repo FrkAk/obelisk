@@ -9,6 +9,11 @@ import {
   nightlifeProfiles,
   shoppingProfiles,
   viewpointProfiles,
+  transportProfiles,
+  educationProfiles,
+  healthProfiles,
+  sportsProfiles,
+  servicesProfiles,
   enrichmentLog,
 } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
@@ -48,7 +53,12 @@ type ProfileTable =
   | typeof artCultureProfiles
   | typeof nightlifeProfiles
   | typeof shoppingProfiles
-  | typeof viewpointProfiles;
+  | typeof viewpointProfiles
+  | typeof transportProfiles
+  | typeof educationProfiles
+  | typeof healthProfiles
+  | typeof sportsProfiles
+  | typeof servicesProfiles;
 
 export interface EnrichInput {
   id: string;
@@ -58,6 +68,7 @@ export interface EnrichInput {
   websiteUrl: string | null;
   wikipediaUrl: string | null;
   locale: string;
+  osmTags?: Record<string, string> | null;
 }
 
 export interface EnrichResult {
@@ -84,6 +95,12 @@ export interface ThrottleCallbacks {
   onRateLimit?: () => void;
 }
 
+/**
+ * Maps a category slug to its corresponding Drizzle profile table.
+ *
+ * @param categorySlug - The category slug (e.g., "food", "transport").
+ * @returns The Drizzle table reference, or null if no profile table exists.
+ */
 function getProfileTable(categorySlug: string): ProfileTable | null {
   const map: Record<string, ProfileTable> = {
     food: foodProfiles,
@@ -95,14 +112,106 @@ function getProfileTable(categorySlug: string): ProfileTable | null {
     nightlife: nightlifeProfiles,
     shopping: shoppingProfiles,
     views: viewpointProfiles,
+    transport: transportProfiles,
+    education: educationProfiles,
+    health: healthProfiles,
+    sports: sportsProfiles,
+    services: servicesProfiles,
   };
   return map[categorySlug] ?? null;
 }
 
+/**
+ * Derives profile fields from OSM tags for a given category.
+ *
+ * Args:
+ *     categorySlug: The category to determine which OSM tags to map.
+ *     osmTags: Raw OSM key-value tags from the POI.
+ *
+ * Returns:
+ *     Object with camelCased profile fields derived from OSM tags.
+ */
+function populateFromOsmTags(
+  categorySlug: string,
+  osmTags: Record<string, string>,
+): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+
+  switch (categorySlug) {
+    case "architecture":
+      if (osmTags.architect) fields.architect = osmTags.architect;
+      if (osmTags.start_date) {
+        const year = parseInt(osmTags.start_date, 10);
+        if (!isNaN(year)) fields.yearBuilt = year;
+      }
+      if (osmTags.height) {
+        const h = parseFloat(osmTags.height);
+        if (!isNaN(h)) fields.heightMeters = String(h);
+      }
+      if (osmTags["heritage:operator"] || osmTags.heritage) {
+        fields.heritageLevel = osmTags["heritage:operator"] === "whc" ? "unesco" : "regional";
+      }
+      if (osmTags.denomination) fields.denomination = osmTags.denomination;
+      break;
+    case "history":
+      if (osmTags.start_date) {
+        const year = parseInt(osmTags.start_date, 10);
+        if (!isNaN(year)) fields.yearBuilt = year;
+      }
+      if (osmTags["heritage:operator"] || osmTags.heritage) {
+        fields.heritageLevel = osmTags["heritage:operator"] === "whc" ? "unesco" : "regional";
+      }
+      break;
+    case "art":
+    case "culture":
+      if (osmTags.start_date) {
+        const year = parseInt(osmTags.start_date, 10);
+        if (!isNaN(year)) fields.foundedYear = year;
+      }
+      break;
+    case "nature":
+      if (osmTags.lit === "yes") fields.litAtNight = true;
+      break;
+    case "transport":
+      if (osmTags.operator) fields.operator = osmTags.operator;
+      if (osmTags.network) fields.lines = [osmTags.network];
+      if (osmTags.elevator === "yes") fields.hasElevator = true;
+      break;
+    case "sports":
+      if (osmTags.sport) fields.sports = osmTags.sport.split(";").map(s => s.trim());
+      if (osmTags.capacity) {
+        const cap = parseInt(osmTags.capacity, 10);
+        if (!isNaN(cap)) fields.capacity = cap;
+      }
+      break;
+    case "health":
+      if (osmTags["healthcare:speciality"]) fields.specialization = osmTags["healthcare:speciality"];
+      if (osmTags.emergency === "yes") fields.isEmergency = true;
+      break;
+    case "services":
+      if (osmTags.operator) fields.operator = osmTags.operator;
+      break;
+  }
+
+  return fields;
+}
+
+/**
+ * Converts a snake_case string to camelCase.
+ *
+ * @param s - Snake_case input string.
+ * @returns CamelCase output string.
+ */
 function snakeToCamel(s: string): string {
   return s.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
 
+/**
+ * Converts LLM extraction keys from snake_case to camelCase for DB column mapping.
+ *
+ * @param extracted - Raw extraction result with snake_case keys.
+ * @returns Object with camelCase keys matching Drizzle column names.
+ */
 function mapExtractedToProfileFields(
   extracted: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -144,6 +253,15 @@ export async function hasRecentEnrichment(
   return rows.length > 0;
 }
 
+/**
+ * Inserts an enrichment log entry for tracking pipeline runs.
+ *
+ * @param poiId - The POI UUID.
+ * @param source - Enrichment source identifier (e.g., "enrich").
+ * @param status - Result status (e.g., "success", "rate_limited").
+ * @param fieldsUpdated - List of profile fields that were updated.
+ * @param metadata - Additional metadata about the enrichment run.
+ */
 async function logEnrichment(
   poiId: string,
   source: string,
@@ -160,6 +278,14 @@ async function logEnrichment(
   });
 }
 
+/**
+ * Builds an update set that only fills null columns, preserving existing data.
+ *
+ * @param profileTable - The Drizzle profile table to check against.
+ * @param poiId - The POI UUID to look up existing data.
+ * @param extracted - New field values to potentially apply.
+ * @returns Object containing only fields that are currently null in the DB.
+ */
 async function buildNullOnlyUpdate(
   profileTable: ProfileTable,
   poiId: string,
@@ -329,7 +455,40 @@ export async function extractAndSaveProfile(
     };
   }
 
+  const osmFields = input.osmTags ? populateFromOsmTags(categorySlug, input.osmTags) : {};
+
   if (!gathered.allScrapedText.trim()) {
+    if (Object.keys(osmFields).length > 0 && profileTable) {
+      const updateSet = await buildNullOnlyUpdate(profileTable, id, osmFields);
+      const fieldsUpdated = Object.keys(updateSet);
+      if (fieldsUpdated.length > 0) {
+        const existingRows = await db
+          .select()
+          .from(profileTable)
+          .where(eq(profileTable.poiId, id))
+          .limit(1);
+        if (existingRows.length === 0) {
+          await db.insert(profileTable).values({
+            poiId: id,
+            ...updateSet,
+          } as typeof profileTable.$inferInsert);
+        } else {
+          await db
+            .update(profileTable)
+            .set(updateSet as Partial<typeof profileTable.$inferInsert>)
+            .where(eq(profileTable.poiId, id));
+        }
+        await db.update(pois).set({ embedding: sql`NULL` }).where(eq(pois.id, id));
+        await logEnrichment(id, "enrich", "success", fieldsUpdated.map(f => `${categorySlug}_profiles.${f}`), enrichMetadata);
+        return {
+          fieldsUpdated: fieldsUpdated.map(f => `${categorySlug}_profiles.${f}`),
+          status: "success" as EnrichStatus,
+          confidenceScore: null,
+          searchSource: gathered.searchSource,
+          hasWikipedia: gathered.hasWikipedia,
+        };
+      }
+    }
     const status: EnrichStatus = gathered.searchResponse.meta.rateLimited
       ? "rate_limited"
       : "no_results";
@@ -364,7 +523,7 @@ export async function extractAndSaveProfile(
     };
   }
 
-  const camelCased = mapExtractedToProfileFields(extracted);
+  const camelCased = { ...osmFields, ...mapExtractedToProfileFields(extracted) };
   const confidenceScore =
     typeof camelCased.confidenceScore === "number"
       ? (camelCased.confidenceScore as number)

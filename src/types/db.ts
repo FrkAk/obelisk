@@ -17,6 +17,11 @@ import type {
   nightlifeProfiles,
   shoppingProfiles,
   viewpointProfiles,
+  transportProfiles,
+  educationProfiles,
+  healthProfiles,
+  sportsProfiles,
+  servicesProfiles,
   cuisines,
   poiCuisines,
   dishes,
@@ -61,6 +66,11 @@ export type NewArtCultureProfile = InferInsertModel<typeof artCultureProfiles>;
 export type NewNightlifeProfile = InferInsertModel<typeof nightlifeProfiles>;
 export type NewShoppingProfile = InferInsertModel<typeof shoppingProfiles>;
 export type NewViewpointProfile = InferInsertModel<typeof viewpointProfiles>;
+export type NewTransportProfile = InferInsertModel<typeof transportProfiles>;
+export type NewEducationProfile = InferInsertModel<typeof educationProfiles>;
+export type NewHealthProfile = InferInsertModel<typeof healthProfiles>;
+export type NewSportsProfile = InferInsertModel<typeof sportsProfiles>;
+export type NewServicesProfile = InferInsertModel<typeof servicesProfiles>;
 export type NewCuisine = InferInsertModel<typeof cuisines>;
 export type NewPoiCuisine = InferInsertModel<typeof poiCuisines>;
 export type NewDish = InferInsertModel<typeof dishes>;

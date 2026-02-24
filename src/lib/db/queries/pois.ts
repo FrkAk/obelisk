@@ -18,6 +18,11 @@ import {
   nightlifeProfiles,
   shoppingProfiles,
   viewpointProfiles,
+  transportProfiles,
+  educationProfiles,
+  healthProfiles,
+  sportsProfiles,
+  servicesProfiles,
   poiTranslations,
   remarks,
 } from "../schema";
@@ -363,6 +368,26 @@ async function fetchProfileByCategory(
     }
     case "views": {
       const r = await db.select().from(viewpointProfiles).where(eq(viewpointProfiles.poiId, poiId)).limit(1);
+      return (r[0] as Record<string, unknown>) ?? null;
+    }
+    case "transport": {
+      const r = await db.select().from(transportProfiles).where(eq(transportProfiles.poiId, poiId)).limit(1);
+      return (r[0] as Record<string, unknown>) ?? null;
+    }
+    case "education": {
+      const r = await db.select().from(educationProfiles).where(eq(educationProfiles.poiId, poiId)).limit(1);
+      return (r[0] as Record<string, unknown>) ?? null;
+    }
+    case "health": {
+      const r = await db.select().from(healthProfiles).where(eq(healthProfiles.poiId, poiId)).limit(1);
+      return (r[0] as Record<string, unknown>) ?? null;
+    }
+    case "sports": {
+      const r = await db.select().from(sportsProfiles).where(eq(sportsProfiles.poiId, poiId)).limit(1);
+      return (r[0] as Record<string, unknown>) ?? null;
+    }
+    case "services": {
+      const r = await db.select().from(servicesProfiles).where(eq(servicesProfiles.poiId, poiId)).limit(1);
       return (r[0] as Record<string, unknown>) ?? null;
     }
     default:

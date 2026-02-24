@@ -9,6 +9,11 @@ import type {
   NightlifeProfile,
   ShoppingProfile,
   ViewpointProfile,
+  TransportProfile,
+  EducationProfile,
+  HealthProfile,
+  SportsProfile,
+  ServicesProfile,
   Cuisine,
   PoiDish,
   Dish,
@@ -24,6 +29,11 @@ export type ProfileUnion =
   | NightlifeProfile
   | ShoppingProfile
   | ViewpointProfile
+  | TransportProfile
+  | EducationProfile
+  | HealthProfile
+  | SportsProfile
+  | ServicesProfile
   | null;
 
 export interface EmbeddingContext {
@@ -74,6 +84,11 @@ const CATEGORY_BUILDERS: Record<string, CategoryBuilder> = {
   nightlife: buildNightlifeText,
   shopping: buildShoppingText,
   views: buildViewpointText,
+  transport: buildTransportText,
+  education: buildEducationText,
+  health: buildHealthText,
+  sports: buildSportsText,
+  services: buildServicesText,
 };
 
 function detectCategorySlug(tags: Tag[]): string {
@@ -412,6 +427,166 @@ function buildViewpointText(ctx: EmbeddingContext): string {
     vp.stepsCount ? `${vp.stepsCount} steps` : null,
     vp.photographyTips,
     vp.crowdLevel && `Crowd: ${vp.crowdLevel}`,
+    tagNames,
+    poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
+  ]);
+}
+
+/**
+ * Builds embedding text from a transport profile.
+ *
+ * @param ctx - POI embedding context with a transport profile.
+ * @returns Pipe-delimited text optimized for vector embedding.
+ */
+function buildTransportText(ctx: EmbeddingContext): string {
+  const { poi, profile, tags } = ctx;
+  const tp = profile as TransportProfile;
+  const tagNames = tags.map((t) => t.name).join(", ");
+
+  return joinParts([
+    poi.name,
+    tp.subtype,
+    tp.lines?.length ? `Lines: ${tp.lines.join(", ")}` : null,
+    tp.operator && `Operator: ${tp.operator}`,
+    tp.yearOpened != null ? `Opened: ${tp.yearOpened}` : null,
+    tp.isInterchange ? "Major interchange" : null,
+    tp.hasElevator ? "Elevator access" : null,
+    tp.hasBikeParking ? "Bike parking" : null,
+    tp.notableFeatures,
+    tp.nearbyConnections?.length ? `Connections: ${tp.nearbyConnections.join(", ")}` : null,
+    tagNames,
+    poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
+  ]);
+}
+
+/**
+ * Builds embedding text from an education profile.
+ *
+ * @param ctx - POI embedding context with an education profile.
+ * @returns Pipe-delimited text optimized for vector embedding.
+ */
+function buildEducationText(ctx: EmbeddingContext): string {
+  const { poi, profile, tags } = ctx;
+  const ep = profile as EducationProfile;
+  const tagNames = tags.map((t) => t.name).join(", ");
+
+  return joinParts([
+    poi.name,
+    ep.subtype,
+    ep.foundedYear != null ? `Founded: ${ep.foundedYear}` : null,
+    ep.specialization,
+    ep.notableAlumni?.length ? `Alumni: ${ep.notableAlumni.join(", ")}` : null,
+    ep.isPublic ? "Public institution" : null,
+    ep.hasPublicAccess ? "Public access" : null,
+    ep.hasLibrary ? "Library" : null,
+    ep.architecturalNote,
+    ep.notableFeatures,
+    tagNames,
+    poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
+  ]);
+}
+
+/**
+ * Builds embedding text from a health profile.
+ *
+ * @param ctx - POI embedding context with a health profile.
+ * @returns Pipe-delimited text optimized for vector embedding.
+ */
+function buildHealthText(ctx: EmbeddingContext): string {
+  const { poi, profile, tags } = ctx;
+  const hp = profile as HealthProfile;
+  const tagNames = tags.map((t) => t.name).join(", ");
+
+  return joinParts([
+    poi.name,
+    hp.subtype,
+    hp.specialization,
+    hp.foundedYear != null ? `Founded: ${hp.foundedYear}` : null,
+    hp.isEmergency ? "Emergency services" : null,
+    hp.spokenLanguages?.length ? `Languages: ${hp.spokenLanguages.join(", ")}` : null,
+    hp.facilities?.length ? `Facilities: ${hp.facilities.join(", ")}` : null,
+    hp.notableFeatures,
+    hp.vibe,
+    tagNames,
+    poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
+  ]);
+}
+
+/**
+ * Builds embedding text from a sports profile.
+ *
+ * @param ctx - POI embedding context with a sports profile.
+ * @returns Pipe-delimited text optimized for vector embedding.
+ */
+function buildSportsText(ctx: EmbeddingContext): string {
+  const { poi, profile, tags } = ctx;
+  const sp = profile as SportsProfile;
+  const tagNames = tags.map((t) => t.name).join(", ");
+
+  return joinParts([
+    poi.name,
+    sp.subtype,
+    sp.sports?.length ? `Sports: ${sp.sports.join(", ")}` : null,
+    sp.homeTeam && `Home team: ${sp.homeTeam}`,
+    sp.capacity ? `Capacity: ${sp.capacity}` : null,
+    sp.yearBuilt != null ? `Built: ${sp.yearBuilt}` : null,
+    sp.isPublicAccess ? "Public access" : null,
+    sp.hasEquipmentRental ? "Equipment rental" : null,
+    sp.hasCoaching ? "Coaching" : null,
+    sp.notableEvents?.length ? `Events: ${sp.notableEvents.join(", ")}` : null,
+    sp.notableFeatures,
+    sp.vibe,
+    tagNames,
+    poi.address,
+    ctx.description,
+    ctx.reviewSummary,
+    ctx.remarkContent && `Story: ${ctx.remarkContent}`,
+    ctx.wikipediaContent && `Wikipedia: ${ctx.wikipediaContent.slice(0, 1000)}`,
+    ctx.reviews && `Reviews: ${ctx.reviews.slice(0, 500)}`,
+  ]);
+}
+
+/**
+ * Builds embedding text from a services profile.
+ *
+ * @param ctx - POI embedding context with a services profile.
+ * @returns Pipe-delimited text optimized for vector embedding.
+ */
+function buildServicesText(ctx: EmbeddingContext): string {
+  const { poi, profile, tags } = ctx;
+  const sv = profile as ServicesProfile;
+  const tagNames = tags.map((t) => t.name).join(", ");
+
+  return joinParts([
+    poi.name,
+    sv.subtype,
+    sv.serviceType,
+    sv.operator && `Operator: ${sv.operator}`,
+    sv.foundedYear != null ? `Founded: ${sv.foundedYear}` : null,
+    sv.hasOnlineBooking ? "Online booking" : null,
+    sv.spokenLanguages?.length ? `Languages: ${sv.spokenLanguages.join(", ")}` : null,
+    sv.historicalNote,
+    sv.notableFeatures,
     tagNames,
     poi.address,
     ctx.description,

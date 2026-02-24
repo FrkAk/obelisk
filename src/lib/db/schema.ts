@@ -414,6 +414,96 @@ export const viewpointProfiles = pgTable("viewpoint_profiles", {
   confidenceScore: smallint("confidence_score"),
 });
 
+export const transportProfiles = pgTable("transport_profiles", {
+  poiId: uuid("poi_id")
+    .references(() => pois.id, { onDelete: "cascade" })
+    .unique()
+    .primaryKey(),
+  subtype: varchar("subtype", { length: 50 }),
+  lines: text("lines").array(),
+  operator: varchar("operator", { length: 200 }),
+  yearOpened: integer("year_opened"),
+  dailyRidership: integer("daily_ridership"),
+  isInterchange: boolean("is_interchange"),
+  hasElevator: boolean("has_elevator"),
+  hasBikeParking: boolean("has_bike_parking"),
+  notableFeatures: text("notable_features"),
+  nearbyConnections: text("nearby_connections").array(),
+  confidenceScore: smallint("confidence_score"),
+});
+
+export const educationProfiles = pgTable("education_profiles", {
+  poiId: uuid("poi_id")
+    .references(() => pois.id, { onDelete: "cascade" })
+    .unique()
+    .primaryKey(),
+  subtype: varchar("subtype", { length: 50 }),
+  foundedYear: integer("founded_year"),
+  specialization: text("specialization"),
+  notableAlumni: text("notable_alumni").array(),
+  studentCount: integer("student_count"),
+  isPublic: boolean("is_public"),
+  hasPublicAccess: boolean("has_public_access"),
+  hasLibrary: boolean("has_library"),
+  architecturalNote: text("architectural_note"),
+  notableFeatures: text("notable_features"),
+  confidenceScore: smallint("confidence_score"),
+});
+
+export const healthProfiles = pgTable("health_profiles", {
+  poiId: uuid("poi_id")
+    .references(() => pois.id, { onDelete: "cascade" })
+    .unique()
+    .primaryKey(),
+  subtype: varchar("subtype", { length: 50 }),
+  specialization: text("specialization"),
+  foundedYear: integer("founded_year"),
+  isEmergency: boolean("is_emergency"),
+  acceptsInsurance: boolean("accepts_insurance"),
+  hasAppointmentBooking: boolean("has_appointment_booking"),
+  spokenLanguages: text("spoken_languages").array(),
+  facilities: text("facilities").array(),
+  notableFeatures: text("notable_features"),
+  vibe: text("vibe"),
+  confidenceScore: smallint("confidence_score"),
+});
+
+export const sportsProfiles = pgTable("sports_profiles", {
+  poiId: uuid("poi_id")
+    .references(() => pois.id, { onDelete: "cascade" })
+    .unique()
+    .primaryKey(),
+  subtype: varchar("subtype", { length: 50 }),
+  sports: text("sports").array(),
+  homeTeam: varchar("home_team", { length: 200 }),
+  capacity: integer("capacity"),
+  yearBuilt: integer("year_built"),
+  isPublicAccess: boolean("is_public_access"),
+  hasEquipmentRental: boolean("has_equipment_rental"),
+  hasCoaching: boolean("has_coaching"),
+  notableEvents: text("notable_events").array(),
+  notableFeatures: text("notable_features"),
+  vibe: text("vibe"),
+  confidenceScore: smallint("confidence_score"),
+});
+
+export const servicesProfiles = pgTable("services_profiles", {
+  poiId: uuid("poi_id")
+    .references(() => pois.id, { onDelete: "cascade" })
+    .unique()
+    .primaryKey(),
+  subtype: varchar("subtype", { length: 50 }),
+  serviceType: varchar("service_type", { length: 100 }),
+  operator: varchar("operator", { length: 200 }),
+  foundedYear: integer("founded_year"),
+  hasOnlineBooking: boolean("has_online_booking"),
+  spokenLanguages: text("spoken_languages").array(),
+  waitTimeNote: text("wait_time_note"),
+  historicalNote: text("historical_note"),
+  notableFeatures: text("notable_features"),
+  confidenceScore: smallint("confidence_score"),
+});
+
 // ===========================================================================
 // 5. Food Domain Tables
 // ===========================================================================
@@ -909,6 +999,26 @@ export const poisRelations = relations(pois, ({ one, many }) => ({
     fields: [pois.id],
     references: [viewpointProfiles.poiId],
   }),
+  transportProfile: one(transportProfiles, {
+    fields: [pois.id],
+    references: [transportProfiles.poiId],
+  }),
+  educationProfile: one(educationProfiles, {
+    fields: [pois.id],
+    references: [educationProfiles.poiId],
+  }),
+  healthProfile: one(healthProfiles, {
+    fields: [pois.id],
+    references: [healthProfiles.poiId],
+  }),
+  sportsProfile: one(sportsProfiles, {
+    fields: [pois.id],
+    references: [sportsProfiles.poiId],
+  }),
+  servicesProfile: one(servicesProfiles, {
+    fields: [pois.id],
+    references: [servicesProfiles.poiId],
+  }),
   userSavedPois: many(userSavedPois),
   userVisits: many(userVisits),
   businessAccounts: many(businessAccounts),
@@ -1035,6 +1145,56 @@ export const viewpointProfilesRelations = relations(
   ({ one }) => ({
     poi: one(pois, {
       fields: [viewpointProfiles.poiId],
+      references: [pois.id],
+    }),
+  }),
+);
+
+export const transportProfilesRelations = relations(
+  transportProfiles,
+  ({ one }) => ({
+    poi: one(pois, {
+      fields: [transportProfiles.poiId],
+      references: [pois.id],
+    }),
+  }),
+);
+
+export const educationProfilesRelations = relations(
+  educationProfiles,
+  ({ one }) => ({
+    poi: one(pois, {
+      fields: [educationProfiles.poiId],
+      references: [pois.id],
+    }),
+  }),
+);
+
+export const healthProfilesRelations = relations(
+  healthProfiles,
+  ({ one }) => ({
+    poi: one(pois, {
+      fields: [healthProfiles.poiId],
+      references: [pois.id],
+    }),
+  }),
+);
+
+export const sportsProfilesRelations = relations(
+  sportsProfiles,
+  ({ one }) => ({
+    poi: one(pois, {
+      fields: [sportsProfiles.poiId],
+      references: [pois.id],
+    }),
+  }),
+);
+
+export const servicesProfilesRelations = relations(
+  servicesProfiles,
+  ({ one }) => ({
+    poi: one(pois, {
+      fields: [servicesProfiles.poiId],
       references: [pois.id],
     }),
   }),

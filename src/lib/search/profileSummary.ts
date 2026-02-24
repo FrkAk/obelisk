@@ -317,6 +317,13 @@ export interface TypesenseDocInput {
   tags: string[];
   signatureDishes: string[];
   hasStory: boolean;
+  cuisines: string[];
+  wheelchair: boolean | null;
+  dogFriendly: boolean | null;
+  elevator: boolean | null;
+  parkingAvailable: boolean | null;
+  freeEntry: boolean | null;
+  openingHours: string | null;
 }
 
 /**
@@ -341,7 +348,17 @@ export function buildTypesenseDocument(input: TypesenseDocInput): TypesensePoiDo
     reviewSummary: input.reviewSummary ?? "",
     category: input.categorySlug,
     amenityType: osmTags?.amenity ?? osmTags?.tourism ?? "",
-    cuisine: osmTags?.cuisine ?? "",
+    cuisines: input.cuisines.length > 0
+      ? input.cuisines
+      : osmTags?.cuisine
+        ? osmTags.cuisine.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+        : undefined,
+    wheelchair: input.wheelchair ?? undefined,
+    dogFriendly: input.dogFriendly ?? undefined,
+    elevator: input.elevator ?? undefined,
+    parkingAvailable: input.parkingAvailable ?? undefined,
+    freeEntry: input.freeEntry ?? undefined,
+    openingHours: input.openingHours ?? undefined,
     priceRange: fp && typeof (fp as Record<string, unknown>).priceLevel === "number"
       ? PRICE_LEVEL_MAP[(fp as Record<string, unknown>).priceLevel as number] ?? ""
       : "",

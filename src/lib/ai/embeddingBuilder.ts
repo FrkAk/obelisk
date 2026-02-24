@@ -43,6 +43,16 @@ export interface EmbeddingContext {
   cuisines?: Cuisine[];
   dishes?: Array<PoiDish & { dish: Dish }>;
   contactInfo?: ContactInfo | null;
+  accessibility?: {
+    wheelchair?: boolean | null;
+    dogFriendly?: boolean | null;
+    elevator?: boolean | null;
+    parkingAvailable?: boolean | null;
+  } | null;
+  priceInfo?: {
+    priceLevel?: number | null;
+    freeEntry?: boolean | null;
+  } | null;
   wikipediaContent?: string;
   description?: string;
   reviewSummary?: string;
@@ -111,6 +121,44 @@ function priceLevelLabel(level: number | null | undefined): string | null {
     4: "Fine dining price",
   };
   return labels[level] ?? null;
+}
+
+/**
+ * Builds accessibility-related text parts from the embedding context.
+ *
+ * @param ctx - POI embedding context with optional accessibility data.
+ * @returns Array of descriptive strings for accessible features.
+ */
+function buildAccessibilityParts(
+  ctx: EmbeddingContext
+): Array<string | false | null | undefined> {
+  const a = ctx.accessibility;
+  if (!a) return [];
+  return [
+    a.wheelchair && "Wheelchair accessible",
+    a.elevator && "Elevator access",
+    a.dogFriendly && "Dog-friendly",
+    a.parkingAvailable && "Parking available",
+  ];
+}
+
+/**
+ * Builds price-related text parts from the embedding context.
+ * Skips price level for food POIs since food builders handle it separately.
+ *
+ * @param ctx - POI embedding context with optional price data.
+ * @returns Array of descriptive strings for price information.
+ */
+function buildPriceParts(
+  ctx: EmbeddingContext
+): Array<string | false | null | undefined> {
+  const p = ctx.priceInfo;
+  if (!p) return [];
+  const slug = detectCategorySlug(ctx.tags);
+  return [
+    p.freeEntry && "Free entry",
+    slug !== "food" && priceLevelLabel(p.priceLevel),
+  ];
 }
 
 function buildFoodText(ctx: EmbeddingContext): string {
@@ -182,6 +230,8 @@ function buildFoodText(ctx: EmbeddingContext): string {
       : null,
     fp.michelinBib && "Bib Gourmand",
     allDishNames && `Dishes: ${allDishNames}`,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     contactInfo?.openingHoursDisplay,
@@ -220,6 +270,8 @@ function buildHistoryText(ctx: EmbeddingContext): string {
       ? `Materials: ${hp.constructionMaterials.join(", ")}`
       : null,
     hp.inscription && `Inscription: ${hp.inscription}`,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -253,6 +305,8 @@ function buildArchitectureText(ctx: EmbeddingContext): string {
     ap.isActiveWorship ? "Active place of worship" : null,
     ap.towerAccessible ? "Tower accessible" : null,
     ap.notableFeatures,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -290,6 +344,8 @@ function buildNatureText(ctx: EmbeddingContext): string {
     activities.length > 0 ? `Activities: ${activities.join(", ")}` : null,
     np.litAtNight ? "Lit at night" : null,
     np.notableFeatures,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -327,6 +383,8 @@ function buildArtCultureText(ctx: EmbeddingContext): string {
     ac.avgVisitMinutes ? `Visit time: ~${ac.avgVisitMinutes} min` : null,
     ac.foundedYear ? `Founded: ${ac.foundedYear}` : null,
     ac.vibe,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -364,6 +422,8 @@ function buildNightlifeText(ctx: EmbeddingContext): string {
     nl.dressCode && `Dress code: ${nl.dressCode}`,
     nl.vibe,
     nl.capacity ? `Capacity: ${nl.capacity}` : null,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     poi.address,
     ctx.description,
     ctx.reviewSummary,
@@ -394,6 +454,8 @@ function buildShoppingText(ctx: EmbeddingContext): string {
     flags.length > 0 ? flags.join(", ") : null,
     sp.marketDays && `Market days: ${sp.marketDays}`,
     sp.vibe,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -427,6 +489,8 @@ function buildViewpointText(ctx: EmbeddingContext): string {
     vp.stepsCount ? `${vp.stepsCount} steps` : null,
     vp.photographyTips,
     vp.crowdLevel && `Crowd: ${vp.crowdLevel}`,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -459,6 +523,8 @@ function buildTransportText(ctx: EmbeddingContext): string {
     tp.hasBikeParking ? "Bike parking" : null,
     tp.notableFeatures,
     tp.nearbyConnections?.length ? `Connections: ${tp.nearbyConnections.join(", ")}` : null,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -491,6 +557,8 @@ function buildEducationText(ctx: EmbeddingContext): string {
     ep.hasLibrary ? "Library" : null,
     ep.architecturalNote,
     ep.notableFeatures,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -522,6 +590,8 @@ function buildHealthText(ctx: EmbeddingContext): string {
     hp.facilities?.length ? `Facilities: ${hp.facilities.join(", ")}` : null,
     hp.notableFeatures,
     hp.vibe,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -556,6 +626,8 @@ function buildSportsText(ctx: EmbeddingContext): string {
     sp.notableEvents?.length ? `Events: ${sp.notableEvents.join(", ")}` : null,
     sp.notableFeatures,
     sp.vibe,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -587,6 +659,8 @@ function buildServicesText(ctx: EmbeddingContext): string {
     sv.spokenLanguages?.length ? `Languages: ${sv.spokenLanguages.join(", ")}` : null,
     sv.historicalNote,
     sv.notableFeatures,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,
@@ -604,6 +678,8 @@ function buildGenericText(ctx: EmbeddingContext): string {
 
   return joinParts([
     poi.name,
+    ...buildAccessibilityParts(ctx),
+    ...buildPriceParts(ctx),
     tagNames,
     poi.address,
     ctx.description,

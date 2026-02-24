@@ -21,6 +21,11 @@ import {
   tags,
   poiDishes,
   dishes,
+  poiCuisines,
+  cuisines,
+  accessibilityInfo,
+  priceInfo,
+  contactInfo,
   enrichmentLog,
 } from "../src/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -324,6 +329,89 @@ async function loadSignatureDishMap(): Promise<Map<string, string[]>> {
   return map;
 }
 
+/**
+ * Loads all POI cuisines as a map from poiId to cuisine name array.
+ *
+ * Returns:
+ *     Map of poiId to string array of cuisine names.
+ */
+async function loadCuisineMap(): Promise<Map<string, string[]>> {
+  const rows = await db
+    .select({
+      poiId: poiCuisines.poiId,
+      cuisineName: cuisines.name,
+    })
+    .from(poiCuisines)
+    .innerJoin(cuisines, eq(poiCuisines.cuisineId, cuisines.id));
+
+  const map = new Map<string, string[]>();
+  for (const row of rows) {
+    const existing = map.get(row.poiId);
+    if (existing) {
+      existing.push(row.cuisineName);
+    } else {
+      map.set(row.poiId, [row.cuisineName]);
+    }
+  }
+  return map;
+}
+
+/**
+ * Loads accessibility data for all POIs as a map from poiId to accessibility fields.
+ *
+ * Returns:
+ *     Map of poiId to object with wheelchair, dogFriendly, elevator, parkingAvailable.
+ */
+async function loadAccessibilityMap(): Promise<
+  Map<string, { wheelchair: boolean | null; dogFriendly: boolean | null; elevator: boolean | null; parkingAvailable: boolean | null }>
+> {
+  const rows = await db
+    .select({
+      poiId: accessibilityInfo.poiId,
+      wheelchair: accessibilityInfo.wheelchair,
+      dogFriendly: accessibilityInfo.dogFriendly,
+      elevator: accessibilityInfo.elevator,
+      parkingAvailable: accessibilityInfo.parkingAvailable,
+    })
+    .from(accessibilityInfo);
+
+  return new Map(rows.map((r) => [r.poiId, r]));
+}
+
+/**
+ * Loads price data for all POIs as a map from poiId to price fields.
+ *
+ * Returns:
+ *     Map of poiId to object with freeEntry.
+ */
+async function loadPriceMap(): Promise<Map<string, { freeEntry: boolean | null }>> {
+  const rows = await db
+    .select({
+      poiId: priceInfo.poiId,
+      freeEntry: priceInfo.freeEntry,
+    })
+    .from(priceInfo);
+
+  return new Map(rows.map((r) => [r.poiId, r]));
+}
+
+/**
+ * Loads contact data for all POIs as a map from poiId to opening hours display.
+ *
+ * Returns:
+ *     Map of poiId to object with openingHoursDisplay.
+ */
+async function loadContactMap(): Promise<Map<string, { openingHoursDisplay: string | null }>> {
+  const rows = await db
+    .select({
+      poiId: contactInfo.poiId,
+      openingHoursDisplay: contactInfo.openingHoursDisplay,
+    })
+    .from(contactInfo);
+
+  return new Map(rows.map((r) => [r.poiId, r]));
+}
+
 async function syncTypesense() {
   log.info("Starting sync...");
 
@@ -414,18 +502,32 @@ async function syncTypesense() {
     services: new Map(servicesRows.map((r) => [r.poiId, r as Record<string, unknown>])),
   };
 
-  log.info("Loading tags and dishes...");
+  log.info("Loading tags, dishes, cuisines, accessibility, price, contact...");
 
-  const tagMap = await loadTagMap();
-  const signatureDishMap = await loadSignatureDishMap();
+  const [tagMap, signatureDishMap, cuisineMap, accessibilityMap, priceMap, contactMap] = await Promise.all([
+    loadTagMap(),
+    loadSignatureDishMap(),
+    loadCuisineMap(),
+    loadAccessibilityMap(),
+    loadPriceMap(),
+    loadContactMap(),
+  ]);
 
-  log.info(`${tagMap.size} POIs have tags, ${signatureDishMap.size} POIs have signature dishes`);
+  log.info(
+    `${tagMap.size} POIs have tags, ${signatureDishMap.size} have signature dishes, ` +
+    `${cuisineMap.size} have cuisines, ${accessibilityMap.size} have accessibility, ` +
+    `${priceMap.size} have price, ${contactMap.size} have contact`
+  );
 
   const documents = allPois.map((poi) => {
     const category = poi.categorySlug ?? "hidden";
     const translation = translationMap.get(poi.id);
     const profile = profileMaps[category]?.get(poi.id) ?? null;
     const profileSummary = profile ? buildProfileSummary(category, profile) : undefined;
+
+    const accessibility = accessibilityMap.get(poi.id);
+    const price = priceMap.get(poi.id);
+    const contact = contactMap.get(poi.id);
 
     return buildTypesenseDocument({
       id: poi.id,
@@ -443,6 +545,13 @@ async function syncTypesense() {
       tags: tagMap.get(poi.id) ?? [],
       signatureDishes: signatureDishMap.get(poi.id) ?? [],
       hasStory: remarkPoiIds.has(poi.id),
+      cuisines: cuisineMap.get(poi.id) ?? [],
+      wheelchair: accessibility?.wheelchair ?? null,
+      dogFriendly: accessibility?.dogFriendly ?? null,
+      elevator: accessibility?.elevator ?? null,
+      parkingAvailable: accessibility?.parkingAvailable ?? null,
+      freeEntry: price?.freeEntry ?? null,
+      openingHours: contact?.openingHoursDisplay ?? null,
     });
   });
 

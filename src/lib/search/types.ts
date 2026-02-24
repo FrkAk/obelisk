@@ -27,6 +27,10 @@ export interface SearchFilters {
   openNow?: boolean;
   wifi?: boolean;
   quiet?: boolean;
+  wheelchair?: boolean;
+  dogFriendly?: boolean;
+  freeEntry?: boolean;
+  parking?: boolean;
 }
 
 export interface SearchLocation {

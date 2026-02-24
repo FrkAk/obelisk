@@ -54,7 +54,7 @@ function typesenseHitToSearchResult(
     score: hit.textScore,
     address: hit.address,
     description: hit.description,
-    cuisine: hit.cuisine,
+    cuisine: hit.cuisines?.join(", "),
     amenityType: hit.amenityType,
     hasStory: hit.hasStory,
     hasOutdoorSeating: hit.hasOutdoorSeating,
@@ -167,6 +167,10 @@ export async function POST(request: NextRequest) {
     if (intent.category) typesenseFilters.category = intent.category;
     if (intent.filters.wifi) typesenseFilters.hasWifi = true;
     if (intent.filters.outdoor) typesenseFilters.hasOutdoorSeating = true;
+    if (intent.cuisineTypes?.length) typesenseFilters.cuisines = intent.cuisineTypes;
+    if (intent.filters.wheelchair) typesenseFilters.wheelchair = true;
+    if (intent.filters.dogFriendly) typesenseFilters.dogFriendly = true;
+    if (intent.filters.freeEntry) typesenseFilters.freeEntry = true;
 
     const [typesenseSettled, semanticSettled, obeliskSettled] =
       await Promise.allSettled([
@@ -189,7 +193,7 @@ export async function POST(request: NextRequest) {
         (async () => {
           const semStart = Date.now();
           const hits = await semanticSearch(
-            searchQuery,
+            query,
             location.latitude,
             location.longitude,
             radius,

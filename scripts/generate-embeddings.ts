@@ -17,6 +17,8 @@ import {
   loadContactInfo,
   loadTranslation,
   loadCurrentRemark,
+  loadAccessibilityInfo,
+  loadPriceInfo,
 } from "../src/lib/db/queries/pois";
 import type { Poi } from "../src/types";
 import { createLogger } from "../src/lib/logger";
@@ -167,7 +169,7 @@ async function generateEmbeddings() {
           updatedAt: row.updatedAt,
         };
 
-        const [profile, poiTagList, poiCuisineList, poiDishList, contact, translation, remarkContent] =
+        const [profile, poiTagList, poiCuisineList, poiDishList, contact, translation, remarkContent, accessibility, price] =
           await Promise.all([
             loadProfile(poi.id, categorySlug),
             loadTags(poi.id),
@@ -176,6 +178,8 @@ async function generateEmbeddings() {
             loadContactInfo(poi.id),
             loadTranslation(poi.id, poi.locale),
             loadCurrentRemark(poi.id),
+            loadAccessibilityInfo(poi.id),
+            loadPriceInfo(poi.id),
           ]);
 
         const text = buildEmbeddingText({
@@ -185,6 +189,8 @@ async function generateEmbeddings() {
           cuisines: poiCuisineList,
           dishes: poiDishList,
           contactInfo: contact,
+          accessibility,
+          priceInfo: price,
           description: translation?.description ?? undefined,
           reviewSummary: translation?.reviewSummary ?? undefined,
           remarkContent: remarkContent ?? undefined,

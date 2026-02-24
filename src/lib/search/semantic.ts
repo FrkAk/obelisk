@@ -4,7 +4,7 @@ import { haversineDistance } from "@/lib/geo/distance";
 import { EMBED_MODEL } from "@/lib/ai/ollama";
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
-const MIN_SIMILARITY = 0.7;
+const MIN_SIMILARITY = 0.55;
 
 interface EmbedResponse {
   embeddings: number[][];

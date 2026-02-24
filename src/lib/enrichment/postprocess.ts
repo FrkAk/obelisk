@@ -1,7 +1,7 @@
 import { db } from "@/lib/db/client";
 import { pois, enrichmentLog, remarks } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { loadProfile, loadTags, loadCuisines, loadDishes, loadContactInfo, loadTranslation, loadCurrentRemark } from "@/lib/db/queries/pois";
+import { loadProfile, loadTags, loadCuisines, loadDishes, loadContactInfo, loadAccessibilityInfo, loadPriceInfo, loadTranslation, loadCurrentRemark } from "@/lib/db/queries/pois";
 import { buildEmbeddingText } from "@/lib/ai/embeddingBuilder";
 import type { ProfileUnion } from "@/lib/ai/embeddingBuilder";
 import { embedTexts } from "@/lib/ai/embeddings";
@@ -55,13 +55,15 @@ export async function syncPoiSearchIndex(
       return;
     }
 
-    const [profile, tagList, cuisineList, dishList, contact, translation, remarkContent] =
+    const [profile, tagList, cuisineList, dishList, contact, accessibility, price, translation, remarkContent] =
       await Promise.all([
         loadProfile(poiId, categorySlug),
         loadTags(poiId),
         loadCuisines(poiId),
         loadDishes(poiId),
         loadContactInfo(poiId),
+        loadAccessibilityInfo(poiId),
+        loadPriceInfo(poiId),
         loadTranslation(poiId, poi.locale),
         loadCurrentRemark(poiId),
       ]);
@@ -73,6 +75,8 @@ export async function syncPoiSearchIndex(
       cuisines: cuisineList,
       dishes: dishList,
       contactInfo: contact,
+      accessibility,
+      priceInfo: price,
       description: translation?.description ?? undefined,
       reviewSummary: translation?.reviewSummary ?? undefined,
       remarkContent: remarkContent ?? undefined,
@@ -139,6 +143,13 @@ export async function syncPoiSearchIndex(
           .filter((d) => d.isSignature)
           .map((d) => d.dish.name),
         hasStory,
+        cuisines: cuisineList.map((c) => c.name),
+        wheelchair: accessibility?.wheelchair ?? null,
+        dogFriendly: accessibility?.dogFriendly ?? null,
+        elevator: accessibility?.elevator ?? null,
+        parkingAvailable: accessibility?.parkingAvailable ?? null,
+        freeEntry: price?.freeEntry ?? null,
+        openingHours: contact?.openingHoursDisplay ?? null,
       });
 
       await upsertDocuments([doc]);

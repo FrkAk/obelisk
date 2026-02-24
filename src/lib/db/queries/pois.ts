@@ -4,6 +4,7 @@ import {
   categories,
   contactInfo,
   priceInfo,
+  accessibilityInfo,
   tags,
   poiTags,
   cuisines,
@@ -547,4 +548,62 @@ export async function loadCurrentRemark(poiId: string): Promise<string | null> {
     .limit(1);
 
   return results[0]?.content ?? null;
+}
+
+/**
+ * Loads accessibility info for a POI.
+ *
+ * Args:
+ *     poiId: The POI's UUID.
+ *
+ * Returns:
+ *     Object with wheelchair, dogFriendly, elevator, parkingAvailable, or null if none exists.
+ */
+export async function loadAccessibilityInfo(
+  poiId: string
+): Promise<{
+  wheelchair: boolean | null;
+  dogFriendly: boolean | null;
+  elevator: boolean | null;
+  parkingAvailable: boolean | null;
+} | null> {
+  const results = await db
+    .select({
+      wheelchair: accessibilityInfo.wheelchair,
+      dogFriendly: accessibilityInfo.dogFriendly,
+      elevator: accessibilityInfo.elevator,
+      parkingAvailable: accessibilityInfo.parkingAvailable,
+    })
+    .from(accessibilityInfo)
+    .where(eq(accessibilityInfo.poiId, poiId))
+    .limit(1);
+
+  return results[0] ?? null;
+}
+
+/**
+ * Loads price info for a POI.
+ *
+ * Args:
+ *     poiId: The POI's UUID.
+ *
+ * Returns:
+ *     Object with priceLevel and freeEntry, or null if none exists.
+ */
+export async function loadPriceInfo(
+  poiId: string
+): Promise<{
+  priceLevel: number | null;
+  freeEntry: boolean | null;
+} | null> {
+  const results = await db
+    .select({
+      priceLevel: priceInfo.priceLevel,
+      freeEntry: priceInfo.freeEntry,
+    })
+    .from(priceInfo)
+    .where(eq(priceInfo.poiId, poiId))
+    .limit(1);
+
+  return results[0] ?? null;
 }

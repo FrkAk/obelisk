@@ -30,13 +30,19 @@ interface TypesensePoiDocument {
   reviewSummary?: string;
   category: string;
   amenityType?: string;
-  cuisine?: string;
+  cuisines?: string[];
   priceRange?: string;
   atmosphere?: string[];
   location: [number, number];
   hasStory: boolean;
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
+  wheelchair?: boolean;
+  dogFriendly?: boolean;
+  elevator?: boolean;
+  parkingAvailable?: boolean;
+  freeEntry?: boolean;
+  openingHours?: string;
   address?: string;
   dietVegetarian?: string;
   dietVegan?: string;
@@ -59,7 +65,13 @@ const poiSchema = {
     { name: "reviewSummary", type: "string" as const, optional: true as const },
     { name: "category", type: "string" as const, facet: true as const },
     { name: "amenityType", type: "string" as const, facet: true as const, optional: true as const },
-    { name: "cuisine", type: "string" as const, facet: true as const, optional: true as const },
+    { name: "cuisines", type: "string[]" as const, facet: true as const, optional: true as const },
+    { name: "wheelchair", type: "bool" as const, facet: true as const, optional: true as const },
+    { name: "dogFriendly", type: "bool" as const, facet: true as const, optional: true as const },
+    { name: "elevator", type: "bool" as const, facet: true as const, optional: true as const },
+    { name: "parkingAvailable", type: "bool" as const, facet: true as const, optional: true as const },
+    { name: "freeEntry", type: "bool" as const, facet: true as const, optional: true as const },
+    { name: "openingHours", type: "string" as const, optional: true as const },
     { name: "priceRange", type: "string" as const, facet: true as const, optional: true as const },
     { name: "atmosphere", type: "string[]" as const, optional: true as const },
     { name: "location", type: "geopoint" as const },
@@ -83,7 +95,10 @@ const poiSchema = {
 
 interface TypesenseSearchFilters {
   category?: string;
-  cuisine?: string;
+  cuisines?: string[];
+  wheelchair?: boolean;
+  dogFriendly?: boolean;
+  freeEntry?: boolean;
   hasStory?: boolean;
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
@@ -159,8 +174,17 @@ export async function searchPOIs(
   if (filters?.category) {
     filterParts.push(`category:=${filters.category}`);
   }
-  if (filters?.cuisine) {
-    filterParts.push(`cuisine:=${filters.cuisine}`);
+  if (filters?.cuisines && filters.cuisines.length > 0) {
+    filterParts.push(`cuisines:=[${filters.cuisines.join(",")}]`);
+  }
+  if (filters?.wheelchair) {
+    filterParts.push(`wheelchair:=true`);
+  }
+  if (filters?.dogFriendly) {
+    filterParts.push(`dogFriendly:=true`);
+  }
+  if (filters?.freeEntry) {
+    filterParts.push(`freeEntry:=true`);
   }
   if (filters?.hasStory !== undefined) {
     filterParts.push(`hasStory:=${filters.hasStory}`);
@@ -186,8 +210,8 @@ export async function searchPOIs(
 
   const searchParameters = {
     q: query,
-    query_by: "name,profileSummary,description,reviewSummary,tags,cuisine,amenityType",
-    query_by_weights: "5,4,3,2,2,2,1",
+    query_by: "name,profileSummary,description,reviewSummary,tags,cuisines,amenityType,openingHours",
+    query_by_weights: "5,4,3,2,2,2,1,1",
     filter_by: filterParts.length > 0 ? filterParts.join(" && ") : undefined,
     sort_by: location
       ? `location(${location.latitude},${location.longitude}):asc`
@@ -195,7 +219,6 @@ export async function searchPOIs(
     per_page: limit,
     num_typos: 2,
     typo_tokens_threshold: 1,
-    drop_tokens_threshold: 1,
   };
 
   const response = await client

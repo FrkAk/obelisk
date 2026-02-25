@@ -1,16 +1,17 @@
 "use server";
 
 import { NextRequest, NextResponse } from "next/server";
-import { after } from "next/server";
+import { db } from "@/lib/db/client";
+import { pois } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { getRemarkById, versionBumpRemark } from "@/lib/db/queries/remarks";
 import { generateStory } from "@/lib/ai/storyGenerator";
-import type { StoryPoiContext, ProfileUnion } from "@/lib/ai/storyGenerator";
+import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
-import { loadProfile, loadTags, loadCuisines, loadDishes, loadContactInfo } from "@/lib/db/queries/pois";
-import { enrichPoi } from "@/lib/enrichment/pipeline";
-import { syncPoiSearchIndex } from "@/lib/enrichment/postprocess";
+import { loadTags, loadContactInfo } from "@/lib/db/queries/pois";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
+import type { PoiProfile } from "@/types";
 
 const log = createLogger("regenerate");
 
@@ -65,32 +66,20 @@ export async function POST(request: NextRequest) {
     const categoryName = existingRemark.poi.category?.name || "Hidden Gems";
     const categorySlug = existingRemark.poi.category?.slug ?? "hidden";
 
-    const websiteUrl =
-      existingRemark.poi.osmTags?.website ||
-      existingRemark.poi.osmTags?.["contact:website"] ||
-      null;
+    const poiRow = await db
+      .select({ profile: pois.profile })
+      .from(pois)
+      .where(eq(pois.id, existingRemark.poi.id))
+      .limit(1);
 
-    await enrichPoi({
-      id: existingRemark.poi.id,
-      name: existingRemark.poi.name,
-      address: existingRemark.poi.address,
-      categorySlug,
-      websiteUrl,
-      wikipediaUrl: existingRemark.poi.wikipediaUrl,
-      locale: existingRemark.poi.locale,
-      osmTags: existingRemark.poi.osmTags,
-    });
+    const profile = (poiRow[0]?.profile as PoiProfile | null) ?? null;
 
     log.info(`Generating new story for: "${existingRemark.poi.name}"`);
 
-    const [profile, poiTagList, cuisineList, dishList, contact] =
-      await Promise.all([
-        loadProfile(existingRemark.poi.id, categorySlug),
-        loadTags(existingRemark.poi.id),
-        loadCuisines(existingRemark.poi.id),
-        loadDishes(existingRemark.poi.id),
-        loadContactInfo(existingRemark.poi.id),
-      ]);
+    const [poiTagList, contact] = await Promise.all([
+      loadTags(existingRemark.poi.id),
+      loadContactInfo(existingRemark.poi.id),
+    ]);
 
     const storyCtx: StoryPoiContext = {
       poi: {
@@ -105,6 +94,7 @@ export async function POST(request: NextRequest) {
         locale: existingRemark.poi.locale,
         osmType: null,
         osmTags: existingRemark.poi.osmTags,
+        profile,
         wikipediaUrl: existingRemark.poi.wikipediaUrl,
         imageUrl: existingRemark.poi.imageUrl,
         embedding: null,
@@ -114,10 +104,8 @@ export async function POST(request: NextRequest) {
       },
       categorySlug,
       categoryName,
-      profile: profile as ProfileUnion,
+      profile,
       tags: poiTagList,
-      cuisines: cuisineList,
-      dishes: dishList,
       contactInfo: contact,
     };
 
@@ -151,10 +139,6 @@ export async function POST(request: NextRequest) {
       confidence: newRemark.confidence,
       poi: existingRemark.poi,
     };
-
-    after(async () => {
-      await syncPoiSearchIndex(existingRemark.poi.id, categorySlug);
-    });
 
     return NextResponse.json({
       remark: remarkWithPoi,

@@ -8,7 +8,6 @@ import { z } from "zod";
 import type { ExternalPOI } from "@/lib/search/types";
 import type { CategorySlug } from "@/types";
 import { createLogger } from "@/lib/logger";
-import { buildWikipediaUrl } from "@/lib/web/wikipedia";
 
 const log = createLogger("poi-lookup");
 import type { RemarkWithPoi } from "@/lib/db/queries/search";
@@ -451,6 +450,22 @@ function mapOsmTypeToCategory(
   if (osmClass === "shop") return "shopping";
 
   return "hidden";
+}
+
+/**
+ * Builds a full Wikipedia URL from an OSM wikipedia tag value.
+ *
+ * Args:
+ *     osmTag: OSM wikipedia tag (format: "lang:Title", e.g. "de:Maximilianeum").
+ *
+ * Returns:
+ *     Full Wikipedia URL with correct language subdomain, or undefined if the tag is malformed.
+ */
+function buildWikipediaUrl(osmTag: string): string | undefined {
+  const match = osmTag.match(/^([a-z]{2,3}):(.+)$/);
+  if (!match) return undefined;
+  const [, lang, title] = match;
+  return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
 }
 
 function createSyntheticPoi(

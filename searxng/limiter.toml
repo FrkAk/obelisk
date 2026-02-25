@@ -1,5 +1,0 @@
-# Limiter is disabled in settings.yml (limiter: false).
-# This file exists only to suppress the "missing config file" warning.
-
-[botdetection.ip_limit]
-link_token = false

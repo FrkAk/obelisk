@@ -3,7 +3,6 @@ import {
   pois,
   categories,
   contactInfo,
-  priceInfo,
   accessibilityInfo,
   tags,
   poiTags,
@@ -11,23 +10,10 @@ import {
   poiCuisines,
   dishes,
   poiDishes,
-  foodProfiles,
-  historyProfiles,
-  architectureProfiles,
-  natureProfiles,
-  artCultureProfiles,
-  nightlifeProfiles,
-  shoppingProfiles,
-  viewpointProfiles,
-  transportProfiles,
-  educationProfiles,
-  healthProfiles,
-  sportsProfiles,
-  servicesProfiles,
   poiTranslations,
   remarks,
 } from "../schema";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { eq, and, gte, lte } from "drizzle-orm";
 import type {
   CategorySlug,
   Tag,
@@ -46,7 +32,7 @@ import type {
  *     radiusMeters: Radius in meters to search within.
  *
  * Returns:
- *     Array of POIs with their categories, contact info, and price info.
+ *     Array of POIs with their categories and contact info.
  */
 export async function getNearbyPois(
   latitude: number,
@@ -74,6 +60,7 @@ export async function getNearbyPois(
       wikipediaUrl: pois.wikipediaUrl,
       imageUrl: pois.imageUrl,
       osmTags: pois.osmTags,
+      profile: pois.profile,
       createdAt: pois.createdAt,
       category: {
         id: categories.id,
@@ -88,16 +75,10 @@ export async function getNearbyPois(
         website: contactInfo.website,
         openingHoursRaw: contactInfo.openingHoursRaw,
       },
-      price: {
-        priceLevel: priceInfo.priceLevel,
-        freeEntry: priceInfo.freeEntry,
-        currency: priceInfo.currency,
-      },
     })
     .from(pois)
     .leftJoin(categories, eq(pois.categoryId, categories.id))
     .leftJoin(contactInfo, eq(pois.id, contactInfo.poiId))
-    .leftJoin(priceInfo, eq(pois.id, priceInfo.poiId))
     .where(
       and(
         gte(pois.latitude, minLat),
@@ -109,13 +90,13 @@ export async function getNearbyPois(
 }
 
 /**
- * Fetches a single POI by ID with full profile data based on category.
+ * Fetches a single POI by ID with full profile data.
  *
  * Args:
  *     poiId: The POI's UUID.
  *
  * Returns:
- *     The POI with category, contact, price, and profile data, or undefined.
+ *     The POI with category, contact, and profile data, or undefined.
  */
 export async function getPoiWithProfile(poiId: string) {
   const baseResults = await db
@@ -131,6 +112,7 @@ export async function getPoiWithProfile(poiId: string) {
       locale: pois.locale,
       osmType: pois.osmType,
       osmTags: pois.osmTags,
+      profile: pois.profile,
       wikipediaUrl: pois.wikipediaUrl,
       imageUrl: pois.imageUrl,
       createdAt: pois.createdAt,
@@ -152,20 +134,10 @@ export async function getPoiWithProfile(poiId: string) {
         openingHoursRaw: contactInfo.openingHoursRaw,
         openingHoursDisplay: contactInfo.openingHoursDisplay,
       },
-      price: {
-        priceLevel: priceInfo.priceLevel,
-        freeEntry: priceInfo.freeEntry,
-        admissionAdult: priceInfo.admissionAdult,
-        admissionChild: priceInfo.admissionChild,
-        admissionStudent: priceInfo.admissionStudent,
-        currency: priceInfo.currency,
-        notes: priceInfo.notes,
-      },
     })
     .from(pois)
     .leftJoin(categories, eq(pois.categoryId, categories.id))
     .leftJoin(contactInfo, eq(pois.id, contactInfo.poiId))
-    .leftJoin(priceInfo, eq(pois.id, priceInfo.poiId))
     .where(eq(pois.id, poiId))
     .limit(1);
 
@@ -183,14 +155,7 @@ export async function getPoiWithProfile(poiId: string) {
     .innerJoin(tags, eq(poiTags.tagId, tags.id))
     .where(eq(poiTags.poiId, poiId));
 
-  const categorySlug = base.category?.slug as CategorySlug | undefined;
-  let profile: Record<string, unknown> | null = null;
-
-  if (categorySlug) {
-    profile = await fetchProfileByCategory(poiId, categorySlug);
-  }
-
-  return { ...base, tags: poiTags_, profile };
+  return { ...base, tags: poiTags_ };
 }
 
 /**
@@ -243,11 +208,11 @@ export async function getAllCategories() {
 }
 
 /**
- * Fetches POIs by category slug with optional profile-specific filtering.
+ * Fetches POIs by category slug within an optional geo radius.
  *
  * Args:
  *     categorySlug: The category slug to filter by.
- *     options: Optional filters like priceLevel, outdoor, etc.
+ *     options: Optional filters like limit, geo bounds.
  *
  * Returns:
  *     Array of POIs matching the category and filters.
@@ -259,11 +224,9 @@ export async function getPoisByCategory(
     latitude?: number;
     longitude?: number;
     radiusMeters?: number;
-    priceLevel?: number;
-    hasOutdoorSeating?: boolean;
   } = {}
 ) {
-  const { limit = 50, latitude, longitude, radiusMeters = 2000, priceLevel, hasOutdoorSeating } = options;
+  const { limit = 50, latitude, longitude, radiusMeters = 2000 } = options;
 
   const conditions = [eq(categories.slug, categorySlug)];
 
@@ -277,7 +240,7 @@ export async function getPoisByCategory(
     conditions.push(lte(pois.longitude, longitude + lonDelta));
   }
 
-  const query = db
+  return db
     .select({
       id: pois.id,
       osmId: pois.osmId,
@@ -287,6 +250,7 @@ export async function getPoisByCategory(
       longitude: pois.longitude,
       address: pois.address,
       imageUrl: pois.imageUrl,
+      profile: pois.profile,
       category: {
         id: categories.id,
         name: categories.name,
@@ -299,118 +263,6 @@ export async function getPoisByCategory(
     .innerJoin(categories, eq(pois.categoryId, categories.id))
     .where(and(...conditions))
     .limit(limit);
-
-  const results = await query;
-
-  if (priceLevel === undefined && hasOutdoorSeating === undefined) {
-    return results;
-  }
-
-  if (categorySlug === "food" && (priceLevel !== undefined || hasOutdoorSeating !== undefined)) {
-    const poiIds = results.map((r) => r.id);
-    if (poiIds.length === 0) return results;
-
-    const profiles = await db
-      .select({
-        poiId: foodProfiles.poiId,
-        priceLevel: foodProfiles.priceLevel,
-        hasOutdoorSeating: foodProfiles.hasOutdoorSeating,
-      })
-      .from(foodProfiles)
-      .where(sql`${foodProfiles.poiId} = ANY(${poiIds})`);
-
-    const profileMap = new Map(profiles.map((p) => [p.poiId, p]));
-
-    return results.filter((r) => {
-      const fp = profileMap.get(r.id);
-      if (!fp) return false;
-      if (priceLevel !== undefined && fp.priceLevel !== priceLevel) return false;
-      if (hasOutdoorSeating !== undefined && fp.hasOutdoorSeating !== hasOutdoorSeating) return false;
-      return true;
-    });
-  }
-
-  return results;
-}
-
-async function fetchProfileByCategory(
-  poiId: string,
-  categorySlug: CategorySlug
-): Promise<Record<string, unknown> | null> {
-  switch (categorySlug) {
-    case "food": {
-      const r = await db.select().from(foodProfiles).where(eq(foodProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "history": {
-      const r = await db.select().from(historyProfiles).where(eq(historyProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "architecture": {
-      const r = await db.select().from(architectureProfiles).where(eq(architectureProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "nature": {
-      const r = await db.select().from(natureProfiles).where(eq(natureProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "art":
-    case "culture": {
-      const r = await db.select().from(artCultureProfiles).where(eq(artCultureProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "nightlife": {
-      const r = await db.select().from(nightlifeProfiles).where(eq(nightlifeProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "shopping": {
-      const r = await db.select().from(shoppingProfiles).where(eq(shoppingProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "views": {
-      const r = await db.select().from(viewpointProfiles).where(eq(viewpointProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "transport": {
-      const r = await db.select().from(transportProfiles).where(eq(transportProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "education": {
-      const r = await db.select().from(educationProfiles).where(eq(educationProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "health": {
-      const r = await db.select().from(healthProfiles).where(eq(healthProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "sports": {
-      const r = await db.select().from(sportsProfiles).where(eq(sportsProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    case "services": {
-      const r = await db.select().from(servicesProfiles).where(eq(servicesProfiles.poiId, poiId)).limit(1);
-      return (r[0] as Record<string, unknown>) ?? null;
-    }
-    default:
-      return null;
-  }
-}
-
-/**
- * Loads the category-specific profile for a POI.
- *
- * Args:
- *     poiId: The POI's UUID.
- *     categorySlug: The category slug to determine which profile table to query.
- *
- * Returns:
- *     The profile record, or null if none exists.
- */
-export async function loadProfile(
-  poiId: string,
-  categorySlug: string
-): Promise<Record<string, unknown> | null> {
-  return fetchProfileByCategory(poiId, categorySlug as CategorySlug);
 }
 
 /**
@@ -581,29 +433,3 @@ export async function loadAccessibilityInfo(
   return results[0] ?? null;
 }
 
-/**
- * Loads price info for a POI.
- *
- * Args:
- *     poiId: The POI's UUID.
- *
- * Returns:
- *     Object with priceLevel and freeEntry, or null if none exists.
- */
-export async function loadPriceInfo(
-  poiId: string
-): Promise<{
-  priceLevel: number | null;
-  freeEntry: boolean | null;
-} | null> {
-  const results = await db
-    .select({
-      priceLevel: priceInfo.priceLevel,
-      freeEntry: priceInfo.freeEntry,
-    })
-    .from(priceInfo)
-    .where(eq(priceInfo.poiId, poiId))
-    .limit(1);
-
-  return results[0] ?? null;
-}

@@ -54,5 +54,8 @@ drizzle/*.sql
 *.swp
 *.swo
 
+# Removed services (Docker-owned leftovers)
+/searxng/
+
 # Env
 !.env.example.*

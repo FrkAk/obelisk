@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
         address: pois.address,
         wikipediaUrl: pois.wikipediaUrl,
         osmTags: pois.osmTags,
+        profile: pois.profile,
         latitude: pois.latitude,
         longitude: pois.longitude,
         categoryName: categories.name,
@@ -117,6 +118,7 @@ export async function POST(request: NextRequest) {
 
     for (const poi of poisWithoutRemarks) {
       try {
+        const profile = (poi.profile as import("@/types").PoiProfile | null) ?? null;
         const storyCtx: StoryPoiContext = {
           poi: {
             id: poi.id,
@@ -130,6 +132,7 @@ export async function POST(request: NextRequest) {
             locale: "de-DE",
             osmType: null,
             osmTags: poi.osmTags,
+            profile,
             wikipediaUrl: poi.wikipediaUrl,
             imageUrl: null,
             embedding: null,
@@ -139,7 +142,7 @@ export async function POST(request: NextRequest) {
           },
           categorySlug: poi.categorySlug ?? "hidden",
           categoryName: poi.categoryName || "Hidden Gems",
-          profile: null,
+          profile,
           tags: [],
         };
 

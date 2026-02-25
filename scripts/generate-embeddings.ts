@@ -2,37 +2,24 @@ import { db } from "../src/lib/db/client";
 import {
   pois,
   categories,
-  enrichmentLog,
 } from "../src/lib/db/schema";
-import { and, eq, isNull, sql, or } from "drizzle-orm";
+import { eq, isNull, sql, or } from "drizzle-orm";
 import { EMBED_MODEL, checkOllamaHealth } from "../src/lib/ai/ollama";
-import { buildEmbeddingText, profileCompleteness } from "../src/lib/ai/embeddingBuilder";
-import type { ProfileUnion } from "../src/lib/ai/embeddingBuilder";
+import { buildEmbeddingText } from "../src/lib/ai/embeddingBuilder";
 import { embedTexts } from "../src/lib/ai/embeddings";
 import {
-  loadProfile,
   loadTags,
   loadCuisines,
-  loadDishes,
   loadContactInfo,
-  loadTranslation,
-  loadCurrentRemark,
   loadAccessibilityInfo,
-  loadPriceInfo,
 } from "../src/lib/db/queries/pois";
-import type { Poi } from "../src/types";
+import type { Poi, PoiProfile } from "../src/types";
 import { createLogger } from "../src/lib/logger";
 
 const log = createLogger("embeddings");
 
 const BATCH_SIZE = parseInt(process.env.EMBED_BATCH_SIZE || "25", 10);
 const STALE_MODE = process.argv.includes("--stale");
-
-interface PoiContext {
-  poi: Poi;
-  text: string;
-  profile: ProfileUnion;
-}
 
 const POI_SELECT_FIELDS = {
   id: pois.id,
@@ -46,6 +33,7 @@ const POI_SELECT_FIELDS = {
   locale: pois.locale,
   osmType: pois.osmType,
   osmTags: pois.osmTags,
+  profile: pois.profile,
   wikipediaUrl: pois.wikipediaUrl,
   imageUrl: pois.imageUrl,
   embedding: pois.embedding,
@@ -57,8 +45,8 @@ const POI_SELECT_FIELDS = {
 
 /**
  * Fetches POIs that need embedding generation.
- * In default mode, selects POIs without embeddings.
- * In stale mode, also includes POIs whose enrichment_log has newer entries than pois.updatedAt.
+ * In default mode, selects all POIs without embeddings.
+ * In stale mode, also includes POIs whose profile was updated after embedding.
  *
  * Args:
  *     stale: Whether to include stale embeddings.
@@ -67,39 +55,22 @@ const POI_SELECT_FIELDS = {
  *     Array of POI rows with category slug.
  */
 async function fetchTargetPois(stale: boolean) {
-  const enrichedFilter = sql`${pois.id} IN (
-    SELECT ${enrichmentLog.poiId} FROM ${enrichmentLog}
-    WHERE ${enrichmentLog.source} = 'enrich'
-      AND ${enrichmentLog.status} IN ('success', 'success_fb')
-  )`;
-
   if (!stale) {
     return db
       .select(POI_SELECT_FIELDS)
       .from(pois)
       .leftJoin(categories, eq(pois.categoryId, categories.id))
-      .where(and(isNull(pois.embedding), enrichedFilter));
+      .where(isNull(pois.embedding));
   }
-
-  const staleSubquery = db
-    .select({ poiId: enrichmentLog.poiId })
-    .from(enrichmentLog)
-    .where(
-      sql`${enrichmentLog.createdAt} > (SELECT updated_at FROM pois WHERE pois.id = ${enrichmentLog.poiId})`,
-    )
-    .groupBy(enrichmentLog.poiId);
 
   return db
     .select(POI_SELECT_FIELDS)
     .from(pois)
     .leftJoin(categories, eq(pois.categoryId, categories.id))
     .where(
-      and(
-        enrichedFilter,
-        or(
-          isNull(pois.embedding),
-          sql`${pois.id} IN (${staleSubquery})`,
-        ),
+      or(
+        isNull(pois.embedding),
+        sql`${pois.updatedAt} > ${pois.createdAt}`,
       ),
     );
 }
@@ -113,20 +84,6 @@ async function generateEmbeddings() {
     log.error(`Ollama not available or model ${EMBED_MODEL} not loaded.`);
     log.info(`Run: ollama pull ${EMBED_MODEL}`);
     process.exit(1);
-  }
-
-  const cleaned = await db.execute<{ id: string }>(sql`
-    UPDATE pois
-    SET embedding = NULL, search_vector = NULL, updated_at = now()
-    WHERE embedding IS NOT NULL
-      AND id NOT IN (
-        SELECT poi_id FROM enrichment_log
-        WHERE source = 'enrich' AND status IN ('success', 'success_fb')
-      )
-    RETURNING id
-  `);
-  if (cleaned.length > 0) {
-    log.info(`Cleaned ${cleaned.length} low-quality embeddings from unenriched POIs`);
   }
 
   const targetPois = await fetchTargetPois(STALE_MODE);
@@ -144,11 +101,10 @@ async function generateEmbeddings() {
   for (let i = 0; i < targetPois.length; i += BATCH_SIZE) {
     const batch = targetPois.slice(i, i + BATCH_SIZE);
 
-    const contexts: PoiContext[] = [];
+    const contexts: Array<{ poi: Poi; text: string }> = [];
 
     const contextResults = await Promise.allSettled(
       batch.map(async (row) => {
-        const categorySlug = row.categorySlug ?? "";
         const poi: Poi = {
           id: row.id,
           osmId: row.osmId,
@@ -161,6 +117,7 @@ async function generateEmbeddings() {
           locale: row.locale,
           osmType: row.osmType,
           osmTags: row.osmTags,
+          profile: row.profile as PoiProfile | null,
           wikipediaUrl: row.wikipediaUrl,
           imageUrl: row.imageUrl,
           embedding: row.embedding,
@@ -169,34 +126,26 @@ async function generateEmbeddings() {
           updatedAt: row.updatedAt,
         };
 
-        const [profile, poiTagList, poiCuisineList, poiDishList, contact, translation, remarkContent, accessibility, price] =
+        const profile = (row.profile as PoiProfile) ?? null;
+
+        const [poiTagList, poiCuisineList, contact, accessibility] =
           await Promise.all([
-            loadProfile(poi.id, categorySlug),
             loadTags(poi.id),
             loadCuisines(poi.id),
-            loadDishes(poi.id),
             loadContactInfo(poi.id),
-            loadTranslation(poi.id, poi.locale),
-            loadCurrentRemark(poi.id),
             loadAccessibilityInfo(poi.id),
-            loadPriceInfo(poi.id),
           ]);
 
-        const text = buildEmbeddingText({
+        const text = buildEmbeddingText(
           poi,
-          profile: profile as ProfileUnion,
-          tags: poiTagList,
-          cuisines: poiCuisineList,
-          dishes: poiDishList,
-          contactInfo: contact,
+          profile,
+          poiTagList,
+          poiCuisineList,
+          contact,
           accessibility,
-          priceInfo: price,
-          description: translation?.description ?? undefined,
-          reviewSummary: translation?.reviewSummary ?? undefined,
-          remarkContent: remarkContent ?? undefined,
-        });
+        );
 
-        return { poi, text, profile: profile as ProfileUnion } satisfies PoiContext;
+        return { poi, text };
       }),
     );
 
@@ -227,21 +176,6 @@ async function generateEmbeddings() {
                     updated_at = now()
                 WHERE id = ${ctx.poi.id}`,
           );
-
-          const completeness = profileCompleteness(ctx.profile);
-          await db.insert(enrichmentLog).values({
-            poiId: ctx.poi.id,
-            source: "llm_embed",
-            status: "success",
-            fieldsUpdated: ["pois.embedding", "pois.search_vector"],
-            metadata: {
-              model: EMBED_MODEL,
-              textLength: ctx.text.length,
-              profileCompleteness: completeness.ratio,
-              embeddingDim: embeddings[j].length,
-              staleMode: STALE_MODE,
-            },
-          });
 
           processed++;
         }),

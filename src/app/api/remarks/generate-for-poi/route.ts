@@ -1,19 +1,16 @@
 "use server";
 
 import { NextRequest, NextResponse } from "next/server";
-import { after } from "next/server";
 import { db } from "@/lib/db/client";
 import { pois, remarks, categories } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { generateStory } from "@/lib/ai/storyGenerator";
-import type { StoryPoiContext, ProfileUnion } from "@/lib/ai/storyGenerator";
+import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
-import { loadProfile, loadTags, loadCuisines, loadDishes, loadContactInfo } from "@/lib/db/queries/pois";
-import { enrichPoi } from "@/lib/enrichment/pipeline";
-import { syncPoiSearchIndex } from "@/lib/enrichment/postprocess";
+import { loadTags, loadContactInfo } from "@/lib/db/queries/pois";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
-import type { CategorySlug } from "@/types";
+import type { CategorySlug, PoiProfile } from "@/types";
 import { getCurrentRemarkForPoi } from "@/lib/db/queries/remarks";
 
 const log = createLogger("generate-for-poi");
@@ -166,12 +163,12 @@ export async function POST(request: NextRequest) {
       log.info(
         `No remark exists, generating new one for: "${existingPoi.name}"`
       );
-      return await generateAndSaveRemark(existingPoi, externalPoi.website);
+      return await generateAndSaveRemark(existingPoi);
     }
 
     log.info(`POI not in DB, creating new: "${externalPoi.name}"`);
     const newPoi = await createPoiFromExternal(externalPoi);
-    return await generateAndSaveRemark(newPoi, externalPoi.website);
+    return await generateAndSaveRemark(newPoi);
   } catch (error) {
     log.error("Error:", error);
     const errorMessage =
@@ -198,6 +195,7 @@ async function findPoiByOsmId(osmId: number) {
       longitude: pois.longitude,
       address: pois.address,
       locale: pois.locale,
+      profile: pois.profile,
       wikipediaUrl: pois.wikipediaUrl,
       imageUrl: pois.imageUrl,
       osmTags: pois.osmTags,
@@ -281,6 +279,7 @@ async function generateAndSaveRemark(
     locale: string;
     wikipediaUrl: string | null;
     osmTags: Record<string, string> | null;
+    profile: unknown;
     latitude: number;
     longitude: number;
     osmId: number | null;
@@ -292,7 +291,6 @@ async function generateAndSaveRemark(
     categoryIcon: string | null;
     categoryColor: string | null;
   },
-  websiteUrl?: string
 ) {
   const isHealthy = await checkOllamaHealth();
   if (!isHealthy) {
@@ -304,29 +302,14 @@ async function generateAndSaveRemark(
 
   const categoryName = poi.categoryName || "Hidden Gems";
   const categorySlug = poi.categorySlug ?? "hidden";
-
-  const enrichWebsiteUrl = websiteUrl ?? poi.osmTags?.website ?? null;
-  await enrichPoi({
-    id: poi.id,
-    name: poi.name,
-    address: poi.address,
-    categorySlug,
-    websiteUrl: enrichWebsiteUrl,
-    wikipediaUrl: poi.wikipediaUrl,
-    locale: poi.locale,
-    osmTags: poi.osmTags,
-  });
+  const profile = (poi.profile as PoiProfile | null) ?? null;
 
   log.info(`Generating story for: "${poi.name}" with category: "${categoryName}"`);
 
-  const [profile, poiTagList, cuisineList, dishList, contact] =
-    await Promise.all([
-      loadProfile(poi.id, categorySlug),
-      loadTags(poi.id),
-      loadCuisines(poi.id),
-      loadDishes(poi.id),
-      loadContactInfo(poi.id),
-    ]);
+  const [poiTagList, contact] = await Promise.all([
+    loadTags(poi.id),
+    loadContactInfo(poi.id),
+  ]);
 
   const storyCtx: StoryPoiContext = {
     poi: {
@@ -341,6 +324,7 @@ async function generateAndSaveRemark(
       locale: poi.locale,
       osmType: null,
       osmTags: poi.osmTags,
+      profile,
       wikipediaUrl: poi.wikipediaUrl,
       imageUrl: poi.imageUrl,
       embedding: null,
@@ -350,10 +334,8 @@ async function generateAndSaveRemark(
     },
     categorySlug,
     categoryName,
-    profile: profile as ProfileUnion,
+    profile,
     tags: poiTagList,
-    cuisines: cuisineList,
-    dishes: dishList,
     contactInfo: contact,
   };
 
@@ -414,10 +396,6 @@ async function generateAndSaveRemark(
         : undefined,
     },
   };
-
-  after(async () => {
-    await syncPoiSearchIndex(poi.id, categorySlug);
-  });
 
   return NextResponse.json({
     remark: remarkWithPoi,

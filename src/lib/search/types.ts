@@ -43,7 +43,7 @@ export interface SearchResult {
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
   remark?: Remark & { poi: Poi & { category?: Category } };
-  source: "typesense" | "semantic" | "obelisk-db";
+  source: "typesense" | "semantic";
 }
 
 export interface SearchResponse {
@@ -53,7 +53,6 @@ export interface SearchResponse {
     parseMs: number;
     typesenseMs: number;
     semanticMs: number;
-    obeliskMs: number;
     totalMs: number;
   };
 }
@@ -131,14 +130,7 @@ export interface ExternalPOI {
   imageUrl?: string;
   wikipediaUrl?: string;
   extraTags?: Record<string, string>;
-  source: "nominatim" | "overpass" | "obelisk-db";
-}
-
-export interface ObeliskResult {
-  type: "remark";
-  remark: Remark & { poi: Poi & { category?: Category } };
-  distance?: number;
-  score: number;
+  source: "nominatim" | "overpass";
 }
 
 export interface ExternalResult {

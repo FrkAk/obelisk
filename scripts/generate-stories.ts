@@ -1,17 +1,12 @@
 import { db } from "../src/lib/db/client";
-import {
-  pois,
-  categories,
-  remarks,
-  enrichmentLog,
-} from "../src/lib/db/schema";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { pois, categories, remarks } from "../src/lib/db/schema";
+import { eq, isNull, sql } from "drizzle-orm";
 import { checkOllamaHealth } from "../src/lib/ai/ollama";
 import { generateStory } from "../src/lib/ai/storyGenerator";
-import type { StoryPoiContext, ProfileUnion } from "../src/lib/ai/storyGenerator";
-import type { Poi } from "../src/types";
+import type { StoryPoiContext } from "../src/lib/ai/storyGenerator";
+import type { Poi, PoiProfile } from "../src/types";
 import { processWithConcurrency } from "./lib/concurrency";
-import { loadProfile, loadTags, loadCuisines, loadDishes, loadContactInfo } from "../src/lib/db/queries/pois";
+import { loadTags, loadContactInfo } from "../src/lib/db/queries/pois";
 
 const STORY_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
 const BATCH_LIMIT = parseInt(process.env.STORY_BATCH_LIMIT || "20", 10);
@@ -43,6 +38,7 @@ async function main() {
       locale: pois.locale,
       osmType: pois.osmType,
       osmTags: pois.osmTags,
+      profile: pois.profile,
       wikipediaUrl: pois.wikipediaUrl,
       imageUrl: pois.imageUrl,
       embedding: pois.embedding,
@@ -58,16 +54,7 @@ async function main() {
       remarks,
       sql`${remarks.poiId} = ${pois.id} AND ${remarks.isCurrent} = true`,
     )
-    .where(
-      and(
-        isNull(remarks.id),
-        sql`${pois.id} IN (
-          SELECT ${enrichmentLog.poiId} FROM ${enrichmentLog}
-          WHERE ${enrichmentLog.source} = 'enrich'
-            AND ${enrichmentLog.status} IN ('success', 'success_fb')
-        )`
-      )
-    )
+    .where(isNull(remarks.id))
     .limit(BATCH_LIMIT);
 
   if (poisWithoutRemarks.length === 0) {
@@ -98,6 +85,7 @@ async function main() {
         locale: row.locale,
         osmType: row.osmType,
         osmTags: row.osmTags,
+        profile: row.profile as PoiProfile | null,
         wikipediaUrl: row.wikipediaUrl,
         imageUrl: row.imageUrl,
         embedding: row.embedding,
@@ -106,60 +94,36 @@ async function main() {
         updatedAt: row.updatedAt,
       };
 
-      const [profile, poiTagList, cuisineList, dishList, contact] =
-        await Promise.all([
-          loadProfile(poi.id, categorySlug),
-          loadTags(poi.id),
-          loadCuisines(poi.id),
-          loadDishes(poi.id),
-          loadContactInfo(poi.id),
-        ]);
+      const [poiTagList, contact] = await Promise.all([
+        loadTags(poi.id),
+        loadContactInfo(poi.id),
+      ]);
 
       const ctx: StoryPoiContext = {
         poi,
         categorySlug,
         categoryName,
-        profile: profile as ProfileUnion,
+        profile: poi.profile,
         tags: poiTagList,
-        cuisines: cuisineList,
-        dishes: dishList,
         contactInfo: contact,
       };
 
       const story = await generateStory(ctx, STORY_MODEL);
 
-      await Promise.all([
-        db.insert(remarks).values({
-          poiId: poi.id,
-          locale: poi.locale,
-          version: 1,
-          isCurrent: true,
-          title: story.title.slice(0, 100),
-          teaser: story.teaser.slice(0, 100),
-          content: story.content,
-          localTip: story.localTip,
-          durationSeconds: story.durationSeconds,
-          modelId: story.modelId,
-          confidence: story.confidence,
-          contextSources: story.contextSources,
-        }),
-        db.insert(enrichmentLog).values({
-          poiId: poi.id,
-          source: "llm_story",
-          status: "success",
-          fieldsUpdated: [
-            "remarks.title",
-            "remarks.teaser",
-            "remarks.content",
-            "remarks.local_tip",
-          ],
-          metadata: {
-            model: story.modelId,
-            confidence: story.confidence,
-            contextSources: story.contextSources,
-          },
-        }),
-      ]);
+      await db.insert(remarks).values({
+        poiId: poi.id,
+        locale: poi.locale,
+        version: 1,
+        isCurrent: true,
+        title: story.title.slice(0, 100),
+        teaser: story.teaser.slice(0, 100),
+        content: story.content,
+        localTip: story.localTip,
+        durationSeconds: story.durationSeconds,
+        modelId: story.modelId,
+        confidence: story.confidence,
+        contextSources: story.contextSources,
+      });
 
       savedCount++;
       console.log(

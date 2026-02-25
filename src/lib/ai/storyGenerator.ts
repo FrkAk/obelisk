@@ -1,53 +1,14 @@
 import { generateText } from "./ollama";
 import { detectLocale, buildLanguagePrompt } from "./localization";
-import { profileCompleteness } from "./embeddingBuilder";
 import type { LocaleInfo } from "./localization";
-import type {
-  Poi,
-  Tag,
-  FoodProfile,
-  HistoryProfile,
-  ArchitectureProfile,
-  NatureProfile,
-  ArtCultureProfile,
-  NightlifeProfile,
-  ShoppingProfile,
-  ViewpointProfile,
-  TransportProfile,
-  EducationProfile,
-  HealthProfile,
-  SportsProfile,
-  ServicesProfile,
-  Cuisine,
-  PoiDish,
-  Dish,
-  ContactInfo,
-} from "@/types";
-
-export type ProfileUnion =
-  | FoodProfile
-  | HistoryProfile
-  | ArchitectureProfile
-  | NatureProfile
-  | ArtCultureProfile
-  | NightlifeProfile
-  | ShoppingProfile
-  | ViewpointProfile
-  | TransportProfile
-  | EducationProfile
-  | HealthProfile
-  | SportsProfile
-  | ServicesProfile
-  | null;
+import type { Poi, Tag, PoiProfile, ContactInfo } from "@/types";
 
 export interface StoryPoiContext {
   poi: Poi;
   categorySlug: string;
   categoryName: string;
-  profile: ProfileUnion;
+  profile: PoiProfile | null;
   tags: Tag[];
-  cuisines?: Cuisine[];
-  dishes?: Array<PoiDish & { dish: Dish }>;
   contactInfo?: ContactInfo | null;
 }
 
@@ -158,25 +119,32 @@ function getPersona(categorySlug: string): CategoryPersona {
 
 /**
  * Scores POI data richness to determine story generation confidence level.
- * Considers profile completeness, OSM tags, Wikipedia, tags, and cuisines.
+ * Based on JSONB profile completeness: keywords, products, summary, and tags.
  *
- * @param ctx - Full POI context with profile and metadata.
- * @returns Confidence level: "high" (score >= 5), "medium" (>= 2), or "low".
+ * Args:
+ *     ctx: Full POI context with JSONB profile and metadata.
+ *
+ * Returns:
+ *     Confidence level: "high" (score >= 5), "medium" (>= 2), or "low".
  */
 function assessConfidence(ctx: StoryPoiContext): "high" | "medium" | "low" {
-  const { ratio } = profileCompleteness(ctx.profile);
-  let score = ratio * 4;
+  let score = 0;
+  const profile = ctx.profile;
 
-  const osmTagCount = Object.keys(ctx.poi.osmTags ?? {}).length;
-  if (osmTagCount >= 5) score += 1;
-  if (osmTagCount >= 10) score += 1;
+  if (profile) {
+    if (profile.keywords.length >= 3) score += 2;
+    else if (profile.keywords.length > 0) score += 1;
 
-  if (ctx.poi.wikipediaUrl) score += 2;
+    if (profile.products.length >= 3) score += 2;
+    else if (profile.products.length > 0) score += 1;
+
+    if (profile.summary) score += 2;
+    if (Object.keys(profile.attributes).length > 0) score += 1;
+  }
 
   if (ctx.tags.length > 0) score += 1;
   if (ctx.contactInfo != null) score += 1;
-
-  if ((ctx.cuisines?.length ?? 0) > 0) score += 1;
+  if (ctx.poi.wikipediaUrl) score += 1;
 
   if (score >= 5) return "high";
   if (score >= 2) return "medium";
@@ -186,19 +154,22 @@ function assessConfidence(ctx: StoryPoiContext): "high" | "medium" | "low" {
 /**
  * Builds a metadata object summarizing the data sources used for story generation.
  *
- * @param ctx - Full POI context with profile and metadata.
- * @returns Metadata record with profile stats, tag/cuisine/dish counts, and flags.
+ * Args:
+ *     ctx: Full POI context with JSONB profile and metadata.
+ *
+ * Returns:
+ *     Metadata record with profile stats, tag counts, and flags.
  */
 function buildContextSources(ctx: StoryPoiContext): Record<string, unknown> {
-  const completeness = profileCompleteness(ctx.profile);
+  const profile = ctx.profile;
   return {
-    profileType: ctx.categorySlug,
-    profilePopulated: completeness.populated,
-    profileTotal: completeness.total,
-    profileRatio: Math.round(completeness.ratio * 100),
+    categorySlug: ctx.categorySlug,
+    keywordCount: profile?.keywords.length ?? 0,
+    productCount: profile?.products.length ?? 0,
+    hasSummary: !!profile?.summary,
+    enrichmentSource: profile?.enrichmentSource ?? "none",
+    attributeCount: Object.keys(profile?.attributes ?? {}).length,
     tagCount: ctx.tags.length,
-    cuisineCount: ctx.cuisines?.length ?? 0,
-    dishCount: ctx.dishes?.length ?? 0,
     hasContactInfo: ctx.contactInfo != null,
     hasWikipedia: !!ctx.poi.wikipediaUrl,
   };
@@ -225,355 +196,37 @@ function buildHonestyGuidelines(confidence: "high" | "medium" | "low"): string {
 - Your reputation depends on being trustworthy, not just positive`;
 }
 
-function buildFoodContext(ctx: StoryPoiContext): string {
-  const fp = ctx.profile as FoodProfile;
-  if (!fp) return "No profile data available.";
+/**
+ * Builds a human-readable context string from a JSONB PoiProfile for the LLM prompt.
+ * Formats keywords, products, summary, subtype, and attributes into a newline-separated string.
+ *
+ * Args:
+ *     profile: JSONB profile data from the pois table.
+ *
+ * Returns:
+ *     Newline-separated profile summary string for the LLM prompt.
+ */
+function buildProfileContext(profile: PoiProfile | null): string {
+  if (!profile) return "No profile data available.";
 
   const parts: string[] = [];
-  if (fp.establishmentType) parts.push(`Type: ${fp.establishmentType}`);
-  if (fp.vibe) parts.push(`Vibe: ${fp.vibe}`);
-  if (fp.ambiance) parts.push(`Ambiance: ${fp.ambiance}`);
-  if (fp.noiseLevel) parts.push(`Noise level: ${fp.noiseLevel}`);
-  if (fp.priceLevel) parts.push(`Price level: ${fp.priceLevel}/4`);
-  if (fp.hasOutdoorSeating) parts.push("Has outdoor seating");
-  if (fp.hasCommunalTables) parts.push("Has communal tables");
-  if (fp.hasLiveMusic) parts.push("Has live music");
-  if (fp.reservationPolicy) parts.push(`Reservation: ${fp.reservationPolicy}`);
-  if (fp.kidFriendly) parts.push("Family-friendly");
-  if (fp.michelinStars && fp.michelinStars > 0)
-    parts.push(`${fp.michelinStars} Michelin star(s)`);
-  if (fp.michelinBib) parts.push("Bib Gourmand");
 
-  if (fp.servesBeer || fp.servesWine || fp.servesCocktails) {
-    const drinks: string[] = [];
-    if (fp.servesBeer) drinks.push("beer");
-    if (fp.servesWine) drinks.push("wine");
-    if (fp.servesCocktails) drinks.push("cocktails");
-    parts.push(`Serves: ${drinks.join(", ")}`);
+  if (profile.subtype) parts.push(`Type: ${profile.subtype}`);
+  if (profile.summary) parts.push(`Description: ${profile.summary}`);
+  if (profile.keywords.length > 0) parts.push(`Keywords: ${profile.keywords.join(", ")}`);
+  if (profile.products.length > 0) parts.push(`Products/Services: ${profile.products.join(", ")}`);
+
+  for (const [key, value] of Object.entries(profile.attributes)) {
+    if (value != null && value !== "") {
+      if (Array.isArray(value)) {
+        if (value.length > 0) parts.push(`${key}: ${value.join(", ")}`);
+      } else {
+        parts.push(`${key}: ${String(value)}`);
+      }
+    }
   }
 
-  const dietaryFlags: string[] = [];
-  if (fp.dietVegetarian === "yes" || fp.dietVegetarian === "only")
-    dietaryFlags.push("vegetarian options");
-  if (fp.dietVegan === "yes" || fp.dietVegan === "only")
-    dietaryFlags.push("vegan options");
-  if (fp.dietHalal === "yes") dietaryFlags.push("halal");
-  if (dietaryFlags.length > 0) parts.push(`Dietary: ${dietaryFlags.join(", ")}`);
-
-  if (ctx.cuisines && ctx.cuisines.length > 0) {
-    parts.push(`Cuisine: ${ctx.cuisines.map((c) => c.name).join(", ")}`);
-  }
-
-  if (ctx.dishes && ctx.dishes.length > 0) {
-    const signature = ctx.dishes
-      .filter((d) => d.isSignature || d.isPopular)
-      .map((d) => d.dish?.name ?? d.localName)
-      .filter(Boolean)
-      .slice(0, 5);
-    if (signature.length > 0) parts.push(`Signature dishes: ${signature.join(", ")}`);
-
-    const others = ctx.dishes
-      .filter((d) => !d.isSignature && !d.isPopular)
-      .map((d) => d.dish?.name ?? d.localName)
-      .filter(Boolean)
-      .slice(0, 5);
-    if (others.length > 0) parts.push(`Menu items: ${others.join(", ")}`);
-  }
-
-  return parts.length > 0 ? parts.join("\n") : "Limited food profile data.";
-}
-
-function buildHistoryContext(ctx: StoryPoiContext): string {
-  const hp = ctx.profile as HistoryProfile;
-  if (!hp) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (hp.subtype) parts.push(`Type: ${hp.subtype}`);
-  if (hp.yearBuilt != null) parts.push(`Year built: ${hp.yearBuilt < 0 ? `${Math.abs(hp.yearBuilt)} BC` : hp.yearBuilt}`);
-  if (hp.yearDestroyed != null) parts.push(`Year destroyed: ${hp.yearDestroyed}`);
-  if (hp.historicalSignificance) parts.push(`Significance: ${hp.historicalSignificance}`);
-  if (hp.keyFigures?.length) parts.push(`Key figures: ${hp.keyFigures.join(", ")}`);
-  if (hp.keyEvents?.length) parts.push(`Key events: ${hp.keyEvents.join(", ")}`);
-  if (hp.originalPurpose) parts.push(`Original purpose: ${hp.originalPurpose}`);
-  if (hp.currentUse) parts.push(`Current use: ${hp.currentUse}`);
-  if (hp.heritageLevel) parts.push(`Heritage level: ${hp.heritageLevel}`);
-  if (hp.preservationStatus) parts.push(`Preservation: ${hp.preservationStatus}`);
-  if (hp.inscription) parts.push(`Inscription: ${hp.inscription}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited history profile data.";
-}
-
-function buildArchitectureContext(ctx: StoryPoiContext): string {
-  const ap = ctx.profile as ArchitectureProfile;
-  if (!ap) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (ap.subtype) parts.push(`Type: ${ap.subtype}`);
-  if (ap.primaryStyle) parts.push(`Style: ${ap.primaryStyle}`);
-  if (ap.architect) parts.push(`Architect: ${ap.architect}`);
-  if (ap.yearBuilt != null) parts.push(`Built: ${ap.yearBuilt}`);
-  if (ap.yearRenovated != null) parts.push(`Renovated: ${ap.yearRenovated}`);
-  if (ap.heightMeters) parts.push(`Height: ${ap.heightMeters}m`);
-  if (ap.buildingLevels) parts.push(`Levels: ${ap.buildingLevels}`);
-  if (ap.constructionMaterials?.length)
-    parts.push(`Materials: ${ap.constructionMaterials.join(", ")}`);
-  if (ap.interiorHighlights?.length)
-    parts.push(`Interior highlights: ${ap.interiorHighlights.join(", ")}`);
-  if (ap.denomination) parts.push(`Denomination: ${ap.denomination}`);
-  if (ap.isActiveWorship) parts.push("Active place of worship");
-  if (ap.towerAccessible) parts.push("Tower is accessible to visitors");
-  if (ap.notableFeatures) parts.push(`Notable: ${ap.notableFeatures}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited architecture profile data.";
-}
-
-function buildNatureContext(ctx: StoryPoiContext): string {
-  const np = ctx.profile as NatureProfile;
-  if (!np) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (np.subtype) parts.push(`Type: ${np.subtype}`);
-  if (np.areaHectares) parts.push(`Area: ${np.areaHectares} hectares`);
-  if (np.trailLengthKm) parts.push(`Trail length: ${np.trailLengthKm}km`);
-  if (np.trailDifficulty) parts.push(`Difficulty: ${np.trailDifficulty}`);
-  if (np.elevationGainM) parts.push(`Elevation gain: ${np.elevationGainM}m`);
-  if (np.floraHighlights?.length) parts.push(`Flora: ${np.floraHighlights.join(", ")}`);
-  if (np.wildlifeHighlights?.length) parts.push(`Wildlife: ${np.wildlifeHighlights.join(", ")}`);
-  if (np.facilities?.length) parts.push(`Facilities: ${np.facilities.join(", ")}`);
-
-  const activities: string[] = [];
-  if (np.picnicAllowed) activities.push("picnic");
-  if (np.swimmingAllowed) activities.push("swimming");
-  if (np.cyclingAllowed) activities.push("cycling");
-  if (activities.length > 0) parts.push(`Activities: ${activities.join(", ")}`);
-
-  if (np.notableFeatures) parts.push(`Notable: ${np.notableFeatures}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited nature profile data.";
-}
-
-function buildArtCultureContext(ctx: StoryPoiContext): string {
-  const ac = ctx.profile as ArtCultureProfile;
-  if (!ac) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (ac.subtype) parts.push(`Type: ${ac.subtype}`);
-  if (ac.collectionFocus) parts.push(`Collection: ${ac.collectionFocus}`);
-  if (ac.genreFocus) parts.push(`Genre: ${ac.genreFocus}`);
-  if (ac.notableWorks?.length) parts.push(`Notable works: ${ac.notableWorks.join(", ")}`);
-  if (ac.notablePerformers?.length) parts.push(`Notable performers: ${ac.notablePerformers.join(", ")}`);
-  if (ac.hasPermanentCollection) parts.push("Has permanent collection");
-  if (ac.hasRotatingExhibitions) parts.push("Has rotating exhibitions");
-  if (ac.guidedTours) parts.push("Guided tours available");
-  if (ac.audioGuide) parts.push("Audio guide available");
-  if (ac.avgVisitMinutes) parts.push(`Average visit: ${ac.avgVisitMinutes} minutes`);
-  if (ac.foundedYear) parts.push(`Founded: ${ac.foundedYear}`);
-  if (ac.vibe) parts.push(`Vibe: ${ac.vibe}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited art/culture profile data.";
-}
-
-function buildNightlifeContext(ctx: StoryPoiContext): string {
-  const nl = ctx.profile as NightlifeProfile;
-  if (!nl) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (nl.subtype) parts.push(`Type: ${nl.subtype}`);
-  if (nl.signatureDrinks?.length) parts.push(`Signature drinks: ${nl.signatureDrinks.join(", ")}`);
-  if (nl.dressCode) parts.push(`Dress code: ${nl.dressCode}`);
-  if (nl.coverCharge) parts.push(`Cover: ${nl.coverCurrency ?? "EUR"} ${nl.coverCharge}`);
-  if (nl.peakHours) parts.push(`Peak hours: ${nl.peakHours}`);
-  if (nl.ageDemographic) parts.push(`Crowd: ${nl.ageDemographic}`);
-  if (nl.hasDancefloor) parts.push("Has dancefloor");
-  if (nl.hasDj) parts.push("Has DJ");
-  if (nl.hasLiveMusic) parts.push("Has live music");
-  if (nl.outdoorArea) parts.push("Outdoor area");
-  if (nl.capacity) parts.push(`Capacity: ${nl.capacity}`);
-  if (nl.vibe) parts.push(`Vibe: ${nl.vibe}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited nightlife profile data.";
-}
-
-function buildShoppingContext(ctx: StoryPoiContext): string {
-  const sp = ctx.profile as ShoppingProfile;
-  if (!sp) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (sp.subtype) parts.push(`Type: ${sp.subtype}`);
-  if (sp.productHighlights?.length) parts.push(`Products: ${sp.productHighlights.join(", ")}`);
-  if (sp.brands?.length) parts.push(`Brands: ${sp.brands.join(", ")}`);
-  if (sp.isSecondhand) parts.push("Secondhand/vintage");
-  if (sp.isLocalCrafts) parts.push("Local crafts");
-  if (sp.isLuxury) parts.push("Luxury");
-  if (sp.marketDays) parts.push(`Market days: ${sp.marketDays}`);
-  if (sp.vibe) parts.push(`Vibe: ${sp.vibe}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited shopping profile data.";
-}
-
-function buildViewpointContext(ctx: StoryPoiContext): string {
-  const vp = ctx.profile as ViewpointProfile;
-  if (!vp) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (vp.subtype) parts.push(`Type: ${vp.subtype}`);
-  if (vp.elevationM) parts.push(`Elevation: ${vp.elevationM}m`);
-  if (vp.viewDirection) parts.push(`View direction: ${vp.viewDirection}`);
-  if (vp.visibleLandmarks?.length) parts.push(`Visible: ${vp.visibleLandmarks.join(", ")}`);
-  if (vp.bestTime) parts.push(`Best time: ${vp.bestTime}`);
-  if (vp.weatherDependent) parts.push("Weather dependent");
-  if (vp.requiresClimb) parts.push("Requires climb");
-  if (vp.stepsCount) parts.push(`Steps: ${vp.stepsCount}`);
-  if (vp.photographyTips) parts.push(`Photo tips: ${vp.photographyTips}`);
-  if (vp.crowdLevel) parts.push(`Crowds: ${vp.crowdLevel}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited viewpoint profile data.";
-}
-
-/**
- * Builds a human-readable context string from a transport profile for the LLM prompt.
- *
- * @param ctx - Story POI context with a transport profile.
- * @returns Newline-separated profile summary string.
- */
-function buildTransportContext(ctx: StoryPoiContext): string {
-  const tp = ctx.profile as TransportProfile;
-  if (!tp) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (tp.subtype) parts.push(`Type: ${tp.subtype}`);
-  if (tp.lines?.length) parts.push(`Lines: ${tp.lines.join(", ")}`);
-  if (tp.operator) parts.push(`Operator: ${tp.operator}`);
-  if (tp.yearOpened != null) parts.push(`Opened: ${tp.yearOpened}`);
-  if (tp.dailyRidership) parts.push(`Daily ridership: ${tp.dailyRidership}`);
-  if (tp.isInterchange) parts.push("Major interchange");
-  if (tp.hasElevator) parts.push("Elevator access");
-  if (tp.hasBikeParking) parts.push("Bike parking");
-  if (tp.notableFeatures) parts.push(`Notable: ${tp.notableFeatures}`);
-  if (tp.nearbyConnections?.length) parts.push(`Connections: ${tp.nearbyConnections.join(", ")}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited transport profile data.";
-}
-
-/**
- * Builds a human-readable context string from an education profile for the LLM prompt.
- *
- * @param ctx - Story POI context with an education profile.
- * @returns Newline-separated profile summary string.
- */
-function buildEducationContext(ctx: StoryPoiContext): string {
-  const ep = ctx.profile as EducationProfile;
-  if (!ep) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (ep.subtype) parts.push(`Type: ${ep.subtype}`);
-  if (ep.foundedYear != null) parts.push(`Founded: ${ep.foundedYear}`);
-  if (ep.specialization) parts.push(`Specialization: ${ep.specialization}`);
-  if (ep.notableAlumni?.length) parts.push(`Notable alumni: ${ep.notableAlumni.join(", ")}`);
-  if (ep.studentCount) parts.push(`Students: ${ep.studentCount}`);
-  if (ep.isPublic) parts.push("Public institution");
-  if (ep.hasPublicAccess) parts.push("Public access available");
-  if (ep.hasLibrary) parts.push("Has library");
-  if (ep.architecturalNote) parts.push(`Architecture: ${ep.architecturalNote}`);
-  if (ep.notableFeatures) parts.push(`Notable: ${ep.notableFeatures}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited education profile data.";
-}
-
-/**
- * Builds a human-readable context string from a health profile for the LLM prompt.
- *
- * @param ctx - Story POI context with a health profile.
- * @returns Newline-separated profile summary string.
- */
-function buildHealthContext(ctx: StoryPoiContext): string {
-  const hp = ctx.profile as HealthProfile;
-  if (!hp) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (hp.subtype) parts.push(`Type: ${hp.subtype}`);
-  if (hp.specialization) parts.push(`Specialization: ${hp.specialization}`);
-  if (hp.foundedYear != null) parts.push(`Founded: ${hp.foundedYear}`);
-  if (hp.isEmergency) parts.push("Emergency services");
-  if (hp.spokenLanguages?.length) parts.push(`Languages: ${hp.spokenLanguages.join(", ")}`);
-  if (hp.facilities?.length) parts.push(`Facilities: ${hp.facilities.join(", ")}`);
-  if (hp.notableFeatures) parts.push(`Notable: ${hp.notableFeatures}`);
-  if (hp.vibe) parts.push(`Vibe: ${hp.vibe}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited health profile data.";
-}
-
-/**
- * Builds a human-readable context string from a sports profile for the LLM prompt.
- *
- * @param ctx - Story POI context with a sports profile.
- * @returns Newline-separated profile summary string.
- */
-function buildSportsContext(ctx: StoryPoiContext): string {
-  const sp = ctx.profile as SportsProfile;
-  if (!sp) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (sp.subtype) parts.push(`Type: ${sp.subtype}`);
-  if (sp.sports?.length) parts.push(`Sports: ${sp.sports.join(", ")}`);
-  if (sp.homeTeam) parts.push(`Home team: ${sp.homeTeam}`);
-  if (sp.capacity) parts.push(`Capacity: ${sp.capacity}`);
-  if (sp.yearBuilt != null) parts.push(`Built: ${sp.yearBuilt}`);
-  if (sp.isPublicAccess) parts.push("Public access");
-  if (sp.hasEquipmentRental) parts.push("Equipment rental");
-  if (sp.hasCoaching) parts.push("Coaching available");
-  if (sp.notableEvents?.length) parts.push(`Events: ${sp.notableEvents.join(", ")}`);
-  if (sp.notableFeatures) parts.push(`Notable: ${sp.notableFeatures}`);
-  if (sp.vibe) parts.push(`Vibe: ${sp.vibe}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited sports profile data.";
-}
-
-/**
- * Builds a human-readable context string from a services profile for the LLM prompt.
- *
- * @param ctx - Story POI context with a services profile.
- * @returns Newline-separated profile summary string.
- */
-function buildServicesContext(ctx: StoryPoiContext): string {
-  const sv = ctx.profile as ServicesProfile;
-  if (!sv) return "No profile data available.";
-
-  const parts: string[] = [];
-  if (sv.subtype) parts.push(`Type: ${sv.subtype}`);
-  if (sv.serviceType) parts.push(`Service: ${sv.serviceType}`);
-  if (sv.operator) parts.push(`Operator: ${sv.operator}`);
-  if (sv.foundedYear != null) parts.push(`Founded: ${sv.foundedYear}`);
-  if (sv.hasOnlineBooking) parts.push("Online booking available");
-  if (sv.spokenLanguages?.length) parts.push(`Languages: ${sv.spokenLanguages.join(", ")}`);
-  if (sv.waitTimeNote) parts.push(`Wait time: ${sv.waitTimeNote}`);
-  if (sv.historicalNote) parts.push(`History: ${sv.historicalNote}`);
-  if (sv.notableFeatures) parts.push(`Notable: ${sv.notableFeatures}`);
-
-  return parts.length > 0 ? parts.join("\n") : "Limited services profile data.";
-}
-
-const CONTEXT_BUILDERS: Record<string, (ctx: StoryPoiContext) => string> = {
-  food: buildFoodContext,
-  history: buildHistoryContext,
-  architecture: buildArchitectureContext,
-  nature: buildNatureContext,
-  art: buildArtCultureContext,
-  culture: buildArtCultureContext,
-  views: buildViewpointContext,
-  nightlife: buildNightlifeContext,
-  shopping: buildShoppingContext,
-  transport: buildTransportContext,
-  education: buildEducationContext,
-  health: buildHealthContext,
-  sports: buildSportsContext,
-  services: buildServicesContext,
-};
-
-function buildProfileContextString(ctx: StoryPoiContext): string {
-  const builder = CONTEXT_BUILDERS[ctx.categorySlug];
-  if (builder) return builder(ctx);
-  return "No profile data available.";
+  return parts.length > 0 ? parts.join("\n") : "Limited profile data available.";
 }
 
 function buildPrompt(
@@ -582,7 +235,7 @@ function buildPrompt(
   locale: LocaleInfo,
 ): string {
   const persona = getPersona(ctx.categorySlug);
-  const profileContext = buildProfileContextString(ctx);
+  const profileContext = buildProfileContext(ctx.profile);
   const honesty = buildHonestyGuidelines(confidence);
   const languagePrompt = buildLanguagePrompt(locale);
   const tagNames = ctx.tags.map((t) => t.name).join(", ");

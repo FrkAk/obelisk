@@ -14,7 +14,6 @@ interface SemanticResult {
 interface RankingInput {
   typesenseResults: SearchResult[];
   semanticResults: SemanticResult[];
-  obeliskResults: SearchResult[];
   userLocation: { latitude: number; longitude: number };
   maxRadius: number;
 }
@@ -23,12 +22,12 @@ const RRF_K = 10;
 const MIN_GEO_FACTOR = 0.5;
 
 /**
- * Ranks and fuses results from multiple search sources using Reciprocal Rank Fusion.
+ * Ranks and fuses results from Typesense and semantic search using Reciprocal Rank Fusion.
  * Typesense results skip geo-penalty since Typesense already sorts by distance.
- * Only semantic and obelisk-db results receive geo-penalty.
+ * Only semantic results receive geo-penalty.
  *
  * Args:
- *     input: Results from Typesense, semantic search, and Obelisk DB, plus user location.
+ *     input: Results from Typesense and semantic search, plus user location.
  *
  * Returns:
  *     Deduplicated, ranked array of search results.
@@ -64,21 +63,6 @@ export function rankResults(input: RankingInput): SearchResult[] {
         hasStory: false,
         source: "semantic",
       });
-    }
-  }
-
-  for (let rank = 0; rank < input.obeliskResults.length; rank++) {
-    const item = input.obeliskResults[rank];
-    const rrfScore = 1 / (RRF_K + rank);
-    scoreMap.set(item.id, (scoreMap.get(item.id) ?? 0) + rrfScore);
-
-    if (!itemMap.has(item.id)) {
-      itemMap.set(item.id, item);
-    } else {
-      const existing = itemMap.get(item.id)!;
-      if (item.remark && !existing.remark) {
-        itemMap.set(item.id, { ...existing, remark: item.remark, hasStory: true });
-      }
     }
   }
 

@@ -283,7 +283,7 @@ export default function Home() {
         cuisine: result.cuisine,
         hasWifi: result.hasWifi,
         hasOutdoorSeating: result.hasOutdoorSeating,
-        source: result.source === "obelisk-db" ? "obelisk-db" : "overpass",
+        source: "overpass",
       };
       setSelectedPoi(externalPoi);
       setSelectedRemark(null);

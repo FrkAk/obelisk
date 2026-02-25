@@ -20,9 +20,9 @@ Detailed product documentation: **`Obelisk.md`** (features, design, roadmap, bra
 | Database | PostgreSQL 15 + pgvector (vector similarity) + pg_trgm (fuzzy text) |
 | ORM | Drizzle ORM v0.45 |
 | Search Engine | Typesense v30.1 (keyword search, autocomplete, faceted filtering) |
-| Web Search | SearXNG (self-hosted meta search for POI enrichment) |
 | LLM | Ollama (gemma3:4b-it-qat) — NVIDIA GPU |
 | Embeddings | Ollama (embeddinggemma:300m) — 768-dim vectors via pgvector |
+| Enrichment | Static taxonomy maps (OSM taginfo + Google Product Taxonomy + NSI brands + Wikidata) |
 | Clustering | Supercluster v8 |
 | Validation | Zod v4 |
 | State | TanStack React Query v5 |
@@ -51,7 +51,7 @@ obelisk/
 │   │       │   ├── generate-for-poi/route.ts # POST single POI story
 │   │       │   └── regenerate/route.ts       # POST re-roll story
 │   │       ├── search/
-│   │       │   ├── route.ts          # POST /api/search (3-engine hybrid)
+│   │       │   ├── route.ts          # POST /api/search (2-engine hybrid)
 │   │       │   └── autocomplete/route.ts # GET /api/search/autocomplete
 │   │       ├── categories/route.ts   # GET /api/categories
 │   │       ├── business/
@@ -101,7 +101,7 @@ obelisk/
 │   ├── lib/
 │   │   ├── db/
 │   │   │   ├── client.ts             # Drizzle ORM + postgres connection
-│   │   │   ├── schema.ts             # Drizzle table definitions (30+ tables)
+│   │   │   ├── schema.ts             # Drizzle table definitions
 │   │   │   └── queries/
 │   │   │       ├── pois.ts           # POI queries
 │   │   │       ├── remarks.ts        # Remark CRUD + generation
@@ -121,18 +121,13 @@ obelisk/
 │   │   │   ├── typesense.ts          # Typesense client (search, autocomplete)
 │   │   │   ├── semantic.ts           # pgvector cosine similarity search
 │   │   │   ├── ranking.ts            # Reciprocal Rank Fusion
+│   │   │   ├── profileSummary.ts     # Profile summary builder for Typesense
 │   │   │   ├── geocoding.ts          # Nominatim forward/reverse geocoding
 │   │   │   └── overpass.ts           # Overpass API for OSM queries
-│   │   ├── enrichment/
-│   │   │   └── extractors.ts         # LLM profile extraction by category
 │   │   ├── geo/
 │   │   │   └── distance.ts           # Haversine distance calculation
 │   │   ├── ui/
 │   │   │   └── animations.ts         # Framer Motion presets
-│   │   ├── web/
-│   │   │   ├── scraper.ts            # HTML scraping for business data
-│   │   │   ├── searxng.ts            # SearXNG JSON API client
-│   │   │   └── webSearch.ts          # Enrichment search queries + scraping
 │   │   └── logger.ts                 # Structured logging utility
 │   │
 │   └── types/
@@ -141,12 +136,14 @@ obelisk/
 │       └── index.ts                  # Re-exports api.ts + db.ts
 │
 ├── scripts/
+│   ├── download-datasets.ts          # Download external datasets (taxonomy, NSI, taginfo, wikidata)
+│   ├── build-taxonomy.ts             # Build tag enrichment map from downloaded data
+│   ├── build-brands.ts               # Build brand enrichment map from NSI + Wikidata
 │   ├── seed-regions.ts               # Seed regions (Germany -> Bavaria -> Munich)
 │   ├── seed-cuisines.ts              # Seed cuisine taxonomy (~100 cuisines)
 │   ├── seed-tags.ts                  # Seed tags across all groups
 │   ├── seed-pois.ts                  # Seed POIs from local OSM PBF extract
-│   ├── enrich-pois.ts                # Web enrichment: SearXNG + scrape + LLM
-│   ├── enrich-menus.ts               # Menu/dish enrichment for food POIs
+│   ├── enrich-taxonomy.ts            # Taxonomy enrichment + LLM summaries
 │   ├── generate-stories.ts           # Batch LLM story generation
 │   ├── generate-embeddings.ts        # Generate vector embeddings via Ollama
 │   ├── sync-typesense.ts             # Sync PostgreSQL -> Typesense index
@@ -155,20 +152,30 @@ obelisk/
 │       ├── pbf-reader.ts             # OpenStreetMap PBF file reader
 │       └── osm-read.d.ts             # Type declarations for osm-read
 │
-├── searxng/
-│   ├── settings.yml                  # SearXNG engine config
-│   └── limiter.toml                  # Rate limiter config (disabled)
-│
 ├── db/
 │   └── dump.sql                      # Database dump for quick restore
 │
-├── data/                             # OSM PBF extracts (gitignored)
-│   └── Muenchen.osm.pbf             # Munich OSM extract (~100MB)
+├── data/                             # External datasets (gitignored)
+│   ├── Muenchen.osm.pbf             # Munich OSM extract (~100MB)
+│   ├── google_product_taxonomy.txt   # Google Product Taxonomy (~6K categories)
+│   ├── nsi/                          # Name Suggestion Index
+│   │   ├── nsi.json                  # Brand -> OSM path -> Wikidata QID
+│   │   └── dissolved.json            # Discontinued brands
+│   ├── taginfo/                      # OSM Taginfo value distributions
+│   │   ├── shop.json
+│   │   ├── amenity.json
+│   │   ├── leisure.json
+│   │   ├── tourism.json
+│   │   ├── historic.json
+│   │   └── ...                       # Subtag files
+│   ├── wikidata_brands.json          # Wikidata brand data (industry, products)
+│   ├── tag_enrichment_map.json       # Built: OSM tag -> keywords/products
+│   └── brand_enrichment_map.json     # Built: Wikidata QID -> brand data
 │
 ├── drizzle/
 │   └── 0001_enable_extensions.sql    # Enables pgvector + pg_trgm
 │
-├── docker-compose.yml                # Dev: app + postgres + typesense + searxng
+├── docker-compose.yml                # Dev: app + postgres + typesense
 ├── docker-compose.local.yml          # Local network overlay
 ├── docker-compose.prod.yml           # Production config
 ├── Dockerfile
@@ -194,7 +201,7 @@ Always use `bun` / `bunx` instead of `npm` / `pnpm` / `npx`.
 
 | Command | Description |
 |---------|-------------|
-| `make setup` | First-time setup (deps, db, models, seed, enrich, stories, search) |
+| `make setup` | First-time setup (deps, db, models, datasets, seed, enrich, stories, search) |
 | `make run` | Start app + services at localhost:3000 |
 | `make run-local` | Start exposed to local network (same WiFi) |
 | `make stop` | Stop services (data preserved) |
@@ -206,13 +213,16 @@ Always use `bun` / `bunx` instead of `npm` / `pnpm` / `npx`.
 
 | Command | Description |
 |---------|-------------|
+| `make download-datasets` | Download external datasets (taxonomy, NSI, taginfo, wikidata) |
+| `make build-taxonomy` | Build tag enrichment map from downloaded data |
+| `make build-brands` | Build brand enrichment map from NSI + Wikidata |
 | `make seed-regions` | Seed regions (Germany -> Bavaria -> Munich) |
 | `make seed-cuisines` | Seed cuisine taxonomy |
 | `make seed-tags` | Seed tags across all groups |
 | `make download-pbf` | Download Munich OSM PBF extract |
 | `make seed-pois` | Seed POIs from local OSM extract |
 | `make seed-all` | Run all seed scripts in order |
-| `make enrich-pois` | Enrich POIs with web data + LLM |
+| `make enrich-taxonomy` | Enrich POIs with taxonomy data + LLM summaries |
 | `make sync-search` | Sync PostgreSQL -> Typesense |
 | `make generate-embeddings` | Generate vector embeddings |
 | `make search-setup` | Full search pipeline (seed + enrich + sync + embed) |
@@ -244,16 +254,12 @@ Always use `bun` / `bunx` instead of `npm` / `pnpm` / `npx`.
 | `NEXT_PUBLIC_MAPBOX_STYLE_DARK` | — | Mapbox style URL for dark mode |
 | `DATABASE_URL` | `postgresql://obelisk:obelisk_dev@localhost:5432/obelisk` | PostgreSQL connection string |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama API endpoint |
-| `OLLAMA_MODEL` | `gemma3:4b-it-qat` | Story generation model |
+| `OLLAMA_MODEL` | `gemma3:4b-it-qat` | Story generation + enrichment model |
 | `OLLAMA_SEARCH_MODEL` | `gemma3:4b-it-qat` | Query parsing model |
 | `OLLAMA_EMBED_MODEL` | `embeddinggemma:300m` | Embedding model (768-dim) |
 | `TYPESENSE_API_KEY` | `obelisk_typesense_dev` | Typesense API key |
 | `TYPESENSE_URL` | `http://localhost:8108` | Typesense endpoint |
-| `SEARXNG_URL` | `http://localhost:8080` | SearXNG endpoint |
 | `SEED_RADIUS` | `1000` | POI seed radius in meters from Munich center |
-| `ENRICH_RADIUS` | `$SEED_RADIUS` | Enrichment radius (defaults to SEED_RADIUS) |
-| `ENRICH_BATCH_SIZE` | `20` | POIs per enrichment batch |
-| `ENRICH_CONCURRENCY` | `3` | Concurrent enrichment workers |
 
 ---
 
@@ -267,7 +273,7 @@ Always use `bun` / `bunx` instead of `npm` / `pnpm` / `npx`.
 | GET | `/api/remarks/generate` | Batch generate stories |
 | POST | `/api/remarks/generate-for-poi` | Generate story for single POI |
 | POST | `/api/remarks/regenerate` | Re-roll existing story |
-| POST | `/api/search` | Hybrid 3-engine search (Typesense + pgvector + DB) |
+| POST | `/api/search` | Hybrid 2-engine search (Typesense + pgvector) |
 | GET | `/api/search/autocomplete` | Fast prefix autocomplete via Typesense |
 | GET | `/api/categories` | List all categories |
 | GET | `/api/poi/[osmId]` | Get external POI details |
@@ -283,36 +289,44 @@ Always use `bun` / `bunx` instead of `npm` / `pnpm` / `npx`.
 
 ## Database Schema
 
-PostgreSQL 15 with pgvector and pg_trgm extensions. 30+ tables organized into 9 groups:
+PostgreSQL 15 with pgvector and pg_trgm extensions.
 
 ### 1. Core Tables
 
 - **regions** — Geographic hierarchy (country -> state -> city)
 - **categories** — POI categories (15 total: history, food, art, nature, architecture, hidden, views, culture, shopping, nightlife, sports, health, transport, education, services)
-- **pois** — Points of interest (10,000+ seeded in Munich) with embeddings (vector(768)), search vectors (tsvector), trigram index on name
+- **pois** — Points of interest with JSONB `profile` column, embeddings (vector(768)), search vectors (tsvector), trigram index on name
 
-### 2. Shared POI Tables (1:1 with pois)
+### 2. POI Profile (JSONB on pois table)
+
+Each POI has a `profile` JSONB column with:
+
+```typescript
+interface PoiProfile {
+  subtype?: string;               // e.g., "clothes", "restaurant", "park"
+  osmExtracted?: {                // raw OSM subtag values preserved for enrichment
+    [key: string]: string;
+  };
+  keywords: string[];             // semantic keywords: ["clothing", "fashion", "apparel"]
+  products: string[];             // product/service terms: ["jackets", "dresses", "shirts"]
+  summary: string;                // LLM-generated 2-3 sentence description
+  enrichmentSource: string;       // "seed" | "taxonomy" | "taxonomy+brand" | "taxonomy+brand+llm"
+  attributes: {
+    [key: string]: unknown;       // category-specific: { priceLevel: "moderate", yearBuilt: 1468 }
+  };
+}
+```
+
+### 3. Shared POI Tables (1:1 with pois)
 
 - **contact_info** — Phone[], email[], website[], social media, opening hours
-- **price_info** — Price level, admission fees, currency
 - **accessibility_info** — Wheelchair, elevator, stroller, dog, parking
 - **photos** — POI photos with captions and sort order
 
-### 3. Tag System
+### 4. Tag System
 
 - **tags** — Reusable tags with groups (e.g., "pet-friendly" in group "amenities")
 - **poi_tags** — Many-to-many POI <-> tag
-
-### 4. Category Profile Tables (1:1 with pois)
-
-- **food_profiles** — 60+ fields: establishment type, dietary options, ambiance, reservations, payment, kids, wifi, etc.
-- **history_profiles** — Year built/destroyed, key figures, events, heritage level, preservation status
-- **architecture_profiles** — Style, architect, materials, denomination, tower access
-- **nature_profiles** — Area, trails, wildlife, facilities, entry points
-- **art_culture_profiles** — Collection focus, notable works, guided tours, capacity
-- **nightlife_profiles** — Dress code, cover charge, happy hour, DJ, dancefloor
-- **shopping_profiles** — Product highlights, brands, secondhand, market days
-- **viewpoint_profiles** — Elevation, view direction, visible landmarks, best time
 
 ### 5. Food Domain Tables
 
@@ -327,11 +341,7 @@ PostgreSQL 15 with pgvector and pg_trgm extensions. 30+ tables organized into 9 
 - **remarks** — AI-generated stories with versioning (locale, version, isCurrent)
 - **events** — POI events with dates, types, and ticket info
 
-### 7. Enrichment Pipeline
-
-- **enrichment_log** — Tracks enrichment source, status, and fields updated per POI
-
-### 8. User Tables
+### 7. User Tables
 
 - **users** — User accounts with email, locale, role
 - **auth_providers** — OAuth/password auth (multi-provider per user)
@@ -340,7 +350,7 @@ PostgreSQL 15 with pgvector and pg_trgm extensions. 30+ tables organized into 9 
 - **user_visits** — Visit history with duration
 - **user_sessions** — App sessions with device and location data
 
-### 9. Monetization Tables
+### 8. Monetization Tables
 
 - **business_accounts** — Business profiles linked to POIs
 - **ad_campaigns** — Campaigns with targeting, budgets, and scheduling
@@ -352,13 +362,12 @@ PostgreSQL 15 with pgvector and pg_trgm extensions. 30+ tables organized into 9 
 
 ## Search Architecture
 
-Three-engine hybrid search with Reciprocal Rank Fusion.
+Two-engine hybrid search with Reciprocal Rank Fusion.
 
 **Query flow:** User query -> `queryParser` (230+ fast-path entries or LLM fallback) -> parallel search:
 
 1. **Typesense** — Keyword search with typo tolerance, geo-filtering, facets
 2. **pgvector** — Semantic similarity via cosine distance on embeddings
-3. **Obelisk DB** — Story text search on remarks table
 
 Results are fused via RRF scoring, geo-penalized by distance, boosted for POIs with stories, deduplicated by POI ID.
 
@@ -366,22 +375,24 @@ Results are fused via RRF scoring, geo-penalized by distance, boosted for POIs w
 
 ---
 
-## `make setup` — Full Bootstrap (12 steps)
+## `make setup` — Full Bootstrap (14 steps)
 
 | Step | Command | What it does |
 |------|---------|-------------|
-| 1/12 | `docker compose up -d --build` | Build + start postgres, typesense, searxng, app containers |
-| 2/12 | `drizzle-kit push` | Enable pgvector + pg_trgm extensions, apply schema migrations |
-| 3/12 | `ollama pull` x4 | Pull gemma3:4b-it-qat, embeddinggemma:300m, translategemma:4b |
-| 4/12 | `seed-regions.ts` | Seed regions: Germany → Bavaria → Munich |
-| 5/12 | `seed-cuisines.ts` | Seed ~100 cuisine taxonomy entries |
-| 6/12 | `seed-tags.ts` | Seed tags across all groups |
-| 7/12 | `download-pbf` | Download Munich OSM PBF extract (~100MB from bbbike.org) |
-| 8/12 | `seed-pois.ts` | Parse OSM PBF, upsert POIs within `SEED_RADIUS` of Munich center |
-| 9/12 | `enrich-pois.ts` | **Slowest step** — web search + scrape + translate + LLM extract |
-| 10/12 | `generate-stories.ts` | Batch LLM story generation (non-blocking, `\|\| true`) |
-| 11/12 | `sync-typesense.ts` | Sync PostgreSQL → Typesense search index |
-| 12/12 | `generate-embeddings.ts` | Generate 768-dim vectors via embeddinggemma into pgvector |
+| 1/14 | `docker compose up -d --build` | Build + start postgres, typesense, app containers |
+| 2/14 | `drizzle-kit push` | Enable pgvector + pg_trgm extensions, apply schema migrations |
+| 3/14 | `ollama pull` x3 | Pull gemma3:4b-it-qat, embeddinggemma:300m |
+| 4/14 | `download-datasets.ts` | Download external datasets (Google taxonomy, NSI, taginfo, Wikidata) |
+| 5/14 | `build-taxonomy.ts` | Build tag enrichment map from downloaded data |
+| 6/14 | `build-brands.ts` | Build brand enrichment map from NSI + Wikidata |
+| 7/14 | `seed-regions.ts` | Seed regions: Germany -> Bavaria -> Munich |
+| 8/14 | `seed-cuisines.ts` | Seed ~100 cuisine taxonomy entries |
+| 9/14 | `seed-tags.ts` | Seed tags across all groups |
+| 10/14 | `download-pbf` | Download Munich OSM PBF extract (~100MB from bbbike.org) |
+| 11/14 | `seed-pois.ts` | Parse OSM PBF, upsert POIs within `SEED_RADIUS` of Munich center |
+| 12/14 | `enrich-taxonomy.ts` | Taxonomy enrichment: merge keywords/products + LLM summaries |
+| 13/14 | `generate-stories.ts` | Batch LLM story generation (non-blocking, `\|\| true`) |
+| 14/14 | `sync-typesense.ts` + `generate-embeddings.ts` | Sync search index + generate 768-dim vectors |
 
 `SEED_RADIUS` defaults to `100` (meters) in the Makefile for quick first-time setup. Increase for production runs.
 
@@ -391,121 +402,50 @@ Results are fused via RRF scoring, geo-penalized by distance, boosted for POIs w
 
 Four sequential stages (run via `make search-setup`):
 
-1. **Seed POIs** (`seed-pois.ts`) — Extract from local OSM PBF, 10 query groups, `SEED_RADIUS` from Munich center, batch upsert with dedup
-2. **Enrich POIs** (`enrich-pois.ts`) — Two-phase per batch to minimize Ollama model swaps. Resumable (checks `enrichment_log`). See Enrichment Pipeline below.
-3. **Sync Typesense** (`sync-typesense.ts`) — Full PostgreSQL → Typesense sync with weighted fields
-4. **Generate Embeddings** (`generate-embeddings.ts`) — 768-dim vectors via embeddinggemma:300m into pgvector. Resumable.
+1. **Seed POIs** (`seed-pois.ts`) — Extract from local OSM PBF, 10 query groups, `SEED_RADIUS` from Munich center, batch upsert with dedup. Writes initial JSONB profile with `subtype` and `osmExtracted` fields.
+2. **Enrich POIs** (`enrich-taxonomy.ts`) — Merge keywords/products from static taxonomy maps, add brand data from Wikidata, generate LLM summaries. Resumable (skips POIs with existing summary).
+3. **Sync Typesense** (`sync-typesense.ts`) — Full PostgreSQL -> Typesense sync with weighted fields. All POIs indexed.
+4. **Generate Embeddings** (`generate-embeddings.ts`) — 768-dim vectors via embeddinggemma:300m into pgvector. All POIs get embeddings. Resumable.
 
 ---
 
-## Enrichment Pipeline (`scripts/enrich-pois.ts`)
+## Taxonomy Enrichment Pipeline (`scripts/enrich-taxonomy.ts`)
 
 ### Overview
 
-Enriches POIs with web-sourced data and LLM-extracted structured profiles. Processes POIs in batches of `BATCH_SIZE` (default 20). Each batch runs in **two phases** to minimize GPU model swapping.
+Enriches POIs using static JSON taxonomy maps and LLM synthesis. No external API calls at runtime -- all data comes from pre-built local files.
 
-### Two-Phase Batch Architecture
+### Data Sources
 
-The pipeline uses two Ollama models: **translategemma:4b** (translation) and **gemma3:4b-it-qat** (extraction). Loading a model into GPU takes 3-10s. By grouping all work by model, we swap only once per batch instead of twice per POI.
+| File | Content | Built by |
+|------|---------|----------|
+| `data/tag_enrichment_map.json` | OSM tag -> keywords, products, subtags | `build-taxonomy.ts` |
+| `data/brand_enrichment_map.json` | Wikidata QID -> brand name, products, industry | `build-brands.ts` |
 
-**Phase 1 — `gatherEnrichmentData()` (translategemma stays loaded):**
+### Enrichment Flow
 
-For each POI in the batch, sequentially:
-1. **Wikipedia fetch** (HTTP) — If POI has `wikipediaUrl`, fetch summary via Wikipedia API
-2. **Website scrape** (HTTP) — If POI has website in `contact_info`, scrape main content
-3. **Translate keywords** (translategemma) — English `FALLBACK_KEYWORDS` for category → native language
-4. **Web search** (SearXNG HTTP) — Query: `"POI_NAME City" translated_keywords`
-5. **Scrape top results** (HTTP) — Scrape up to 2 URLs from search results
-6. **Translate content** (translategemma) — Translate all scraped text to English
-
-**Phase 2 — `extractAndSaveProfile()` (gemma3 stays loaded):**
-
-For each POI in the batch, sequentially:
-7. **LLM extraction** (gemma3) — Category-specific structured extraction via `chatExtract()` with JSON format
-8. **DB writes** — Upsert into category profile table (null-only update), null out embedding for re-generation, log to `enrichment_log`
-
-**Model swap count:** 1 per batch (translategemma → gemma3), not 2 per POI.
-
-### Search Keywords
-
-Keywords are **predefined in English** per category (`FALLBACK_KEYWORDS` in `webSearch.ts`), then translated to the POI's native language via translategemma. This replaced LLM-generated keywords which were unreliable (wrong cities, repeated POI names, truncated words).
-
-```
-food → "tradition cuisine local" → (de) "Tradition Küche lokal"
-history → "heritage significance events" → (de) "Erbe Bedeutung Ereignisse"
-```
-
-### Translation
-
-Uses **translategemma:4b** with the correct prompt format (full system prompt with source/target language names and codes, two blank lines before text). Handles bidirectional translation: native → English (scraped content) and English → native (keywords). Long texts (>2500 chars) split at `\n---` section delimiters.
+For each POI:
+1. Read `pois.profile.osmExtracted` and determine primary OSM tag (e.g., `shop=clothes`)
+2. Look up `tag_enrichment_map[primaryTag]` -- merge keywords + products into profile
+3. If `brand:wikidata` exists, look up `brand_enrichment_map[wikidataQID]` -- merge brand-specific products
+4. If POI has specific subtags (e.g., `clothes=women`), refine keywords
+5. LLM synthesis: call Ollama (`gemma3:4b-it-qat`) to generate 2-3 sentence description grounded in merged data
+6. Update `pois.profile` JSONB with: summary, keywords, products, enrichmentSource
 
 ### Resumability
 
-- Checks `enrichment_log` table before each POI — skips if enriched in last 24 hours
-- Safe to re-run: `make enrich-pois` picks up where it left off
-- Failed POIs logged as `rate_limited`, `no_results`, or `extract_empty` — re-eligible after 24h
+- Skips POIs where `profile.summary` is already non-empty
+- Safe to re-run: `make enrich-taxonomy` picks up where it left off
 
 ### Key Files
 
 | File | Role |
 |------|------|
-| `scripts/enrich-pois.ts` | Pipeline orchestration (batching, two-phase, throttle) |
-| `src/lib/web/webSearch.ts` | `translateKeywords()`, `FALLBACK_KEYWORDS`, `enrichPOIWithWebSearch()` |
-| `src/lib/web/searxng.ts` | SearXNG client with retry, backoff, caching, rate limit detection |
-| `src/lib/web/ollamaSearch.ts` | Ollama cloud web search API fallback (requires `OLLAMA_API_KEY`) |
-| `src/lib/ai/ollama.ts` | `translateText()`, `generateText()`, `chatExtract()` |
-| `src/lib/enrichment/extractors.ts` | Category-specific LLM extraction prompts |
-| `searxng/settings.yml` | SearXNG engine configuration |
-
----
-
-## Rate Limiting & Search Reliability
-
-### Web Search Fallback Chain
-
-```
-SearXNG (self-hosted, free) → Ollama cloud search (external, needs OLLAMA_API_KEY) → empty results
-```
-
-### SearXNG Rate Limit Handling (`src/lib/web/searxng.ts`)
-
-**Detection** — `detectRateLimit()` triggers on:
-- HTTP 429 from SearXNG
-- 4+ unresponsive engines (out of 4 total)
-
-**Retry** — Exponential backoff with jitter:
-- Up to 4 retries, base delay 1500ms × 2^attempt × random(0.5–1.5)
-- Capped at 12s max delay
-- Non-retryable errors (non-network, non-429) break immediately
-
-**Caching** — In-memory cache with 1-hour TTL. Same query returns cached result.
-
-**Engine selection** — Only 4 engines that tolerate automated queries:
-- `wikipedia`, `wikidata` — free APIs, generous limits
-- `mojeek` — independent search engine
-- `mwmbl` — community search engine
-- Removed: `yep` (UTF-8 crashes), DuckDuckGo/Brave/Google (aggressive rate limiting)
-
-### Enrichment Script Throttle (`scripts/enrich-pois.ts`)
-
-**Adaptive throttle** — `ThrottleController` class:
-- Starts at `INTER_BATCH_DELAY_MS` (default 8s) between batches
-- On rate limit: doubles delay (up to 60s cap)
-- On success: reduces delay by 25% (down to baseline)
-- After 3 consecutive rate limits: 2-minute cooldown pause
-
-### Ollama Cloud Fallback (`src/lib/web/ollamaSearch.ts`)
-
-- Calls `https://ollama.com/api/web_search` (real web search, not LLM-generated)
-- Requires `OLLAMA_API_KEY` environment variable
-- Free tier has undocumented "generous" limits; paid plans ($20/mo Pro, $100/mo Max) have higher limits
-- Rate limits not publicly documented — need empirical testing
-
-### Remaining Risks
-
-- SearXNG returns 0 results with HTTP 200 when soft-rate-limited — indistinguishable from genuine "no results"
-- SearXNG's built-in rate limiter disabled (`limiter: false`) — could be enabled per-engine
-- No cross-process result caching — re-runs query the same URLs if cache expired
+| `scripts/enrich-taxonomy.ts` | Enrichment orchestration (batching, LLM synthesis) |
+| `scripts/build-taxonomy.ts` | Builds tag enrichment map from taginfo + Google taxonomy |
+| `scripts/build-brands.ts` | Builds brand enrichment map from NSI + Wikidata |
+| `scripts/download-datasets.ts` | Downloads all external datasets |
+| `src/lib/ai/ollama.ts` | `generateText()` for LLM summary synthesis |
 
 ---
 
@@ -516,7 +456,6 @@ SearXNG (self-hosted, free) → Ollama cloud search (external, needs OLLAMA_API_
 | app | Dockerfile (dev target) | 3000 (host network) | Next.js app server |
 | postgres | pgvector/pgvector:pg15 | 5432 | Database with vector + trigram extensions |
 | typesense | typesense/typesense:30.1 | 8108 | Search engine |
-| searxng | searxng/searxng:latest | 8080 | Meta search (enrichment only) |
 
 Ollama runs on the host (not in Docker) at `http://localhost:11434`.
 

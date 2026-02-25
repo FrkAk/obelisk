@@ -91,6 +91,7 @@ export const pois = pgTable(
     osmTags: jsonb("osm_tags").$type<Record<string, string>>(),
     wikipediaUrl: text("wikipedia_url"),
     imageUrl: text("image_url"),
+    profile: jsonb("profile").default({}).$type<import("@/types/api").PoiProfile>(),
     embedding: vector("embedding"),
     searchVector: tsvector("search_vector"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -123,20 +124,6 @@ export const contactInfo = pgTable("contact_info", {
   facebook: text("facebook"),
   openingHoursRaw: text("opening_hours_raw"),
   openingHoursDisplay: text("opening_hours_display"),
-});
-
-export const priceInfo = pgTable("price_info", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  priceLevel: smallint("price_level"),
-  freeEntry: boolean("free_entry"),
-  admissionAdult: numeric("admission_adult", { precision: 8, scale: 2 }),
-  admissionChild: numeric("admission_child", { precision: 8, scale: 2 }),
-  admissionStudent: numeric("admission_student", { precision: 8, scale: 2 }),
-  currency: varchar("currency", { length: 3 }),
-  notes: text("notes"),
 });
 
 export const accessibilityInfo = pgTable("accessibility_info", {
@@ -195,317 +182,7 @@ export const poiTags = pgTable(
 );
 
 // ===========================================================================
-// 4. Category Profile Tables (1:1 with pois)
-// ===========================================================================
-
-export const foodProfiles = pgTable("food_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  establishmentType: varchar("establishment_type", { length: 30 }),
-  dineIn: boolean("dine_in"),
-  takeaway: boolean("takeaway"),
-  delivery: boolean("delivery"),
-  driveThrough: boolean("drive_through"),
-  catering: boolean("catering"),
-  servesBreakfast: boolean("serves_breakfast"),
-  servesBrunch: boolean("serves_brunch"),
-  servesLunch: boolean("serves_lunch"),
-  servesDinner: boolean("serves_dinner"),
-  servesLateNight: boolean("serves_late_night"),
-  dietVegetarian: varchar("diet_vegetarian", { length: 4 }),
-  dietVegan: varchar("diet_vegan", { length: 4 }),
-  dietHalal: varchar("diet_halal", { length: 4 }),
-  dietKosher: varchar("diet_kosher", { length: 4 }),
-  dietGlutenFree: varchar("diet_gluten_free", { length: 4 }),
-  dietLactoseFree: varchar("diet_lactose_free", { length: 4 }),
-  dietPescetarian: varchar("diet_pescetarian", { length: 4 }),
-  alcoholPolicy: varchar("alcohol_policy", { length: 20 }),
-  servesBeer: boolean("serves_beer"),
-  servesWine: boolean("serves_wine"),
-  servesCocktails: boolean("serves_cocktails"),
-  priceLevel: smallint("price_level"),
-  priceRangeLow: numeric("price_range_low", { precision: 10, scale: 2 }),
-  priceRangeHigh: numeric("price_range_high", { precision: 10, scale: 2 }),
-  priceCurrency: varchar("price_currency", { length: 3 }),
-  ambiance: varchar("ambiance", { length: 20 }),
-  noiseLevel: varchar("noise_level", { length: 10 }),
-  dressCode: varchar("dress_code", { length: 20 }),
-  vibe: text("vibe"),
-  capacityIndoor: smallint("capacity_indoor"),
-  capacityOutdoor: smallint("capacity_outdoor"),
-  hasOutdoorSeating: boolean("has_outdoor_seating"),
-  hasBarSeating: boolean("has_bar_seating"),
-  hasCommunalTables: boolean("has_communal_tables"),
-  hasPrivateDining: boolean("has_private_dining"),
-  reservationPolicy: varchar("reservation_policy", { length: 20 }),
-  reservationUrl: text("reservation_url"),
-  timeLimitMinutes: smallint("time_limit_minutes"),
-  michelinStars: smallint("michelin_stars"),
-  michelinBib: boolean("michelin_bib"),
-  kidFriendly: boolean("kid_friendly"),
-  hasHighchair: boolean("has_highchair"),
-  hasKidsMenu: boolean("has_kids_menu"),
-  hasChangingTable: boolean("has_changing_table"),
-  hasWifi: boolean("has_wifi"),
-  hasAirConditioning: boolean("has_air_conditioning"),
-  hasLiveMusic: boolean("has_live_music"),
-  hasParking: boolean("has_parking"),
-  smokingPolicy: varchar("smoking_policy", { length: 15 }),
-  paymentMethods: jsonb("payment_methods").$type<Record<string, boolean>>(),
-  cashOnly: boolean("cash_only"),
-  tippingPolicy: varchar("tipping_policy", { length: 20 }),
-  autoGratuity: boolean("auto_gratuity"),
-  autoGratuityPct: smallint("auto_gratuity_pct"),
-  warnings: jsonb("warnings").$type<string[]>(),
-  goodForGroups: boolean("good_for_groups"),
-  maxPartySize: smallint("max_party_size"),
-  kitchenHours: text("kitchen_hours"),
-  confidenceScore: smallint("confidence_score"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
-
-export const historyProfiles = pgTable("history_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  yearBuilt: integer("year_built"),
-  yearDestroyed: integer("year_destroyed"),
-  historicalSignificance: text("historical_significance"),
-  keyFigures: text("key_figures").array(),
-  keyEvents: text("key_events").array(),
-  originalPurpose: varchar("original_purpose", { length: 200 }),
-  currentUse: varchar("current_use", { length: 200 }),
-  heritageLevel: varchar("heritage_level", { length: 20 }),
-  inscription: text("inscription"),
-  constructionMaterials: text("construction_materials").array(),
-  preservationStatus: varchar("preservation_status", { length: 20 }),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const architectureProfiles = pgTable("architecture_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  primaryStyle: varchar("primary_style", { length: 100 }),
-  architect: varchar("architect", { length: 200 }),
-  yearBuilt: integer("year_built"),
-  yearRenovated: integer("year_renovated"),
-  heightMeters: numeric("height_meters", { precision: 6, scale: 1 }),
-  buildingLevels: smallint("building_levels"),
-  constructionMaterials: text("construction_materials").array(),
-  interiorHighlights: text("interior_highlights").array(),
-  denomination: varchar("denomination", { length: 50 }),
-  isActiveWorship: boolean("is_active_worship"),
-  towerAccessible: boolean("tower_accessible"),
-  notableFeatures: text("notable_features"),
-  bestPhotoAngle: text("best_photo_angle"),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const natureProfiles = pgTable("nature_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  areaHectares: numeric("area_hectares", { precision: 8, scale: 2 }),
-  trailLengthKm: numeric("trail_length_km", { precision: 6, scale: 1 }),
-  trailDifficulty: varchar("trail_difficulty", { length: 20 }),
-  elevationGainM: integer("elevation_gain_m"),
-  floraHighlights: text("flora_highlights").array(),
-  wildlifeHighlights: text("wildlife_highlights").array(),
-  facilities: text("facilities").array(),
-  picnicAllowed: boolean("picnic_allowed"),
-  swimmingAllowed: boolean("swimming_allowed"),
-  cyclingAllowed: boolean("cycling_allowed"),
-  litAtNight: boolean("lit_at_night"),
-  notableFeatures: text("notable_features"),
-  entryPoints: text("entry_points").array(),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const artCultureProfiles = pgTable("art_culture_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  collectionFocus: text("collection_focus"),
-  notableWorks: text("notable_works").array(),
-  hasPermanentCollection: boolean("has_permanent_collection"),
-  hasRotatingExhibitions: boolean("has_rotating_exhibitions"),
-  guidedTours: boolean("guided_tours"),
-  audioGuide: boolean("audio_guide"),
-  photographyAllowed: boolean("photography_allowed"),
-  avgVisitMinutes: integer("avg_visit_minutes"),
-  genreFocus: varchar("genre_focus", { length: 100 }),
-  capacity: integer("capacity"),
-  notablePerformers: text("notable_performers").array(),
-  foundedYear: integer("founded_year"),
-  vibe: text("vibe"),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const nightlifeProfiles = pgTable("nightlife_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  signatureDrinks: text("signature_drinks").array(),
-  dressCode: varchar("dress_code", { length: 100 }),
-  coverCharge: numeric("cover_charge", { precision: 6, scale: 2 }),
-  coverCurrency: varchar("cover_currency", { length: 3 }),
-  happyHour: varchar("happy_hour", { length: 100 }),
-  peakHours: varchar("peak_hours", { length: 100 }),
-  ageDemographic: varchar("age_demographic", { length: 50 }),
-  hasDancefloor: boolean("has_dancefloor"),
-  hasLiveMusic: boolean("has_live_music"),
-  hasDj: boolean("has_dj"),
-  outdoorArea: boolean("outdoor_area"),
-  smokingArea: boolean("smoking_area"),
-  capacity: integer("capacity"),
-  foodServed: boolean("food_served"),
-  vibe: text("vibe"),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const shoppingProfiles = pgTable("shopping_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  productHighlights: text("product_highlights").array(),
-  brands: text("brands").array(),
-  isSecondhand: boolean("is_secondhand"),
-  isLocalCrafts: boolean("is_local_crafts"),
-  isLuxury: boolean("is_luxury"),
-  marketDays: varchar("market_days", { length: 100 }),
-  cashOnly: boolean("cash_only"),
-  vibe: text("vibe"),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const viewpointProfiles = pgTable("viewpoint_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  elevationM: numeric("elevation_m", { precision: 6, scale: 1 }),
-  viewDirection: varchar("view_direction", { length: 50 }),
-  visibleLandmarks: text("visible_landmarks").array(),
-  bestTime: varchar("best_time", { length: 100 }),
-  weatherDependent: boolean("weather_dependent"),
-  indoorViewing: boolean("indoor_viewing"),
-  telescopeAvailable: boolean("telescope_available"),
-  requiresClimb: boolean("requires_climb"),
-  stepsCount: integer("steps_count"),
-  photographyTips: text("photography_tips"),
-  crowdLevel: varchar("crowd_level", { length: 50 }),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const transportProfiles = pgTable("transport_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  lines: text("lines").array(),
-  operator: varchar("operator", { length: 200 }),
-  yearOpened: integer("year_opened"),
-  dailyRidership: integer("daily_ridership"),
-  isInterchange: boolean("is_interchange"),
-  hasElevator: boolean("has_elevator"),
-  hasBikeParking: boolean("has_bike_parking"),
-  notableFeatures: text("notable_features"),
-  nearbyConnections: text("nearby_connections").array(),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const educationProfiles = pgTable("education_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  foundedYear: integer("founded_year"),
-  specialization: text("specialization"),
-  notableAlumni: text("notable_alumni").array(),
-  studentCount: integer("student_count"),
-  isPublic: boolean("is_public"),
-  hasPublicAccess: boolean("has_public_access"),
-  hasLibrary: boolean("has_library"),
-  architecturalNote: text("architectural_note"),
-  notableFeatures: text("notable_features"),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const healthProfiles = pgTable("health_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  specialization: text("specialization"),
-  foundedYear: integer("founded_year"),
-  isEmergency: boolean("is_emergency"),
-  acceptsInsurance: boolean("accepts_insurance"),
-  hasAppointmentBooking: boolean("has_appointment_booking"),
-  spokenLanguages: text("spoken_languages").array(),
-  facilities: text("facilities").array(),
-  notableFeatures: text("notable_features"),
-  vibe: text("vibe"),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const sportsProfiles = pgTable("sports_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  sports: text("sports").array(),
-  homeTeam: varchar("home_team", { length: 200 }),
-  capacity: integer("capacity"),
-  yearBuilt: integer("year_built"),
-  isPublicAccess: boolean("is_public_access"),
-  hasEquipmentRental: boolean("has_equipment_rental"),
-  hasCoaching: boolean("has_coaching"),
-  notableEvents: text("notable_events").array(),
-  notableFeatures: text("notable_features"),
-  vibe: text("vibe"),
-  confidenceScore: smallint("confidence_score"),
-});
-
-export const servicesProfiles = pgTable("services_profiles", {
-  poiId: uuid("poi_id")
-    .references(() => pois.id, { onDelete: "cascade" })
-    .unique()
-    .primaryKey(),
-  subtype: varchar("subtype", { length: 50 }),
-  serviceType: varchar("service_type", { length: 100 }),
-  operator: varchar("operator", { length: 200 }),
-  foundedYear: integer("founded_year"),
-  hasOnlineBooking: boolean("has_online_booking"),
-  spokenLanguages: text("spoken_languages").array(),
-  waitTimeNote: text("wait_time_note"),
-  historicalNote: text("historical_note"),
-  notableFeatures: text("notable_features"),
-  confidenceScore: smallint("confidence_score"),
-});
-
-// ===========================================================================
-// 5. Food Domain Tables
+// 4. Food Domain Tables
 // ===========================================================================
 
 export const cuisines = pgTable("cuisines", {
@@ -590,7 +267,7 @@ export const poiDishes = pgTable(
 );
 
 // ===========================================================================
-// 6. Content Tables
+// 5. Content Tables
 // ===========================================================================
 
 export const poiTranslations = pgTable(
@@ -674,27 +351,7 @@ export const events = pgTable(
 );
 
 // ===========================================================================
-// 7. Enrichment Pipeline
-// ===========================================================================
-
-export const enrichmentLog = pgTable(
-  "enrichment_log",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    poiId: uuid("poi_id")
-      .references(() => pois.id, { onDelete: "cascade" })
-      .notNull(),
-    source: varchar("source", { length: 30 }).notNull(),
-    status: varchar("status", { length: 15 }).notNull(),
-    fieldsUpdated: text("fields_updated").array(),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  },
-  (table) => [index("idx_enrichment_log_poi").on(table.poiId)],
-);
-
-// ===========================================================================
-// 8. User Tables
+// 6. User Tables
 // ===========================================================================
 
 export const users = pgTable("users", {
@@ -808,7 +465,7 @@ export const userSessions = pgTable(
 );
 
 // ===========================================================================
-// 9. Monetization Tables
+// 8. Monetization Tables
 // ===========================================================================
 
 export const businessAccounts = pgTable("business_accounts", {
@@ -951,10 +608,6 @@ export const poisRelations = relations(pois, ({ one, many }) => ({
     fields: [pois.id],
     references: [contactInfo.poiId],
   }),
-  priceInfo: one(priceInfo, {
-    fields: [pois.id],
-    references: [priceInfo.poiId],
-  }),
   accessibilityInfo: one(accessibilityInfo, {
     fields: [pois.id],
     references: [accessibilityInfo.poiId],
@@ -966,59 +619,6 @@ export const poisRelations = relations(pois, ({ one, many }) => ({
   translations: many(poiTranslations),
   remarks: many(remarks),
   events: many(events),
-  enrichmentLogs: many(enrichmentLog),
-  foodProfile: one(foodProfiles, {
-    fields: [pois.id],
-    references: [foodProfiles.poiId],
-  }),
-  historyProfile: one(historyProfiles, {
-    fields: [pois.id],
-    references: [historyProfiles.poiId],
-  }),
-  architectureProfile: one(architectureProfiles, {
-    fields: [pois.id],
-    references: [architectureProfiles.poiId],
-  }),
-  natureProfile: one(natureProfiles, {
-    fields: [pois.id],
-    references: [natureProfiles.poiId],
-  }),
-  artCultureProfile: one(artCultureProfiles, {
-    fields: [pois.id],
-    references: [artCultureProfiles.poiId],
-  }),
-  nightlifeProfile: one(nightlifeProfiles, {
-    fields: [pois.id],
-    references: [nightlifeProfiles.poiId],
-  }),
-  shoppingProfile: one(shoppingProfiles, {
-    fields: [pois.id],
-    references: [shoppingProfiles.poiId],
-  }),
-  viewpointProfile: one(viewpointProfiles, {
-    fields: [pois.id],
-    references: [viewpointProfiles.poiId],
-  }),
-  transportProfile: one(transportProfiles, {
-    fields: [pois.id],
-    references: [transportProfiles.poiId],
-  }),
-  educationProfile: one(educationProfiles, {
-    fields: [pois.id],
-    references: [educationProfiles.poiId],
-  }),
-  healthProfile: one(healthProfiles, {
-    fields: [pois.id],
-    references: [healthProfiles.poiId],
-  }),
-  sportsProfile: one(sportsProfiles, {
-    fields: [pois.id],
-    references: [sportsProfiles.poiId],
-  }),
-  servicesProfile: one(servicesProfiles, {
-    fields: [pois.id],
-    references: [servicesProfiles.poiId],
-  }),
   userSavedPois: many(userSavedPois),
   userVisits: many(userVisits),
   businessAccounts: many(businessAccounts),
@@ -1030,13 +630,6 @@ export const poisRelations = relations(pois, ({ one, many }) => ({
 export const contactInfoRelations = relations(contactInfo, ({ one }) => ({
   poi: one(pois, {
     fields: [contactInfo.poiId],
-    references: [pois.id],
-  }),
-}));
-
-export const priceInfoRelations = relations(priceInfo, ({ one }) => ({
-  poi: one(pois, {
-    fields: [priceInfo.poiId],
     references: [pois.id],
   }),
 }));
@@ -1072,133 +665,6 @@ export const poiTagsRelations = relations(poiTags, ({ one }) => ({
     references: [tags.id],
   }),
 }));
-
-export const foodProfilesRelations = relations(foodProfiles, ({ one }) => ({
-  poi: one(pois, {
-    fields: [foodProfiles.poiId],
-    references: [pois.id],
-  }),
-}));
-
-export const historyProfilesRelations = relations(
-  historyProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [historyProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const architectureProfilesRelations = relations(
-  architectureProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [architectureProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const natureProfilesRelations = relations(
-  natureProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [natureProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const artCultureProfilesRelations = relations(
-  artCultureProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [artCultureProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const nightlifeProfilesRelations = relations(
-  nightlifeProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [nightlifeProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const shoppingProfilesRelations = relations(
-  shoppingProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [shoppingProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const viewpointProfilesRelations = relations(
-  viewpointProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [viewpointProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const transportProfilesRelations = relations(
-  transportProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [transportProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const educationProfilesRelations = relations(
-  educationProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [educationProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const healthProfilesRelations = relations(
-  healthProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [healthProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const sportsProfilesRelations = relations(
-  sportsProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [sportsProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
-
-export const servicesProfilesRelations = relations(
-  servicesProfiles,
-  ({ one }) => ({
-    poi: one(pois, {
-      fields: [servicesProfiles.poiId],
-      references: [pois.id],
-    }),
-  }),
-);
 
 export const cuisinesRelations = relations(cuisines, ({ one, many }) => ({
   parent: one(cuisines, {
@@ -1262,13 +728,6 @@ export const remarksRelations = relations(remarks, ({ one, many }) => ({
 export const eventsRelations = relations(events, ({ one }) => ({
   poi: one(pois, {
     fields: [events.poiId],
-    references: [pois.id],
-  }),
-}));
-
-export const enrichmentLogRelations = relations(enrichmentLog, ({ one }) => ({
-  poi: one(pois, {
-    fields: [enrichmentLog.poiId],
     references: [pois.id],
   }),
 }));

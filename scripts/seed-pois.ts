@@ -5,14 +5,6 @@ import {
   regions,
   contactInfo,
   accessibilityInfo,
-  foodProfiles,
-  historyProfiles,
-  architectureProfiles,
-  natureProfiles,
-  artCultureProfiles,
-  nightlifeProfiles,
-  shoppingProfiles,
-  viewpointProfiles,
   cuisines,
   poiCuisines,
   poiTags,
@@ -21,9 +13,28 @@ import {
 } from "../src/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import type { CategorySlug } from "../src/types";
+import type { PoiProfile } from "../src/types/api";
 import { readPoisFromPbf } from "./lib/pbf-reader";
 import { processWithConcurrency } from "./lib/concurrency";
-import { buildWikipediaUrl } from "../src/lib/web/wikipedia";
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a full Wikipedia URL from an OSM wikipedia tag value.
+ *
+ * Args:
+ *     osmTag: OSM wikipedia tag (format: "lang:Title", e.g. "de:Maximilianeum").
+ *
+ * Returns:
+ *     Full Wikipedia URL with correct language subdomain, or undefined if the tag is malformed.
+ */
+function buildWikipediaUrl(osmTag: string): string | undefined {
+  const match = osmTag.match(/^([a-z]{2,3}):(.+)$/);
+  if (!match) return undefined;
+  const [, lang, title] = match;
+  return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -194,173 +205,105 @@ function hasAccessibilityData(data: AccessibilityData): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Profile builders per category
+// Profile builder — extracts OSM data into a unified PoiProfile JSONB
 // ---------------------------------------------------------------------------
 
-function buildFoodProfile(osmTags: Record<string, string>): Record<string, unknown> {
-  const amenity = osmTags.amenity;
-  const typeMap: Record<string, string> = {
-    restaurant: "restaurant",
-    cafe: "cafe",
-    fast_food: "fast_food",
-    biergarten: "biergarten",
-    ice_cream: "ice_cream",
-    food_court: "food_court",
-    bakery: "bakery",
+/**
+ * Builds a PoiProfile from OSM tags for the given category.
+ * Extracts subtype, OSM-specific subtag values, and category-specific attributes.
+ *
+ * Args:
+ *     osmTags: Raw OSM tags from the PBF element.
+ *     categorySlug: Determined category for this POI.
+ *
+ * Returns:
+ *     A PoiProfile with seed-time data (keywords/products/summary filled by enrich-taxonomy).
+ */
+function buildProfile(osmTags: Record<string, string>, categorySlug: CategorySlug): PoiProfile {
+  const osmExtracted: Record<string, string> = {};
+  const attributes: Record<string, unknown> = {};
+
+  const subtypeExtractors: Record<string, () => string | undefined> = {
+    food: () => osmTags.amenity ?? osmTags.shop,
+    nightlife: () => osmTags.amenity,
+    shopping: () => osmTags.shop,
+    history: () => osmTags.historic,
+    architecture: () => {
+      const buildingSubtypes: Record<string, string> = {
+        church: "church", cathedral: "cathedral", chapel: "chapel",
+        mosque: "mosque", synagogue: "synagogue", temple: "temple",
+      };
+      return buildingSubtypes[osmTags.building] ?? (osmTags.amenity === "place_of_worship" ? "church" : undefined);
+    },
+    nature: () => osmTags.leisure ?? osmTags.natural,
+    art: () => osmTags.tourism ?? osmTags.amenity,
+    culture: () => osmTags.tourism ?? osmTags.amenity,
+    views: () => osmTags["tower:type"] === "observation" ? "tower" : "viewpoint",
+    sports: () => osmTags.leisure ?? osmTags.sport,
+    health: () => osmTags.amenity ?? osmTags.healthcare,
+    transport: () => osmTags.railway ?? osmTags.amenity,
+    education: () => osmTags.amenity,
+    services: () => osmTags.amenity ?? osmTags.tourism,
+    hidden: () => osmTags.amenity ?? osmTags.tourism,
   };
 
-  return {
-    establishmentType: typeMap[amenity] ?? osmTags.shop === "bakery" ? "bakery" : null,
-    dineIn: osmTags["indoor_seating"] === "yes" || osmTags["dine_in"] === "yes" ? true : null,
-    takeaway: osmTags.takeaway === "yes" ? true : osmTags.takeaway === "no" ? false : null,
-    delivery: osmTags.delivery === "yes" ? true : osmTags.delivery === "no" ? false : null,
-    driveThrough: osmTags.drive_through === "yes" ? true : null,
-    catering: osmTags.catering === "yes" ? true : null,
-    servesBreakfast: osmTags["breakfast"] === "yes" ? true : null,
-    servesBrunch: osmTags["brunch"] === "yes" ? true : null,
-    servesLunch: osmTags["lunch"] === "yes" ? true : null,
-    servesDinner: osmTags["dinner"] === "yes" ? true : null,
-    dietVegetarian: osmTags["diet:vegetarian"] ?? null,
-    dietVegan: osmTags["diet:vegan"] ?? null,
-    dietHalal: osmTags["diet:halal"] ?? null,
-    dietKosher: osmTags["diet:kosher"] ?? null,
-    dietGlutenFree: osmTags["diet:gluten_free"] ?? null,
-    dietLactoseFree: osmTags["diet:lactose_free"] ?? null,
-    dietPescetarian: osmTags["diet:pescetarian"] ?? null,
-    servesBeer: osmTags["brewery"] || osmTags["real_ale"] === "yes" ? true : null,
-    servesWine: null,
-    servesCocktails: null,
-    hasOutdoorSeating: osmTags.outdoor_seating === "yes" ? true : osmTags.outdoor_seating === "no" ? false : null,
-    hasWifi: osmTags.internet_access === "wlan" || osmTags.internet_access === "yes" ? true : null,
-    hasLiveMusic: osmTags.live_music === "yes" ? true : null,
-    hasParking: osmTags.parking ? true : null,
-    smokingPolicy:
-      osmTags.smoking === "no" ? "no_smoking" :
-      osmTags.smoking === "outside" ? "outdoor_only" :
-      osmTags.smoking === "separated" ? "designated_area" :
-      osmTags.smoking === "yes" ? "allowed" : null,
-    cashOnly: osmTags["payment:cash"] === "only" ? true : null,
-    hasHighchair: osmTags.highchair === "yes" ? true : null,
-    hasChangingTable: osmTags.changing_table === "yes" ? true : null,
-    hasAirConditioning: osmTags.air_conditioning === "yes" ? true : null,
-  };
-}
+  const subtype = subtypeExtractors[categorySlug]?.() ?? undefined;
 
-function buildHistoryProfile(osmTags: Record<string, string>): Record<string, unknown> {
-  return {
-    subtype: osmTags.historic ?? null,
-    yearBuilt: osmTags.start_date ? parseYear(osmTags.start_date) : null,
-    yearDestroyed: osmTags.end_date ? parseYear(osmTags.end_date) : null,
-    historicalSignificance: osmTags.description ?? null,
-    originalPurpose: osmTags.original_use ?? null,
-    currentUse: osmTags.current_use ?? null,
-    heritageLevel: osmTags.heritage ? parseHeritageLevel(osmTags.heritage) : null,
-    inscription: osmTags.inscription ?? null,
-    preservationStatus: osmTags.ruins === "yes" ? "ruins" : null,
-  };
-}
+  const osmSubtagKeys = [
+    "clothes", "shoes", "beauty", "books", "cuisine", "sport",
+    "brand", "brand:wikidata", "operator:wikidata", "description",
+  ];
+  for (const key of osmSubtagKeys) {
+    if (osmTags[key]) {
+      osmExtracted[key.replace(":", "")] = osmTags[key];
+    }
+  }
 
-function buildArchitectureProfile(osmTags: Record<string, string>): Record<string, unknown> {
-  const subtypeMap: Record<string, string> = {
-    church: "church",
-    cathedral: "cathedral",
-    chapel: "chapel",
-    mosque: "mosque",
-    synagogue: "synagogue",
-    temple: "temple",
-  };
-
-  return {
-    subtype: subtypeMap[osmTags.building] ?? osmTags.amenity === "place_of_worship" ? "church" : null,
-    primaryStyle: osmTags["architecture"] ?? osmTags["building:architecture"] ?? null,
-    architect: osmTags.architect ?? null,
-    yearBuilt: osmTags.start_date ? parseYear(osmTags.start_date) : null,
-    heightMeters: osmTags.height ? osmTags.height.replace("m", "").trim() : null,
-    buildingLevels: osmTags["building:levels"] ? parseInt(osmTags["building:levels"]) || null : null,
-    denomination: osmTags.denomination ?? null,
-    isActiveWorship: osmTags.amenity === "place_of_worship" ? true : null,
-    towerAccessible: osmTags["tower:type"] === "observation" ? true : null,
-  };
-}
-
-function buildNatureProfile(osmTags: Record<string, string>): Record<string, unknown> {
-  return {
-    subtype: osmTags.leisure ?? osmTags.natural ?? null,
-    areaHectares: osmTags.area ? (parseFloat(osmTags.area) / 10000).toFixed(2) : null,
-    trailDifficulty: osmTags["sac_scale"] ? mapTrailDifficulty(osmTags["sac_scale"]) : null,
-    picnicAllowed: osmTags.picnic === "yes" ? true : null,
-    swimmingAllowed: osmTags.swimming === "yes" ? true : osmTags.swimming === "no" ? false : null,
-    cyclingAllowed: osmTags.bicycle === "yes" || osmTags.bicycle === "designated" ? true : osmTags.bicycle === "no" ? false : null,
-    litAtNight: osmTags.lit === "yes" ? true : osmTags.lit === "no" ? false : null,
-  };
-}
-
-function buildArtCultureProfile(osmTags: Record<string, string>): Record<string, unknown> {
-  const subtypeMap: Record<string, string> = {
-    museum: "museum",
-    gallery: "gallery",
-    theatre: "theatre",
-    cinema: "cinema",
-  };
-
-  return {
-    subtype: subtypeMap[osmTags.tourism] ?? subtypeMap[osmTags.amenity] ?? null,
-    collectionFocus: osmTags["museum:type"] ?? osmTags.subject ?? null,
-    guidedTours: osmTags.guided_tours === "yes" ? true : null,
-    audioGuide: osmTags.audio_guide === "yes" ? true : null,
-    photographyAllowed: osmTags.photography === "yes" ? true : osmTags.photography === "no" ? false : null,
-    genreFocus: osmTags.genre ?? null,
-    foundedYear: osmTags.start_date ? parseYear(osmTags.start_date) : null,
-  };
-}
-
-function buildNightlifeProfile(osmTags: Record<string, string>): Record<string, unknown> {
-  const subtypeMap: Record<string, string> = {
-    bar: "bar",
-    pub: "pub",
-    nightclub: "nightclub",
-  };
-
-  return {
-    subtype: subtypeMap[osmTags.amenity] ?? null,
-    hasDancefloor: osmTags.amenity === "nightclub" ? true : null,
-    hasLiveMusic: osmTags.live_music === "yes" ? true : null,
-    hasDj: osmTags.amenity === "nightclub" ? true : null,
-    outdoorArea: osmTags.outdoor_seating === "yes" ? true : null,
-    smokingArea: osmTags.smoking === "outside" || osmTags.smoking === "separated" ? true : null,
-    foodServed: osmTags.food === "yes" ? true : null,
-  };
-}
-
-function buildShoppingProfile(osmTags: Record<string, string>): Record<string, unknown> {
-  const shopType = osmTags.shop;
-  let subtype: string | null = null;
-
-  if (shopType === "clothes" || shopType === "fashion") subtype = "boutique";
-  else if (shopType === "mall" || shopType === "department_store") subtype = "mall";
-  else if (shopType === "supermarket" || shopType === "convenience") subtype = "supermarket";
-  else if (shopType === "books") subtype = "bookstore";
-  else if (shopType === "second_hand" || shopType === "charity") subtype = "vintage";
-  else if (shopType === "bakery") subtype = "bakery";
-  else if (shopType === "marketplace") subtype = "market";
+  switch (categorySlug) {
+    case "food": {
+      if (osmTags.outdoor_seating) attributes.outdoorSeating = osmTags.outdoor_seating === "yes";
+      if (osmTags.takeaway) attributes.takeaway = osmTags.takeaway === "yes";
+      if (osmTags.delivery) attributes.delivery = osmTags.delivery === "yes";
+      if (osmTags["diet:vegetarian"]) attributes.vegetarian = osmTags["diet:vegetarian"];
+      if (osmTags["diet:vegan"]) attributes.vegan = osmTags["diet:vegan"];
+      break;
+    }
+    case "history": {
+      if (osmTags.start_date) attributes.yearBuilt = parseYear(osmTags.start_date);
+      if (osmTags.heritage) attributes.heritageLevel = parseHeritageLevel(osmTags.heritage);
+      if (osmTags.ruins === "yes") attributes.preservationStatus = "ruins";
+      break;
+    }
+    case "architecture": {
+      const style = osmTags.architecture ?? osmTags["building:architecture"];
+      if (style) attributes.primaryStyle = style;
+      if (osmTags.architect) attributes.architect = osmTags.architect;
+      if (osmTags.start_date) attributes.yearBuilt = parseYear(osmTags.start_date);
+      if (osmTags.denomination) attributes.denomination = osmTags.denomination;
+      break;
+    }
+    case "nature": {
+      if (osmTags["sac_scale"]) attributes.trailDifficulty = mapTrailDifficulty(osmTags["sac_scale"]);
+      if (osmTags.lit) attributes.litAtNight = osmTags.lit === "yes";
+      break;
+    }
+    case "views": {
+      if (osmTags.ele) attributes.elevationM = osmTags.ele;
+      if (osmTags.direction) attributes.viewDirection = osmTags.direction;
+      break;
+    }
+    default:
+      break;
+  }
 
   return {
     subtype,
-    isSecondhand: shopType === "second_hand" || shopType === "charity" ? true : null,
-    isLocalCrafts: osmTags.craft ? true : null,
-    isLuxury: shopType === "jewelry" || osmTags.brand ? null : null,
-    cashOnly: osmTags["payment:cash"] === "only" ? true : null,
-  };
-}
-
-function buildViewpointProfile(osmTags: Record<string, string>): Record<string, unknown> {
-  return {
-    subtype: osmTags["tower:type"] === "observation" ? "tower" : "viewpoint",
-    elevationM: osmTags.ele ?? null,
-    viewDirection: osmTags.direction ?? null,
-    weatherDependent: true,
-    indoorViewing: osmTags["tower:type"] === "observation" ? true : null,
-    requiresClimb: osmTags["tower:type"] === "observation" ? true : null,
+    osmExtracted: Object.keys(osmExtracted).length > 0 ? osmExtracted : undefined,
+    keywords: [],
+    products: [],
+    summary: "",
+    enrichmentSource: "seed",
+    attributes,
   };
 }
 
@@ -451,14 +394,13 @@ interface ProcessResult {
   pois: number;
   contacts: number;
   accessibility: number;
-  profiles: number;
   cuisines: number;
   tags: number;
   translations: number;
 }
 
 function emptyResult(): ProcessResult {
-  return { pois: 0, contacts: 0, accessibility: 0, profiles: 0, cuisines: 0, tags: 0, translations: 0 };
+  return { pois: 0, contacts: 0, accessibility: 0, cuisines: 0, tags: 0, translations: 0 };
 }
 
 function sumResults(results: ProcessResult[]): ProcessResult {
@@ -467,7 +409,6 @@ function sumResults(results: ProcessResult[]): ProcessResult {
     totals.pois += r.pois;
     totals.contacts += r.contacts;
     totals.accessibility += r.accessibility;
-    totals.profiles += r.profiles;
     totals.cuisines += r.cuisines;
     totals.tags += r.tags;
     totals.translations += r.translations;
@@ -565,6 +506,8 @@ async function main() {
       ? buildWikipediaUrl(osmTags.wikipedia) ?? null
       : null;
 
+    const profile = buildProfile(osmTags, categorySlug);
+
     const [insertedPoi] = await db
       .insert(pois)
       .values({
@@ -580,6 +523,7 @@ async function main() {
         osmTags,
         wikipediaUrl,
         imageUrl: osmTags.image ?? null,
+        profile,
       })
       .onConflictDoUpdate({
         target: pois.osmId,
@@ -594,6 +538,7 @@ async function main() {
           osmTags: sql`EXCLUDED.osm_tags`,
           wikipediaUrl: sql`EXCLUDED.wikipedia_url`,
           imageUrl: sql`EXCLUDED.image_url`,
+          profile: sql`EXCLUDED.profile`,
           updatedAt: sql`now()`,
         },
       })
@@ -623,10 +568,6 @@ async function main() {
             .then(() => { result.accessibility++; })
         : null,
 
-      insertProfile(poiId, categorySlug, osmTags)
-        .then(() => { result.profiles++; })
-        .catch(() => {}),
-
       insertCuisinesForPoi(poiId, osmTags, cuisineSlugMap)
         .then((n) => { result.cuisines += n; }),
 
@@ -649,7 +590,6 @@ async function main() {
     totals.pois += batchTotals.pois;
     totals.contacts += batchTotals.contacts;
     totals.accessibility += batchTotals.accessibility;
-    totals.profiles += batchTotals.profiles;
     totals.cuisines += batchTotals.cuisines;
     totals.tags += batchTotals.tags;
     totals.translations += batchTotals.translations;
@@ -662,116 +602,12 @@ async function main() {
   console.log(`  POIs: ${totals.pois}`);
   console.log(`  Contact info: ${totals.contacts}`);
   console.log(`  Accessibility info: ${totals.accessibility}`);
-  console.log(`  Profiles: ${totals.profiles}`);
   console.log(`  Cuisine links: ${totals.cuisines}`);
   console.log(`  Tag links: ${totals.tags}`);
   console.log(`  Translations: ${totals.translations}`);
   process.exit(0);
 }
 
-// ---------------------------------------------------------------------------
-// Profile insertion dispatcher
-// ---------------------------------------------------------------------------
-
-async function insertProfile(
-  poiId: string,
-  categorySlug: CategorySlug,
-  osmTags: Record<string, string>,
-): Promise<void> {
-  switch (categorySlug) {
-    case "food": {
-      const profile = buildFoodProfile(osmTags);
-      await db
-        .insert(foodProfiles)
-        .values({ poiId, ...profile } as typeof foodProfiles.$inferInsert)
-        .onConflictDoUpdate({
-          target: foodProfiles.poiId,
-          set: profile,
-        });
-      break;
-    }
-    case "history": {
-      const profile = buildHistoryProfile(osmTags);
-      await db
-        .insert(historyProfiles)
-        .values({ poiId, ...profile } as typeof historyProfiles.$inferInsert)
-        .onConflictDoUpdate({
-          target: historyProfiles.poiId,
-          set: profile,
-        });
-      break;
-    }
-    case "architecture": {
-      const profile = buildArchitectureProfile(osmTags);
-      await db
-        .insert(architectureProfiles)
-        .values({ poiId, ...profile } as typeof architectureProfiles.$inferInsert)
-        .onConflictDoUpdate({
-          target: architectureProfiles.poiId,
-          set: profile,
-        });
-      break;
-    }
-    case "nature": {
-      const profile = buildNatureProfile(osmTags);
-      await db
-        .insert(natureProfiles)
-        .values({ poiId, ...profile } as typeof natureProfiles.$inferInsert)
-        .onConflictDoUpdate({
-          target: natureProfiles.poiId,
-          set: profile,
-        });
-      break;
-    }
-    case "art":
-    case "culture": {
-      const profile = buildArtCultureProfile(osmTags);
-      await db
-        .insert(artCultureProfiles)
-        .values({ poiId, ...profile } as typeof artCultureProfiles.$inferInsert)
-        .onConflictDoUpdate({
-          target: artCultureProfiles.poiId,
-          set: profile,
-        });
-      break;
-    }
-    case "nightlife": {
-      const profile = buildNightlifeProfile(osmTags);
-      await db
-        .insert(nightlifeProfiles)
-        .values({ poiId, ...profile } as typeof nightlifeProfiles.$inferInsert)
-        .onConflictDoUpdate({
-          target: nightlifeProfiles.poiId,
-          set: profile,
-        });
-      break;
-    }
-    case "shopping": {
-      const profile = buildShoppingProfile(osmTags);
-      await db
-        .insert(shoppingProfiles)
-        .values({ poiId, ...profile } as typeof shoppingProfiles.$inferInsert)
-        .onConflictDoUpdate({
-          target: shoppingProfiles.poiId,
-          set: profile,
-        });
-      break;
-    }
-    case "views": {
-      const profile = buildViewpointProfile(osmTags);
-      await db
-        .insert(viewpointProfiles)
-        .values({ poiId, ...profile } as typeof viewpointProfiles.$inferInsert)
-        .onConflictDoUpdate({
-          target: viewpointProfiles.poiId,
-          set: profile,
-        });
-      break;
-    }
-    default:
-      break;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Batch insert helpers (Layer 3: multi-row inserts)

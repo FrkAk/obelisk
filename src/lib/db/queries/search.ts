@@ -1,5 +1,5 @@
 import { db } from "../client";
-import { remarks, pois, categories, foodProfiles, natureProfiles } from "../schema";
+import { remarks, pois, categories } from "../schema";
 import { eq, and, gte, lte, sql, or } from "drizzle-orm";
 import type { CategorySlug } from "@/types";
 
@@ -187,114 +187,6 @@ export async function searchRemarksByText(
     .limit(limit);
 
   return results.map(mapRowToRemarkWithPoi);
-}
-
-/**
- * Searches with profile-aware filters using tsvector full-text search.
- *
- * Args:
- *     query: The text to search for.
- *     latitude: Center latitude.
- *     longitude: Center longitude.
- *     radiusMeters: Search radius in meters.
- *     filters: Optional profile-specific filters.
- *     limit: Maximum number of results.
- *
- * Returns:
- *     Array of remarks matching the query and filters.
- */
-export async function searchWithFilters(
-  query: string,
-  latitude: number,
-  longitude: number,
-  radiusMeters: number,
-  filters: {
-    priceLevel?: number;
-    cuisine?: string;
-    outdoor?: boolean;
-    trailDifficulty?: string;
-    category?: CategorySlug;
-  } = {},
-  limit: number = 20
-): Promise<RemarkWithPoi[]> {
-  const baseResults = await searchRemarksByText(
-    query,
-    latitude,
-    longitude,
-    radiusMeters,
-    limit * 3
-  );
-
-  let filtered = baseResults;
-
-  if (filters.category) {
-    filtered = filtered.filter(
-      (r) => r.poi.category?.slug === filters.category
-    );
-  }
-
-  if (
-    filters.priceLevel !== undefined ||
-    filters.outdoor !== undefined ||
-    filters.cuisine !== undefined
-  ) {
-    const poiIds = filtered.map((r) => r.poi.id);
-    if (poiIds.length > 0) {
-      const profiles = await db
-        .select({
-          poiId: foodProfiles.poiId,
-          priceLevel: foodProfiles.priceLevel,
-          hasOutdoorSeating: foodProfiles.hasOutdoorSeating,
-        })
-        .from(foodProfiles)
-        .where(sql`${foodProfiles.poiId} = ANY(${poiIds})`);
-
-      const profileMap = new Map(profiles.map((p) => [p.poiId, p]));
-
-      filtered = filtered.filter((r) => {
-        const fp = profileMap.get(r.poi.id);
-        if (!fp) {
-          return (
-            filters.priceLevel === undefined && filters.outdoor === undefined
-          );
-        }
-        if (
-          filters.priceLevel !== undefined &&
-          fp.priceLevel !== filters.priceLevel
-        )
-          return false;
-        if (
-          filters.outdoor !== undefined &&
-          fp.hasOutdoorSeating !== filters.outdoor
-        )
-          return false;
-        return true;
-      });
-    }
-  }
-
-  if (filters.trailDifficulty !== undefined) {
-    const poiIds = filtered.map((r) => r.poi.id);
-    if (poiIds.length > 0) {
-      const profiles = await db
-        .select({
-          poiId: natureProfiles.poiId,
-          trailDifficulty: natureProfiles.trailDifficulty,
-        })
-        .from(natureProfiles)
-        .where(sql`${natureProfiles.poiId} = ANY(${poiIds})`);
-
-      const profileMap = new Map(profiles.map((p) => [p.poiId, p]));
-
-      filtered = filtered.filter((r) => {
-        const np = profileMap.get(r.poi.id);
-        if (!np) return false;
-        return np.trailDifficulty === filters.trailDifficulty;
-      });
-    }
-  }
-
-  return filtered.slice(0, limit);
 }
 
 /**

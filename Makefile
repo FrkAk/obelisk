@@ -1,4 +1,4 @@
-.PHONY: help setup finish-setup run run-local stop logs rebuild destroy download-pbf seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup finish-setup run run-local stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-taxonomy sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -18,7 +18,6 @@ export OLLAMA_URL ?= http://127.0.0.1:11434
 export OLLAMA_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_SEARCH_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_EMBED_MODEL ?= embeddinggemma:300m
-export OLLAMA_TRANSLATE_MODEL ?= translategemma:4b
 export TYPESENSE_API_KEY ?= obelisk_typesense_dev
 export SEED_RADIUS ?= 100
 
@@ -44,8 +43,13 @@ help:
 	@printf "  $(CYAN)seed-pois$(RESET)           Seed POIs from local OSM extract\n"
 	@printf "  $(CYAN)seed-all$(RESET)            Run all seed scripts in order\n"
 	@printf "\n"
+	@printf "$(GREEN)Enrichment:$(RESET)\n"
+	@printf "  $(CYAN)download-datasets$(RESET)   Download external datasets (taxonomy, NSI, taginfo, wikidata)\n"
+	@printf "  $(CYAN)build-taxonomy$(RESET)      Build tag enrichment map from downloaded data\n"
+	@printf "  $(CYAN)build-brands$(RESET)        Build brand enrichment map from NSI + Wikidata\n"
+	@printf "  $(CYAN)enrich-taxonomy$(RESET)     Enrich POIs with taxonomy data + LLM summaries\n"
+	@printf "\n"
 	@printf "$(GREEN)Search Pipeline:$(RESET)\n"
-	@printf "  $(CYAN)enrich-pois$(RESET)         Enrich POIs with web data + LLM\n"
 	@printf "  $(CYAN)sync-search$(RESET)         Sync POIs to Typesense\n"
 	@printf "  $(CYAN)generate-embeddings$(RESET)  Generate vector embeddings\n"
 	@printf "  $(CYAN)search-setup$(RESET)        Run full search pipeline\n"
@@ -58,46 +62,52 @@ help:
 setup:
 	@printf "$(GREEN)Setting up Obelisk...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[1/12]$(RESET) Building and starting services...\n"
+	@printf "$(CYAN)[1/14]$(RESET) Building and starting services...\n"
 	$(COMPOSE) up -d --build
 	@printf "Waiting for services...\n"
 	@sleep 8
 	@printf "\n"
-	@printf "$(CYAN)[2/12]$(RESET) Enabling extensions and running migrations...\n"
+	@printf "$(CYAN)[2/14]$(RESET) Enabling extensions and running migrations...\n"
 	$(COMPOSE) exec -T postgres psql -U obelisk -d obelisk -f /dev/stdin < drizzle/0001_enable_extensions.sql
 	$(COMPOSE) exec app bun run drizzle-kit push
 	@printf "\n"
-	@printf "$(CYAN)[3/12]$(RESET) Ensuring Ollama models...\n"
+	@printf "$(CYAN)[3/14]$(RESET) Ensuring Ollama models...\n"
 	ollama pull $(OLLAMA_MODEL)
 	ollama pull $(OLLAMA_SEARCH_MODEL)
 	ollama pull $(OLLAMA_EMBED_MODEL)
-	ollama pull $(OLLAMA_TRANSLATE_MODEL)
 	@printf "\n"
-	@printf "$(CYAN)[4/12]$(RESET) Seeding regions...\n"
+	@printf "$(CYAN)[4/14]$(RESET) Downloading external datasets...\n"
+	$(COMPOSE) exec app bun scripts/download-datasets.ts
+	@printf "\n"
+	@printf "$(CYAN)[5/14]$(RESET) Building tag enrichment map...\n"
+	$(COMPOSE) exec app bun scripts/build-taxonomy.ts
+	@printf "\n"
+	@printf "$(CYAN)[6/14]$(RESET) Building brand enrichment map...\n"
+	$(COMPOSE) exec app bun scripts/build-brands.ts
+	@printf "\n"
+	@printf "$(CYAN)[7/14]$(RESET) Seeding regions...\n"
 	$(COMPOSE) exec app bun scripts/seed-regions.ts
 	@printf "\n"
-	@printf "$(CYAN)[5/12]$(RESET) Seeding cuisines...\n"
+	@printf "$(CYAN)[8/14]$(RESET) Seeding cuisines...\n"
 	$(COMPOSE) exec app bun scripts/seed-cuisines.ts
 	@printf "\n"
-	@printf "$(CYAN)[6/12]$(RESET) Seeding tags...\n"
+	@printf "$(CYAN)[9/14]$(RESET) Seeding tags...\n"
 	$(COMPOSE) exec app bun scripts/seed-tags.ts
 	@printf "\n"
-	@printf "$(CYAN)[7/12]$(RESET) Downloading Munich OSM extract...\n"
+	@printf "$(CYAN)[10/14]$(RESET) Downloading Munich OSM extract...\n"
 	$(MAKE) download-pbf
 	@printf "\n"
-	@printf "$(CYAN)[8/12]$(RESET) Seeding POIs...\n"
+	@printf "$(CYAN)[11/14]$(RESET) Seeding POIs...\n"
 	$(COMPOSE) exec app bun scripts/seed-pois.ts
 	@printf "\n"
-	@printf "$(CYAN)[9/12]$(RESET) Enrich POIs...\n"
-	$(COMPOSE) exec app bun scripts/enrich-pois.ts
+	@printf "$(CYAN)[12/14]$(RESET) Enriching POIs with taxonomy data...\n"
+	$(COMPOSE) exec app bun scripts/enrich-taxonomy.ts
 	@printf "\n"
-	@printf "$(CYAN)[10/12]$(RESET) Generating stories...\n"
+	@printf "$(CYAN)[13/14]$(RESET) Generating stories...\n"
 	$(COMPOSE) exec app bun scripts/generate-stories.ts || true
 	@printf "\n"
-	@printf "$(CYAN)[11/12]$(RESET) Syncing search index...\n"
+	@printf "$(CYAN)[14/14]$(RESET) Syncing search index + generating embeddings...\n"
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
-	@printf "\n"
-	@printf "$(CYAN)[12/12]$(RESET) Generating vector embeddings...\n"
 	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
@@ -153,6 +163,15 @@ download-pbf:
 		printf "$(GREEN)Download complete: data/Muenchen.osm.pbf$(RESET)\n"; \
 	fi
 
+download-datasets:
+	$(COMPOSE) exec app bun scripts/download-datasets.ts
+
+build-taxonomy:
+	$(COMPOSE) exec app bun scripts/build-taxonomy.ts
+
+build-brands:
+	$(COMPOSE) exec app bun scripts/build-brands.ts
+
 seed-regions:
 	$(COMPOSE) exec app bun scripts/seed-regions.ts
 
@@ -167,8 +186,8 @@ seed-pois:
 
 seed-all: seed-regions seed-cuisines seed-tags seed-pois
 
-enrich-pois:
-	$(COMPOSE) exec app bun scripts/enrich-pois.ts
+enrich-taxonomy:
+	$(COMPOSE) exec app bun scripts/enrich-taxonomy.ts
 
 sync-search:
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
@@ -191,15 +210,13 @@ db-restore:
 finish-setup:
 	@printf "$(GREEN)Finishing setup (stories + search + embeddings)...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[10/12]$(RESET) Generating stories...\n"
+	@printf "$(CYAN)[13/14]$(RESET) Generating stories...\n"
 	$(COMPOSE) exec app bun scripts/generate-stories.ts || true
 	@printf "\n"
-	@printf "$(CYAN)[11/12]$(RESET) Syncing search index...\n"
+	@printf "$(CYAN)[14/14]$(RESET) Syncing search index + generating embeddings...\n"
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
-	@printf "\n"
-	@printf "$(CYAN)[12/12]$(RESET) Generating vector embeddings...\n"
 	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
-search-setup: seed-pois enrich-pois sync-search generate-embeddings
+search-setup: seed-pois enrich-taxonomy sync-search generate-embeddings

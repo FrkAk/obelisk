@@ -3,8 +3,7 @@ import { z } from "zod";
 import { parseQueryIntent } from "@/lib/search/queryParser";
 import { searchPOIs } from "@/lib/search/typesense";
 import { semanticSearch } from "@/lib/search/semantic";
-import { searchRemarksByText, getRandomRemark } from "@/lib/db/queries/search";
-import type { RemarkWithPoi } from "@/lib/db/queries/search";
+import { getRandomRemark } from "@/lib/db/queries/search";
 import { rankResults } from "@/lib/search/ranking";
 import { haversineDistance } from "@/lib/geo/distance";
 import { createLogger } from "@/lib/logger";
@@ -63,43 +62,6 @@ function typesenseHitToSearchResult(
   };
 }
 
-/**
- * Converts a remark-with-POI into a unified SearchResult.
- *
- * Args:
- *     remark: A remark joined with its POI data.
- *     userLat: User's latitude for distance calculation.
- *     userLon: User's longitude for distance calculation.
- *
- * Returns:
- *     A SearchResult with source "obelisk-db".
- */
-function remarkToSearchResult(
-  remark: RemarkWithPoi,
-  userLat: number,
-  userLon: number
-): SearchResult {
-  return {
-    id: remark.poi.id,
-    osmId: remark.poi.osmId ?? undefined,
-    name: remark.poi.name,
-    category: remark.poi.category?.slug ?? "hidden",
-    latitude: remark.poi.latitude,
-    longitude: remark.poi.longitude,
-    distance: haversineDistance(
-      userLat,
-      userLon,
-      remark.poi.latitude,
-      remark.poi.longitude
-    ),
-    score: 0,
-    address: remark.poi.address ?? undefined,
-    hasStory: true,
-    remark: remark as SearchResult["remark"],
-    source: "obelisk-db",
-  };
-}
-
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
@@ -129,12 +91,25 @@ export async function POST(request: NextRequest) {
       );
 
       if (randomRemark) {
-        const result = remarkToSearchResult(
-          randomRemark,
-          location.latitude,
-          location.longitude
-        );
-        result.score = 100;
+        const result: SearchResult = {
+          id: randomRemark.poi.id,
+          osmId: randomRemark.poi.osmId ?? undefined,
+          name: randomRemark.poi.name,
+          category: randomRemark.poi.category?.slug ?? "hidden",
+          latitude: randomRemark.poi.latitude,
+          longitude: randomRemark.poi.longitude,
+          distance: haversineDistance(
+            location.latitude,
+            location.longitude,
+            randomRemark.poi.latitude,
+            randomRemark.poi.longitude
+          ),
+          score: 100,
+          address: randomRemark.poi.address ?? undefined,
+          hasStory: true,
+          remark: randomRemark as SearchResult["remark"],
+          source: "typesense",
+        };
 
         const response: SearchResponse = {
           results: [result],
@@ -143,7 +118,6 @@ export async function POST(request: NextRequest) {
             parseMs,
             typesenseMs: 0,
             semanticMs: 0,
-            obeliskMs: Date.now() - parseStart - parseMs,
             totalMs: Date.now() - startTime,
           },
         };
@@ -169,7 +143,7 @@ export async function POST(request: NextRequest) {
     const hasKeywords = intent.keywords.length > 0;
     const typesenseQuery = hasFacets && !hasKeywords ? "*" : query;
 
-    const [typesenseSettled, semanticSettled, obeliskSettled] =
+    const [typesenseSettled, semanticSettled] =
       await Promise.allSettled([
         (async () => {
           const tsStart = Date.now();
@@ -198,22 +172,6 @@ export async function POST(request: NextRequest) {
           );
           return { results: hits, ms: Date.now() - semStart };
         })(),
-        (async () => {
-          const obStart = Date.now();
-          const hits = await searchRemarksByText(
-            query,
-            location.latitude,
-            location.longitude,
-            radius,
-            limit
-          );
-          return {
-            results: hits.map((r) =>
-              remarkToSearchResult(r, location.latitude, location.longitude)
-            ),
-            ms: Date.now() - obStart,
-          };
-        })(),
       ]);
 
     const typesenseResults =
@@ -234,15 +192,6 @@ export async function POST(request: NextRequest) {
         ? semanticSettled.value.ms
         : 0;
 
-    const obeliskResults =
-      obeliskSettled.status === "fulfilled"
-        ? obeliskSettled.value.results
-        : [];
-    const obeliskMs =
-      obeliskSettled.status === "fulfilled"
-        ? obeliskSettled.value.ms
-        : 0;
-
     if (typesenseSettled.status === "rejected") {
       log.error("Typesense failed:", typesenseSettled.reason);
     } else {
@@ -259,19 +208,10 @@ export async function POST(request: NextRequest) {
         `Semantic: ${semanticResults.length} hits in ${semanticMs}ms${top ? ` — top: "${top.name}" (sim: ${top.similarity.toFixed(3)})` : ""}`
       );
     }
-    if (obeliskSettled.status === "rejected") {
-      log.error("Obelisk DB failed:", obeliskSettled.reason);
-    } else {
-      const top = obeliskResults[0];
-      log.info(
-        `Obelisk DB: ${obeliskResults.length} hits in ${obeliskMs}ms${top ? ` — top: "${top.name}"` : ""}`
-      );
-    }
 
     const ranked = rankResults({
       typesenseResults,
       semanticResults,
-      obeliskResults,
       userLocation: location,
       maxRadius: radius,
     });
@@ -280,7 +220,7 @@ export async function POST(request: NextRequest) {
 
     const totalMs = Date.now() - startTime;
     log.info(
-      `Results: ${finalResults.length} (ts:${typesenseResults.length}, sem:${semanticResults.length}, ob:${obeliskResults.length})`
+      `Results: ${finalResults.length} (ts:${typesenseResults.length}, sem:${semanticResults.length})`
     );
     log.timing("total", totalMs);
 
@@ -300,7 +240,6 @@ export async function POST(request: NextRequest) {
         parseMs,
         typesenseMs,
         semanticMs,
-        obeliskMs,
         totalMs,
       },
     };

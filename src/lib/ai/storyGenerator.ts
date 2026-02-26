@@ -2,6 +2,9 @@ import { generateText } from "./ollama";
 import { detectLocale, buildLanguagePrompt } from "./localization";
 import type { LocaleInfo } from "./localization";
 import type { Poi, Tag, PoiProfile, ContactInfo } from "@/types";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("storyGenerator");
 
 export interface StoryPoiContext {
   poi: Poi;
@@ -229,13 +232,39 @@ function buildProfileContext(profile: PoiProfile | null): string {
   return parts.length > 0 ? parts.join("\n") : "Limited profile data available.";
 }
 
+const CATEGORY_FEW_SHOT: Partial<Record<string, string>> = {
+  shopping: `TITLE: The Vintage Goldmine
+TEASER: Vintage finds, no crowds
+STORY: On a quiet Gasse off the main drag, this Laden has the kind of curated selection you won't find in any Kaufhaus. The owner knows every piece by heart and the vibe is relaxed — no pushy sales, just good finds.
+LOCAL_TIP: Go on weekday mornings when new stock hits the shelves. Ask about their alterations service.`,
+  food: `TITLE: Honest Bavarian Comfort
+TEASER: Schnitzel done right
+STORY: This Wirtshaus does one thing and does it well — proper Bavarian comfort food without the tourist markup. The Schnitzel is hand-pounded and the Kartoffelsalat is made fresh. Nothing fancy, just gemütlich and real.
+LOCAL_TIP: Skip the English menu and point at what the Stammgäste are having. The Tagesgericht is always the move.`,
+  culture: `TITLE: The Quiet Stage
+TEASER: Seats so close you feel it
+STORY: While everyone queues for the big Staatstheater, this kleine Bühne puts on shows that actually surprise you. The intimate space means every seat is a good one, and the crowd is a mix of students and regulars who know what's up.
+LOCAL_TIP: Check their Abendkasse — last-minute tickets are half price and almost always available on weeknights.`,
+  history: `TITLE: Walls That Remember
+TEASER: Centuries in one courtyard
+STORY: Most people walk right past this unassuming Altbau without a second glance. But these walls have seen centuries — from medieval Handwerker to wartime shelter. The courtyard alone tells more stories than most museums in the Altstadt.
+LOCAL_TIP: Visit at dusk when the courtyard is empty and the old Laternen flicker on. That's when you feel the history.`,
+  art: `TITLE: Color on Every Corner
+TEASER: Watch artists at work
+STORY: This Atelier doubles as gallery and workspace, and you can watch Künstler at work most afternoons. The rotating exhibits favor local talent over big names, and the vibe is refreshingly ungezwungen — no velvet ropes here.
+LOCAL_TIP: First Thursday each month is Vernissage night — free wine, the artists are there, and it's genuinely good.`,
+};
+
 /**
  * Builds the full LLM prompt for story generation using persona, profile, and locale.
  *
- * @param ctx - Full POI context with profile, tags, and contact info.
- * @param confidence - Data richness confidence level.
- * @param locale - Detected locale for language and cultural flavor.
- * @returns Assembled prompt string for the LLM.
+ * Args:
+ *     ctx: Full POI context with profile, tags, and contact info.
+ *     confidence: Data richness confidence level.
+ *     locale: Detected locale for language and cultural flavor.
+ *
+ * Returns:
+ *     Assembled prompt string for the LLM.
  */
 function buildPrompt(
   ctx: StoryPoiContext,
@@ -247,6 +276,7 @@ function buildPrompt(
   const honesty = buildHonestyGuidelines(confidence);
   const languagePrompt = buildLanguagePrompt(locale);
   const tagNames = ctx.tags.map((t) => t.name).join(", ");
+  const fewShot = CATEGORY_FEW_SHOT[ctx.categorySlug] ?? CATEGORY_FEW_SHOT["food"]!;
 
   return `${persona.voice}
 
@@ -266,30 +296,186 @@ ${languagePrompt}
 
 ${persona.perspective}
 
-CRITICAL RULES FOR SOUNDING LOCAL:
+CRITICAL RULES:
 - NEVER cite review scores, star ratings, or "X reviews" - locals don't talk like that
 - NEVER quote website marketing copy or taglines
 - DO talk about the vibe, atmosphere, what makes it special to YOU
 - Sound like you're texting a friend, not writing a Tripadvisor review
+- Write in plain text only. No asterisks, no bold, no italics, no markdown formatting.
+- NEVER use these filler phrases: "you know?", "not flashy", "tucked away", "a real find", "a real gem", "a proper"
+- NEVER start with "Okay, so"
+- Each story must sound fresh — avoid repeating patterns from other stories
 
 GROUNDING: Only mention specific dishes, products, or services that appear in the STRUCTURED PROFILE DATA above. Do not invent menu items, nearby businesses, or events.
 
 Write:
 1. TITLE: Catchy, local-feeling (3-5 words)
-2. TEASER: Hook that sounds personal (3-5 words).
-   BANNED teasers: "You need to...", "Trust me...", "This place is...", "Seriously..."
-   Good examples: "Munich's best-kept secret", "Where locals actually go", "Skip the tourist traps"
-3. STORY: 60 words MAX. Talk like you've actually been there. Share the vibe, your honest take.
-4. LOCAL_TIP: ${persona.tipStyle}
+2. TEASER: Write an ORIGINAL short hook (3-7 words) specific to THIS place.
+   Do NOT use generic phrases. Make it specific to what makes this place unique.
+   Bad: "Where locals actually go", "A proper local spot", "Worth the detour"
+   Good: "Schnitzel worth the queue", "Books & coffee since 1892", "Bavaria's tiniest gallery"
+3. STORY: 2-3 SHORT sentences. Be concise.
+4. LOCAL_TIP: 1-2 sentences. ${persona.tipStyle}
+   IMPORTANT: Do NOT start with "If you're". Vary your opener.
+   Do NOT invent staff names, specific dishes, or nearby businesses not in the data above.
+   Only recommend items/services explicitly listed in the STRUCTURED PROFILE DATA.
 
-Format your response EXACTLY like this:
+Here is an example of EXACTLY the voice, length, and format I want:
+
+${fewShot}
+
+Now write yours for "${ctx.poi.name}". Format your response EXACTLY like this:
 TITLE: [your title]
 TEASER: [your teaser]
 STORY: [your story]
 LOCAL_TIP: [your tip]`;
 }
 
-function parseStoryResponse(response: string): {
+const BANNED_TEASERS = [
+  "seriously",
+  "you need to",
+  "trust me",
+  "this place is",
+  "where locals actually",
+  "a proper local",
+  "munich's best-kept",
+  "off the beaten",
+  "worth the detour",
+  "not in the guidebooks",
+  "a neighborhood favorite",
+  "the real deal",
+];
+
+const FALLBACK_TEASERS_BY_CATEGORY: Record<string, string[]> = {
+  food: ["Taste this", "Fork-ready", "Table for one?", "Menu highlight"],
+  history: ["Time-stamped", "Past meets present", "History underfoot", "Echoes remain"],
+  shopping: ["Shelf life", "Browse this", "Find of the day", "Curated picks"],
+  nightlife: ["After hours", "Night moves", "Late-night pick", "Dark horse"],
+  art: ["Eye candy", "Canvas & more", "Gallery worthy", "Creative corner"],
+  culture: ["Stage-side", "Scene stealer", "Curtain up", "Culture fix"],
+  health: ["Self-care stop", "Wellness check", "Healing hands", "Care spot"],
+  sports: ["Game on", "On the pitch", "Athletic pick", "Sweat spot"],
+  nature: ["Green escape", "Fresh air fix", "Leaf it to us", "Nature break"],
+  architecture: ["Built different", "Stone & story", "Design eye", "Facade first"],
+  views: ["Eyes up", "View finder", "Scenic stop", "Panorama pick"],
+  hidden: ["Stumble upon this", "Off-radar", "Detour worthy", "Secret spot"],
+  education: ["Brain fuel", "Learn here", "Knowledge nook", "Study break"],
+  services: ["Local essential", "City staple", "Need this", "Go-to spot"],
+  transport: ["Hub life", "Transit gem", "Connection point", "On the move"],
+};
+
+const GENERIC_FALLBACKS = ["Tap to discover", "Check this out", "Spot this", "Local pick"];
+
+/**
+ * Selects a random fallback teaser from the category-specific pool.
+ *
+ * Args:
+ *     categorySlug: Category slug for pool selection.
+ *
+ * Returns:
+ *     Random fallback teaser string.
+ */
+function getRandomFallbackTeaser(categorySlug: string): string {
+  const pool = FALLBACK_TEASERS_BY_CATEGORY[categorySlug] ?? GENERIC_FALLBACKS;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/**
+ * Strips markdown formatting from text (bold, italic, headers).
+ *
+ * Args:
+ *     text: Raw text possibly containing markdown.
+ *
+ * Returns:
+ *     Plain text with markdown formatting removed.
+ */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
+    .replace(/_{1,3}([^_]+)_{1,3}/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/`([^`]+)`/g, "$1");
+}
+
+/**
+ * Truncates text to a maximum word count at a sentence boundary.
+ *
+ * Args:
+ *     text: Text to truncate.
+ *     maxWords: Maximum number of words allowed.
+ *
+ * Returns:
+ *     Truncated text ending at a sentence boundary.
+ */
+function truncateAtSentence(text: string, maxWords: number): string {
+  const words = text.split(/\s+/);
+  if (words.length <= maxWords) return text;
+
+  const truncated = words.slice(0, maxWords).join(" ");
+  const lastSentenceEnd = Math.max(
+    truncated.lastIndexOf("."),
+    truncated.lastIndexOf("!"),
+    truncated.lastIndexOf("?"),
+  );
+
+  if (lastSentenceEnd > truncated.length * 0.4) {
+    return truncated.slice(0, lastSentenceEnd + 1);
+  }
+  return truncated + ".";
+}
+
+const BANNED_CONTENT_PHRASES = [
+  "you know?",
+  "you know,",
+  ", you know",
+  "not flashy",
+  "tucked away",
+  "a real find",
+  "a real gem",
+  "a proper gem",
+  "don't hesitate to ask",
+  "don't be afraid to ask",
+  "trust me,",
+  "Trust me,",
+];
+
+/**
+ * Strips banned filler phrases from LLM-generated content and cleans up whitespace.
+ *
+ * Args:
+ *     content: Raw content string from LLM output.
+ *
+ * Returns:
+ *     Sanitized content with banned phrases removed and whitespace normalized.
+ */
+function sanitizeContent(content: string): string {
+  let result = content;
+  for (const phrase of BANNED_CONTENT_PHRASES) {
+    result = result.replaceAll(phrase, "");
+  }
+  return result.replace(/\s{2,}/g, " ").replace(/\s+([.,!?])/g, "$1").trim();
+}
+
+/**
+ * Sanitizes a teaser string by rejecting banned patterns and replacing with a category fallback.
+ *
+ * Args:
+ *     teaser: Raw teaser text from LLM output.
+ *     categorySlug: Category slug for fallback pool selection.
+ *
+ * Returns:
+ *     Sanitized teaser, replaced with a random category fallback if banned.
+ */
+function sanitizeTeaser(teaser: string, categorySlug: string): string {
+  const lower = teaser.toLowerCase().trim();
+  const isBanned = BANNED_TEASERS.some((b) => lower.startsWith(b));
+  if (isBanned) {
+    return getRandomFallbackTeaser(categorySlug);
+  }
+  return teaser;
+}
+
+function parseStoryResponse(response: string, categorySlug: string): {
   title: string;
   teaser: string;
   content: string;
@@ -301,43 +487,59 @@ function parseStoryResponse(response: string): {
   const storyMatch = response.match(/STORY:\s*(.+?)(?=\nLOCAL_TIP:|$)/is);
   const tipMatch = response.match(/LOCAL_TIP:\s*(.+?)$/is);
 
-  const content = storyMatch?.[1]?.trim() || response.slice(0, 300);
+  const rawContent = stripMarkdown(storyMatch?.[1]?.trim() || response.slice(0, 300));
+  const cleanContent = sanitizeContent(rawContent);
+  const content = truncateAtSentence(cleanContent, 100);
+  const rawTeaser = stripMarkdown(teaserMatch?.[1]?.trim() || "Tap to discover");
+  const teaser = sanitizeTeaser(rawTeaser, categorySlug);
+  const rawTitle = stripMarkdown(titleMatch?.[1]?.trim() || "A Hidden Story");
+  const rawTip = stripMarkdown(tipMatch?.[1]?.trim() || "Ask locals for more stories!");
+  const localTip = sanitizeContent(rawTip);
+
   const wordCount = content.split(/\s+/).length;
   const durationSeconds = Math.max(30, Math.min(90, Math.round(wordCount * 0.5 + 15)));
 
   return {
-    title: (titleMatch?.[1]?.trim() || "A Hidden Story").slice(0, 100),
-    teaser: (teaserMatch?.[1]?.trim() || "Tap to discover").slice(0, 100),
+    title: rawTitle.slice(0, 100),
+    teaser: teaser.slice(0, 100),
     content,
-    localTip: tipMatch?.[1]?.trim() || "Ask locals for more stories!",
+    localTip,
     durationSeconds,
   };
 }
 
 /**
  * Generates a story for a POI using structured profile data and category-specific persona.
- * Returns the story along with confidence scoring and context source metadata.
+ * Returns null when the POI has insufficient data for reliable story generation.
  *
  * Args:
  *     ctx: Full POI context with profile, tags, cuisines, dishes, and contact info.
  *     model: Ollama model ID to use (defaults to OLLAMA_MODEL env).
  *
  * Returns:
- *     Generated story with confidence level, model ID, and context sources.
+ *     Generated story with confidence level, model ID, and context sources, or null if insufficient data.
  */
 export async function generateStory(
   ctx: StoryPoiContext,
   model?: string,
-): Promise<GeneratedStory> {
+): Promise<GeneratedStory | null> {
   const confidence = assessConfidence(ctx);
+  const hasKeywords = (ctx.profile?.keywords?.length ?? 0) > 0;
+  const hasProducts = (ctx.profile?.products?.length ?? 0) > 0;
+
+  if (confidence === "low" && !hasKeywords && !hasProducts) {
+    log.info(`Skipping "${ctx.poi.name}" — insufficient data for reliable story`);
+    return null;
+  }
+
   const locale = await detectLocale(ctx.poi.address, ctx.poi.latitude, ctx.poi.longitude);
   const usedModel = model ?? (process.env.OLLAMA_MODEL || "gemma3:4b-it-qat");
 
-  console.log(`[storyGenerator] Generating for "${ctx.poi.name}" | confidence: ${confidence} | locale: ${locale.country}`);
+  log.info(`Generating for "${ctx.poi.name}" | confidence: ${confidence} | locale: ${locale.country}`);
 
   const prompt = buildPrompt(ctx, confidence, locale);
   const response = await generateText(prompt, usedModel);
-  const parsed = parseStoryResponse(response);
+  const parsed = parseStoryResponse(response, ctx.categorySlug);
 
   return {
     ...parsed,
@@ -349,6 +551,7 @@ export async function generateStory(
 
 /**
  * Generates stories for multiple POIs sequentially with a delay between each.
+ * Skips POIs where generateStory returns null (insufficient data).
  *
  * Args:
  *     contexts: Array of story POI contexts.
@@ -356,7 +559,7 @@ export async function generateStory(
  *     delayMs: Delay between requests in milliseconds.
  *
  * Returns:
- *     Array of generated stories with POI IDs.
+ *     Array of generated stories with POI IDs (excludes skipped POIs).
  */
 export async function generateStoriesBatch(
   contexts: Array<{ id: string; ctx: StoryPoiContext }>,
@@ -368,11 +571,15 @@ export async function generateStoriesBatch(
   for (const { id, ctx } of contexts) {
     try {
       const story = await generateStory(ctx, model);
+      if (!story) {
+        log.info(`Skipped: ${ctx.poi.name} (insufficient data)`);
+        continue;
+      }
       results.push({ poiId: id, story });
-      console.log(`[storyGenerator] Generated: ${ctx.poi.name}`);
+      log.info(`Generated: ${ctx.poi.name}`);
     } catch (error) {
-      console.error(
-        `[storyGenerator] Failed for ${ctx.poi.name}:`,
+      log.error(
+        `Failed for ${ctx.poi.name}:`,
         error instanceof Error ? error.message : error,
       );
     }

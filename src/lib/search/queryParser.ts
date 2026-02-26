@@ -7,6 +7,7 @@ const log = createLogger("queryParser");
 const DEFAULT_INTENT: ParsedIntent = {
   filters: {},
   keywords: [],
+  source: "default",
 };
 
 const FAST_PATH: Record<string, ParsedIntent> = {
@@ -38,10 +39,12 @@ const FAST_PATH: Record<string, ParsedIntent> = {
   restaurant: { category: "food", keywords: ["restaurant"], filters: {} },
   bakery: { category: "food", keywords: ["bakery"], filters: {} },
   "bäckerei": { category: "food", keywords: ["bakery"], filters: {} },
+  backerei: { category: "food", keywords: ["bakery"], filters: {} },
   metzgerei: { category: "food", keywords: ["butcher", "shop"], filters: {} },
   butcher: { category: "food", keywords: ["butcher", "shop"], filters: {} },
   breakfast: { category: "food", keywords: ["cafe", "breakfast", "restaurant"], filters: {} },
   "frühstück": { category: "food", keywords: ["cafe", "breakfast", "restaurant"], filters: {} },
+  fruhstuck: { category: "food", keywords: ["cafe", "breakfast", "restaurant"], filters: {} },
   brunch: { category: "food", keywords: ["cafe", "brunch", "restaurant"], filters: {} },
   "ice cream": { category: "food", keywords: ["ice_cream"], filters: {} },
   eis: { category: "food", keywords: ["ice_cream"], filters: {} },
@@ -95,6 +98,7 @@ const FAST_PATH: Record<string, ParsedIntent> = {
   movie: { category: "culture", keywords: ["cinema"], filters: {} },
   library: { category: "education", keywords: ["library"], filters: {} },
   "bücherei": { category: "education", keywords: ["library"], filters: {} },
+  bucherei: { category: "education", keywords: ["library"], filters: {} },
   bibliothek: { category: "education", keywords: ["library"], filters: {} },
   "opera": { category: "culture", keywords: ["opera", "theatre"], filters: {} },
   "concert": { category: "culture", keywords: ["concert_hall", "music_venue"], filters: {} },
@@ -190,6 +194,7 @@ const FAST_PATH: Record<string, ParsedIntent> = {
 
   university: { category: "education", keywords: ["university"], filters: {} },
   "universität": { category: "education", keywords: ["university"], filters: {} },
+  universitat: { category: "education", keywords: ["university"], filters: {} },
   uni: { category: "education", keywords: ["university"], filters: {} },
   school: { category: "education", keywords: ["school"], filters: {} },
   schule: { category: "education", keywords: ["school"], filters: {} },
@@ -211,6 +216,7 @@ const FAST_PATH: Record<string, ParsedIntent> = {
   statue: { category: "architecture", keywords: ["statue", "monument"], filters: {} },
   bridge: { category: "architecture", keywords: ["bridge"], filters: {} },
   "brücke": { category: "architecture", keywords: ["bridge"], filters: {} },
+  brucke: { category: "architecture", keywords: ["bridge"], filters: {} },
   tower: { category: "architecture", keywords: ["tower"], filters: {} },
   turm: { category: "architecture", keywords: ["tower"], filters: {} },
 
@@ -258,7 +264,7 @@ export async function parseQueryIntent(query: string): Promise<ParsedIntent> {
   const fastResult = lookupFastPath(normalized);
   if (fastResult) {
     log.info(`Fast-path: "${query}"`);
-    return fastResult;
+    return { ...fastResult, source: "fast-path" };
   }
 
   if (normalized.length < 3) {
@@ -271,6 +277,7 @@ export async function parseQueryIntent(query: string): Promise<ParsedIntent> {
     return {
       keywords: [],
       ...classification,
+      source: "classifier",
     };
   } catch (error) {
     log.warn(`Classifier failed for: "${query}"`, error);

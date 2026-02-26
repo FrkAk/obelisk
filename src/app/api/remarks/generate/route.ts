@@ -7,6 +7,7 @@ import { eq, isNull, and, gte, lte } from "drizzle-orm";
 import { generateStory } from "@/lib/ai/storyGenerator";
 import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
+import { insertRemark } from "@/lib/db/queries/remarks";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
 
@@ -97,6 +98,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    let skippedCount = 0;
     const generatedRemarks: Array<{
       id: string;
       poiId: string;
@@ -148,19 +150,17 @@ export async function POST(request: NextRequest) {
 
         const story = await generateStory(storyCtx);
 
-        const [insertedRemark] = await db
-          .insert(remarks)
-          .values({
-            poiId: poi.id,
-            title: story.title.slice(0, 100),
-            teaser: story.teaser.slice(0, 100),
-            content: story.content,
-            localTip: story.localTip,
-            durationSeconds: story.durationSeconds,
-            version: 1,
-            isCurrent: true,
-          })
-          .returning();
+        if (!story) {
+          log.info(`Skipped "${poi.name}" — insufficient data`);
+          skippedCount++;
+          continue;
+        }
+
+        const insertedRemark = await insertRemark({
+          poiId: poi.id,
+          locale: "de-DE",
+          story,
+        });
 
         generatedRemarks.push({
           id: insertedRemark.id,
@@ -189,6 +189,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       generated: generatedRemarks.length,
+      skipped: skippedCount,
       remarks: generatedRemarks,
     });
   } catch (error) {

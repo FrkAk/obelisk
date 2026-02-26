@@ -6,6 +6,7 @@ export interface ParsedIntent {
   cuisineTypes?: string[];
   filters: SearchFilters;
   isDiscovery?: boolean;
+  source?: "fast-path" | "classifier" | "default";
 }
 
 export interface SearchFilters {

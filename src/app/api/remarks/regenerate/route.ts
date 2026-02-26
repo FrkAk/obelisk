@@ -111,16 +111,20 @@ export async function POST(request: NextRequest) {
 
     const story = await generateStory(storyCtx);
 
+    if (!story) {
+      return NextResponse.json(
+        { error: "Insufficient data for story regeneration" },
+        { status: 422 },
+      );
+    }
+
     log.success(`Generated new story - Title: "${story.title}"`);
 
-    const newRemark = await versionBumpRemark(remarkId, {
-      poiId: existingRemark.poi.id,
-      title: story.title.slice(0, 100),
-      teaser: story.teaser.slice(0, 100),
-      content: story.content,
-      localTip: story.localTip,
-      durationSeconds: story.durationSeconds,
-    });
+    const newRemark = await versionBumpRemark(
+      remarkId,
+      existingRemark.poi.id,
+      story,
+    );
 
     const remarkWithPoi = {
       id: newRemark.id,

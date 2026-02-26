@@ -54,7 +54,7 @@ function loadJson<T>(path: string): T {
 // Primary OSM tag determination
 // ---------------------------------------------------------------------------
 
-const TAG_KEY_PRIORITY = ["shop", "amenity", "tourism", "historic", "leisure"];
+const TAG_KEY_PRIORITY = ["shop", "amenity", "tourism", "historic", "leisure", "natural", "building"];
 
 /**
  * Determines the primary OSM tag key=value for enrichment lookup.
@@ -72,7 +72,6 @@ function determinePrimaryTag(osmTags: Record<string, string>): string | null {
       return `${key}=${osmTags[key]}`;
     }
   }
-  if (osmTags.natural) return `natural=${osmTags.natural}`;
   if (osmTags.railway) return `railway=${osmTags.railway}`;
   if (osmTags.healthcare) return `healthcare=${osmTags.healthcare}`;
   return null;
@@ -215,6 +214,12 @@ async function main() {
       const mergedProducts = [...existingProfile.products];
       let enrichmentSource = existingProfile.enrichmentSource || "seed";
 
+      if (!primaryTag) {
+        log.warn(`${poi.name}: No primary tag determined from OSM tags: ${JSON.stringify(osmTags)}`);
+      } else if (!tagMap[primaryTag]) {
+        log.warn(`${poi.name}: No taxonomy match for tag "${primaryTag}"`);
+      }
+
       if (primaryTag && tagMap[primaryTag]) {
         const tagEntry = tagMap[primaryTag];
         for (const kw of tagEntry.keywords) {
@@ -270,7 +275,7 @@ async function main() {
         return "enriched" as const;
       } catch (error) {
         const msg = error instanceof Error ? error.message : "Unknown error";
-        log.error(`${poi.name}: LLM failed -- ${msg}`);
+        log.error(`${poi.name}: LLM failed — primaryTag=${primaryTag}, keywords=${mergedKeywords.length}, products=${mergedProducts.length} — ${msg}`);
         return "failed" as const;
       }
     });

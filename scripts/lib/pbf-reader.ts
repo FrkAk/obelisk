@@ -104,10 +104,16 @@ const TAG_FILTERS: TagFilter[] = [
   { key: "shop" },
   // Healthcare (any value)
   { key: "healthcare" },
+  // Religion
+  { key: "amenity", value: "place_of_worship" },
   // Transport
   { key: "amenity", value: "bus_station" },
   { key: "railway", value: "station" },
   { key: "railway", value: "tram_stop" },
+  // Natural (any value)
+  { key: "natural" },
+  // Building (any value)
+  { key: "building" },
 ];
 
 /**

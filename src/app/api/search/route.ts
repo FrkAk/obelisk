@@ -12,7 +12,7 @@ import type { SearchResult, SearchResponse } from "@/lib/search/types";
 const log = createLogger("search");
 
 const requestSchema = z.object({
-  query: z.string().min(1).max(500),
+  query: z.string().min(2).max(500),
   location: z.object({
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
@@ -139,7 +139,9 @@ export async function POST(request: NextRequest) {
     if (intent.filters.dogFriendly) typesenseFilters.dogFriendly = true;
     if (intent.filters.freeEntry) typesenseFilters.freeEntry = true;
 
-    const typesenseQuery = query;
+    const typesenseQuery = intent.keywords.length > 0
+      ? `${query} ${intent.keywords.join(" ")}`
+      : query;
 
     const [typesenseSettled, semanticSettled] =
       await Promise.allSettled([
@@ -166,7 +168,8 @@ export async function POST(request: NextRequest) {
             location.latitude,
             location.longitude,
             radius,
-            limit
+            limit,
+            intent.keywords
           );
           return { results: hits, ms: Date.now() - semStart };
         })(),
@@ -182,7 +185,8 @@ export async function POST(request: NextRequest) {
         : 0;
 
     const hasClassifierFilters = !!(typesenseFilters.category || typesenseFilters.cuisines?.length);
-    if (typesenseResults.length === 0 && hasClassifierFilters) {
+    const shouldRetry = intent.source !== "fast-path";
+    if (typesenseResults.length === 0 && hasClassifierFilters && shouldRetry) {
       const removed = [
         typesenseFilters.category && `category="${typesenseFilters.category}"`,
         typesenseFilters.cuisines?.length && `cuisines=[${typesenseFilters.cuisines.join(", ")}]`,

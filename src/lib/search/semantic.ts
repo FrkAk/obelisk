@@ -66,6 +66,7 @@ export async function embedText(text: string): Promise<number[]> {
  *     longitude: Center longitude for geo filtering.
  *     radiusMeters: Search radius in meters.
  *     limit: Maximum number of results.
+ *     keywords: Optional keywords to augment the embedding query text.
  *
  * Returns:
  *     Array of POIs ranked by semantic similarity, filtered by geo bounds.
@@ -75,9 +76,13 @@ export async function semanticSearch(
   latitude: number,
   longitude: number,
   radiusMeters: number,
-  limit: number = 10
+  limit: number = 10,
+  keywords?: string[]
 ): Promise<SemanticSearchResult[]> {
-  const queryEmbedding = await embedText(queryText);
+  const embeddingText = keywords?.length
+    ? `${queryText} ${keywords.join(" ")}`
+    : queryText;
+  const queryEmbedding = await embedText(embeddingText);
 
   const latDelta = radiusMeters / 111320;
   const lonDelta = radiusMeters / (111320 * Math.cos(latitude * (Math.PI / 180)));

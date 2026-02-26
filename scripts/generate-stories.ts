@@ -7,6 +7,7 @@ import type { StoryPoiContext } from "../src/lib/ai/storyGenerator";
 import type { Poi, PoiProfile } from "../src/types";
 import { processWithConcurrency } from "./lib/concurrency";
 import { loadTags, loadContactInfo } from "../src/lib/db/queries/pois";
+import { insertRemark } from "../src/lib/db/queries/remarks";
 
 const STORY_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
 const BATCH_LIMIT = parseInt(process.env.STORY_BATCH_LIMIT || "20", 10);
@@ -66,6 +67,7 @@ async function main() {
 
   let savedCount = 0;
   let failedCount = 0;
+  let skippedCount = 0;
 
   type PoiRow = (typeof poisWithoutRemarks)[number];
   await processWithConcurrency<PoiRow, void>(poisWithoutRemarks, CONCURRENCY, async (row) => {
@@ -110,24 +112,17 @@ async function main() {
 
       const story = await generateStory(ctx, STORY_MODEL);
 
-      await db.insert(remarks).values({
-        poiId: poi.id,
-        locale: poi.locale,
-        version: 1,
-        isCurrent: true,
-        title: story.title.slice(0, 100),
-        teaser: story.teaser.slice(0, 100),
-        content: story.content,
-        localTip: story.localTip,
-        durationSeconds: story.durationSeconds,
-        modelId: story.modelId,
-        confidence: story.confidence,
-        contextSources: story.contextSources,
-      });
+      if (!story) {
+        skippedCount++;
+        console.log(`[stories] Skipped: ${poi.name} (insufficient data)`);
+        return;
+      }
+
+      await insertRemark({ poiId: poi.id, locale: poi.locale, story });
 
       savedCount++;
       console.log(
-        `[stories] [${savedCount + failedCount}/${poisWithoutRemarks.length}] Saved: ${poi.name} (confidence: ${story.confidence})`,
+        `[stories] [${savedCount + failedCount + skippedCount}/${poisWithoutRemarks.length}] Saved: ${poi.name} (confidence: ${story.confidence})`,
       );
     } catch (error) {
       failedCount++;
@@ -138,7 +133,7 @@ async function main() {
     }
   });
 
-  console.log(`[stories] Generated and saved ${savedCount} stories (${failedCount} failed)`);
+  console.log(`[stories] Generated and saved ${savedCount} stories (${failedCount} failed, ${skippedCount} skipped)`);
   console.log("[stories] Story generation complete!");
   process.exit(0);
 }

@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { pois, remarks, categories } from "@/lib/db/schema";
+import { pois, categories } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { generateStory } from "@/lib/ai/storyGenerator";
 import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
@@ -11,7 +11,7 @@ import { loadTags, loadContactInfo } from "@/lib/db/queries/pois";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
 import type { CategorySlug, PoiProfile } from "@/types";
-import { getCurrentRemarkForPoi } from "@/lib/db/queries/remarks";
+import { getCurrentRemarkForPoi, insertRemark } from "@/lib/db/queries/remarks";
 
 const log = createLogger("generate-for-poi");
 
@@ -341,21 +341,20 @@ async function generateAndSaveRemark(
 
   const story = await generateStory(storyCtx);
 
+  if (!story) {
+    return NextResponse.json(
+      { error: "Insufficient data for story generation" },
+      { status: 422 },
+    );
+  }
+
   log.success(`Generated story — Title: "${story.title}"`);
 
-  const [insertedRemark] = await db
-    .insert(remarks)
-    .values({
-      poiId: poi.id,
-      title: story.title.slice(0, 100),
-      teaser: story.teaser.slice(0, 100),
-      content: story.content,
-      localTip: story.localTip,
-      durationSeconds: story.durationSeconds,
-      version: 1,
-      isCurrent: true,
-    })
-    .returning();
+  const insertedRemark = await insertRemark({
+    poiId: poi.id,
+    locale: poi.locale,
+    story,
+  });
 
   const remarkWithPoi = {
     id: insertedRemark.id,

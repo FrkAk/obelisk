@@ -139,9 +139,7 @@ export async function POST(request: NextRequest) {
     if (intent.filters.dogFriendly) typesenseFilters.dogFriendly = true;
     if (intent.filters.freeEntry) typesenseFilters.freeEntry = true;
 
-    const hasFacets = !!(intent.category || intent.cuisineTypes?.length);
-    const hasKeywords = intent.keywords.length > 0;
-    const typesenseQuery = hasFacets && !hasKeywords ? "*" : query;
+    const typesenseQuery = query;
 
     const [typesenseSettled, semanticSettled] =
       await Promise.allSettled([
@@ -174,14 +172,42 @@ export async function POST(request: NextRequest) {
         })(),
       ]);
 
-    const typesenseResults =
+    let typesenseResults =
       typesenseSettled.status === "fulfilled"
         ? typesenseSettled.value.results
         : [];
-    const typesenseMs =
+    let typesenseMs =
       typesenseSettled.status === "fulfilled"
         ? typesenseSettled.value.ms
         : 0;
+
+    const hasClassifierFilters = !!(typesenseFilters.category || typesenseFilters.cuisines?.length);
+    if (typesenseResults.length === 0 && hasClassifierFilters) {
+      const removed = [
+        typesenseFilters.category && `category="${typesenseFilters.category}"`,
+        typesenseFilters.cuisines?.length && `cuisines=[${typesenseFilters.cuisines.join(", ")}]`,
+      ].filter(Boolean).join(", ");
+      log.info(`Retrying Typesense without classifier filters: ${removed}`);
+      const retryFilters = { ...typesenseFilters };
+      delete retryFilters.category;
+      delete retryFilters.cuisines;
+      const retryStart = Date.now();
+      try {
+        const retryHits = await searchPOIs(
+          typesenseQuery,
+          location,
+          radiusKm,
+          retryFilters,
+          limit
+        );
+        typesenseResults = retryHits.map((h) =>
+          typesenseHitToSearchResult(h, location.latitude, location.longitude)
+        );
+        typesenseMs += Date.now() - retryStart;
+      } catch (error) {
+        log.error("Typesense retry failed:", error);
+      }
+    }
 
     const semanticResults =
       semanticSettled.status === "fulfilled"
@@ -209,11 +235,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const typesenseWeight = intent.keywords.length > 0 ? 1.0 : 0.1;
+
     const ranked = rankResults({
       typesenseResults,
       semanticResults,
       userLocation: location,
       maxRadius: radius,
+      typesenseWeight,
     });
 
     const finalResults = ranked.slice(0, limit);

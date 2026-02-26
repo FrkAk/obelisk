@@ -16,10 +16,12 @@ interface RankingInput {
   semanticResults: SemanticResult[];
   userLocation: { latitude: number; longitude: number };
   maxRadius: number;
+  typesenseWeight?: number;
 }
 
 const RRF_K = 10;
 const MIN_GEO_FACTOR = 0.5;
+const SCORE_CUTOFF_RATIO = 0.5;
 
 /**
  * Ranks and fuses results from Typesense and semantic search using Reciprocal Rank Fusion.
@@ -27,7 +29,7 @@ const MIN_GEO_FACTOR = 0.5;
  * Only semantic results receive geo-penalty.
  *
  * Args:
- *     input: Results from Typesense and semantic search, plus user location.
+ *     input: Results from Typesense and semantic search, plus user location and optional typesenseWeight (default 1.0).
  *
  * Returns:
  *     Deduplicated, ranked array of search results.
@@ -37,9 +39,11 @@ export function rankResults(input: RankingInput): SearchResult[] {
   const scoreMap = new Map<string, number>();
   const typesenseIds = new Set<string>();
 
+  const typesenseWeight = input.typesenseWeight ?? 1.0;
+
   for (let rank = 0; rank < input.typesenseResults.length; rank++) {
     const item = input.typesenseResults[rank];
-    const rrfScore = 1 / (RRF_K + rank);
+    const rrfScore = (1 / (RRF_K + rank)) * typesenseWeight;
     itemMap.set(item.id, item);
     scoreMap.set(item.id, (scoreMap.get(item.id) ?? 0) + rrfScore);
     typesenseIds.add(item.id);
@@ -81,9 +85,13 @@ export function rankResults(input: RankingInput): SearchResult[] {
 
   ranked.sort((a, b) => b.score - a.score);
 
+  const topScore = ranked[0]?.score ?? 0;
+  const minScore = topScore * SCORE_CUTOFF_RATIO;
+
   const seen = new Set<string>();
   return ranked.filter((item) => {
     if (seen.has(item.id)) return false;
+    if (item.score < minScore) return false;
     seen.add(item.id);
     return true;
   });

@@ -132,14 +132,14 @@ function assessConfidence(ctx: StoryPoiContext): "high" | "medium" | "low" {
   const profile = ctx.profile;
 
   if (profile) {
-    if (profile.keywords.length >= 3) score += 2;
-    else if (profile.keywords.length > 0) score += 1;
+    if ((profile.keywords?.length ?? 0) >= 3) score += 2;
+    else if ((profile.keywords?.length ?? 0) > 0) score += 1;
 
-    if (profile.products.length >= 3) score += 2;
-    else if (profile.products.length > 0) score += 1;
+    if ((profile.products?.length ?? 0) >= 3) score += 2;
+    else if ((profile.products?.length ?? 0) > 0) score += 1;
 
     if (profile.summary) score += 2;
-    if (Object.keys(profile.attributes).length > 0) score += 1;
+    if (Object.keys(profile.attributes ?? {}).length > 0) score += 1;
   }
 
   if (ctx.tags.length > 0) score += 1;
@@ -164,8 +164,8 @@ function buildContextSources(ctx: StoryPoiContext): Record<string, unknown> {
   const profile = ctx.profile;
   return {
     categorySlug: ctx.categorySlug,
-    keywordCount: profile?.keywords.length ?? 0,
-    productCount: profile?.products.length ?? 0,
+    keywordCount: profile?.keywords?.length ?? 0,
+    productCount: profile?.products?.length ?? 0,
     hasSummary: !!profile?.summary,
     enrichmentSource: profile?.enrichmentSource ?? "none",
     attributeCount: Object.keys(profile?.attributes ?? {}).length,
@@ -213,10 +213,10 @@ function buildProfileContext(profile: PoiProfile | null): string {
 
   if (profile.subtype) parts.push(`Type: ${profile.subtype}`);
   if (profile.summary) parts.push(`Description: ${profile.summary}`);
-  if (profile.keywords.length > 0) parts.push(`Keywords: ${profile.keywords.join(", ")}`);
-  if (profile.products.length > 0) parts.push(`Products/Services: ${profile.products.join(", ")}`);
+  if (profile.keywords && profile.keywords.length > 0) parts.push(`Keywords: ${profile.keywords.join(", ")}`);
+  if (profile.products && profile.products.length > 0) parts.push(`Products/Services: ${profile.products.join(", ")}`);
 
-  for (const [key, value] of Object.entries(profile.attributes)) {
+  for (const [key, value] of Object.entries(profile.attributes ?? {})) {
     if (value != null && value !== "") {
       if (Array.isArray(value)) {
         if (value.length > 0) parts.push(`${key}: ${value.join(", ")}`);
@@ -229,6 +229,14 @@ function buildProfileContext(profile: PoiProfile | null): string {
   return parts.length > 0 ? parts.join("\n") : "Limited profile data available.";
 }
 
+/**
+ * Builds the full LLM prompt for story generation using persona, profile, and locale.
+ *
+ * @param ctx - Full POI context with profile, tags, and contact info.
+ * @param confidence - Data richness confidence level.
+ * @param locale - Detected locale for language and cultural flavor.
+ * @returns Assembled prompt string for the LLM.
+ */
 function buildPrompt(
   ctx: StoryPoiContext,
   confidence: "high" | "medium" | "low",
@@ -264,9 +272,13 @@ CRITICAL RULES FOR SOUNDING LOCAL:
 - DO talk about the vibe, atmosphere, what makes it special to YOU
 - Sound like you're texting a friend, not writing a Tripadvisor review
 
+GROUNDING: Only mention specific dishes, products, or services that appear in the STRUCTURED PROFILE DATA above. Do not invent menu items, nearby businesses, or events.
+
 Write:
 1. TITLE: Catchy, local-feeling (3-5 words)
-2. TEASER: Hook that sounds personal (3-5 words)
+2. TEASER: Hook that sounds personal (3-5 words).
+   BANNED teasers: "You need to...", "Trust me...", "This place is...", "Seriously..."
+   Good examples: "Munich's best-kept secret", "Where locals actually go", "Skip the tourist traps"
 3. STORY: 60 words MAX. Talk like you've actually been there. Share the vibe, your honest take.
 4. LOCAL_TIP: ${persona.tipStyle}
 
@@ -319,7 +331,7 @@ export async function generateStory(
 ): Promise<GeneratedStory> {
   const confidence = assessConfidence(ctx);
   const locale = await detectLocale(ctx.poi.address, ctx.poi.latitude, ctx.poi.longitude);
-  const usedModel = model ?? (process.env.OLLAMA_MODEL || "gemma3:27b");
+  const usedModel = model ?? (process.env.OLLAMA_MODEL || "gemma3:4b-it-qat");
 
   console.log(`[storyGenerator] Generating for "${ctx.poi.name}" | confidence: ${confidence} | locale: ${locale.country}`);
 

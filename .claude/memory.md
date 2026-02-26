@@ -68,12 +68,19 @@ Replaced web-scraping enrichment pipeline (SearXNG + HTML scraping + LLM extract
 - When classifier returns category but no keywords, sends `q="*"` instead of original query
 - Kills Typesense's typo tolerance entirely
 
-### IMPORTANT: Story Quality
+### IMPORTANT: Story Generation
 
-**RC6: Story prompt issues**
+**RC6: assessConfidence crashes on POIs with partial profiles**
+- `src/lib/ai/storyGenerator.ts:135` — `profile.keywords.length` throws when `keywords` is undefined
+- Same for `products` (line 138) and `attributes` (line 142)
+- Profile exists but optional fields are missing — needs optional chaining
+- Causes story generation to skip affected POIs entirely
+
+**RC7: Story prompt issues**
 - `src/lib/ai/storyGenerator.ts:269` — repetitive teasers ("Seriously, you *need* to try this place" in 15/21 stories)
 - `src/lib/ai/localization.ts:225-248` — always passes same 5 German expressions, model uses ALL of them in every story
 - No effective anti-hallucination for specific claims (nearby businesses, dishes)
+- Investigate more for these cases from docker logs
 
 ### Search Queries That Fail (for reference)
 - 0 results: clothes, shoes, hotel, church, park, hairdresser, romantic dinner spot, outdoor activities, all typo queries

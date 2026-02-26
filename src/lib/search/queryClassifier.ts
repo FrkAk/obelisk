@@ -19,9 +19,9 @@ interface ClassificationResult {
   filters: SearchFilters;
 }
 
-const CATEGORY_THRESHOLD = 0.50;
-const CUISINE_THRESHOLD = 0.45;
-const FILTER_THRESHOLD = 0.50;
+const CATEGORY_THRESHOLD = 0.65;
+const CUISINE_THRESHOLD = 0.60;
+const FILTER_THRESHOLD = 0.60;
 
 const LABELS: Label[] = [
   // Categories

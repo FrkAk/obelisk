@@ -1,8 +1,8 @@
 import { isWithinRadius } from "../../src/lib/geo/distance";
 
-// osm-read uses `typeof self !== 'undefined'` to detect browser vs Node.js.
-// Bun defines `self` globally, so we must unset it before the module loads
-// to force the Node.js code path (fs-based file reading + native zlib).
+// Bun defines globalThis.self which causes osm-read to use the browser code
+// path (XMLHttpRequest) instead of Node.js (fs + zlib). Temporarily removing
+// self forces the correct detection.
 const savedSelf = globalThis.self;
 // @ts-expect-error — temporarily remove self for osm-read browser detection
 delete globalThis.self;
@@ -11,10 +11,6 @@ const osmRead = require("osm-read") as { parse: (opts: import("osm-read").ParseO
 globalThis.self = savedSelf;
 
 const osmParse = osmRead.parse;
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 interface OverpassElement {
   type: string;
@@ -43,12 +39,7 @@ interface OsmWay {
   nodeRefs: string[];
 }
 
-// ---------------------------------------------------------------------------
-// Tag filters matching current QUERY_GROUPS from seed-pois.ts
-// ---------------------------------------------------------------------------
-
 const TAG_FILTERS: TagFilter[] = [
-  // Food & Drink
   { key: "amenity", value: "restaurant" },
   { key: "amenity", value: "cafe" },
   { key: "amenity", value: "bar" },
@@ -57,7 +48,6 @@ const TAG_FILTERS: TagFilter[] = [
   { key: "amenity", value: "biergarten" },
   { key: "amenity", value: "ice_cream" },
   { key: "amenity", value: "food_court" },
-  // Culture & Entertainment
   { key: "amenity", value: "theatre" },
   { key: "amenity", value: "cinema" },
   { key: "tourism", value: "museum" },
@@ -65,7 +55,6 @@ const TAG_FILTERS: TagFilter[] = [
   { key: "amenity", value: "library" },
   { key: "amenity", value: "community_centre" },
   { key: "amenity", value: "nightclub" },
-  // Services
   { key: "amenity", value: "hospital" },
   { key: "amenity", value: "pharmacy" },
   { key: "amenity", value: "clinic" },
@@ -75,12 +64,10 @@ const TAG_FILTERS: TagFilter[] = [
   { key: "amenity", value: "post_office" },
   { key: "amenity", value: "police" },
   { key: "amenity", value: "fire_station" },
-  // Education
   { key: "amenity", value: "university" },
   { key: "amenity", value: "school" },
   { key: "amenity", value: "college" },
   { key: "amenity", value: "kindergarten" },
-  // Tourism
   { key: "tourism", value: "hotel" },
   { key: "tourism", value: "hostel" },
   { key: "tourism", value: "guest_house" },
@@ -88,9 +75,7 @@ const TAG_FILTERS: TagFilter[] = [
   { key: "tourism", value: "artwork" },
   { key: "tourism", value: "viewpoint" },
   { key: "tourism", value: "information" },
-  // Historic (any value)
   { key: "historic" },
-  // Leisure
   { key: "leisure", value: "park" },
   { key: "leisure", value: "garden" },
   { key: "leisure", value: "nature_reserve" },
@@ -100,19 +85,13 @@ const TAG_FILTERS: TagFilter[] = [
   { key: "leisure", value: "swimming_pool" },
   { key: "leisure", value: "pitch" },
   { key: "leisure", value: "playground" },
-  // Shopping (any value)
   { key: "shop" },
-  // Healthcare (any value)
   { key: "healthcare" },
-  // Religion
   { key: "amenity", value: "place_of_worship" },
-  // Transport
   { key: "amenity", value: "bus_station" },
   { key: "railway", value: "station" },
   { key: "railway", value: "tram_stop" },
-  // Natural (any value)
   { key: "natural" },
-  // Building (any value)
   { key: "building" },
 ];
 

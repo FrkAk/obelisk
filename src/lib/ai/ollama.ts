@@ -25,7 +25,6 @@ const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "gemma3:4b-it-qat";
 export const SEARCH_MODEL = process.env.OLLAMA_SEARCH_MODEL || "gemma3:4b-it-qat";
 export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "embeddinggemma:300m";
-export const TRANSLATE_MODEL = process.env.OLLAMA_TRANSLATE_MODEL || "translategemma:4b";
 
 /**
  * Generates text using Ollama.
@@ -166,93 +165,3 @@ export async function checkOllamaHealth(
   }
 }
 
-const LANG_CODE_TO_NAME: Record<string, string> = {
-  en: "English",
-  de: "German",
-  fr: "French",
-  es: "Spanish",
-  it: "Italian",
-  nl: "Dutch",
-  pt: "Portuguese",
-  tr: "Turkish",
-  el: "Greek",
-  ja: "Japanese",
-  pl: "Polish",
-  cs: "Czech",
-  hu: "Hungarian",
-  sv: "Swedish",
-  da: "Danish",
-  fi: "Finnish",
-  no: "Norwegian",
-  ru: "Russian",
-  ko: "Korean",
-  zh: "Chinese",
-  ar: "Arabic",
-};
-
-function buildTranslatePrompt(
-  text: string,
-  sourceLangName: string,
-  sourceCode: string,
-  targetLangName: string,
-  targetCode: string,
-): string {
-  return `You are a professional ${sourceLangName} (${sourceCode}) to ${targetLangName} (${targetCode}) translator.
-Your goal is to accurately convey the meaning and nuances of the original ${sourceLangName} text while adhering to ${targetLangName} grammar, vocabulary, and cultural sensitivities.
-Produce only the ${targetLangName} translation, without any additional explanations or commentary.
-Please translate the following ${sourceLangName} text into ${targetLangName}:
-
-
-${text}`;
-}
-
-/**
- * Translates text between languages using Ollama with translategemma.
- * For long texts (>2500 chars), splits at section delimiters and translates each part
- * sequentially to avoid overwhelming Ollama with concurrent requests.
- *
- * Args:
- *     text: The text to translate.
- *     sourceLang: Source language name (e.g., "German") — used for skip-if-English and logging.
- *     targetLangCode: Target language code (e.g., "en", "de"). Defaults to "en".
- *     model: Translation model to use.
- *
- * Returns:
- *     Translated text, or original text if source matches target or translation fails.
- */
-export async function translateText(
-  text: string,
-  sourceLang: string,
-  targetLangCode: string = "en",
-  model: string = TRANSLATE_MODEL,
-): Promise<string> {
-  const targetLangName = LANG_CODE_TO_NAME[targetLangCode] ?? "English";
-  if (sourceLang.toLowerCase() === targetLangName.toLowerCase()) return text;
-  if (!text.trim()) return text;
-
-  const sourceLangLower = sourceLang.toLowerCase();
-  const sourceCode = Object.entries(LANG_CODE_TO_NAME)
-    .find(([, name]) => name.toLowerCase() === sourceLangLower)?.[0] ?? "en";
-
-  try {
-    const sections = text.length > 2500
-      ? text.split("\n---").map((s) => s.trim()).filter(Boolean)
-      : [text];
-
-    const translated: string[] = [];
-    for (const section of sections) {
-      const prompt = buildTranslatePrompt(section, sourceLang, sourceCode, targetLangName, targetLangCode);
-      const result = await generateText(prompt, model, {
-        temperature: 0.1,
-        num_predict: 4096,
-      });
-      translated.push(result);
-    }
-
-    return translated.join("\n---\n");
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    log.warn(`Translation failed (${sourceLang} → ${targetLangName}): ${msg}`);
-    return text;
-  }
-}

@@ -1,22 +1,7 @@
-import { z } from "zod";
-
 // ---------------------------------------------------------------------------
 // Select types — plain interfaces, NO Drizzle imports.
 // These are the API contract for any client (React, React Native, Flutter).
 // ---------------------------------------------------------------------------
-
-export interface Region {
-  id: string;
-  name: string;
-  slug: string | null;
-  type: string;
-  parentId: string | null;
-  locale: string;
-  latitude: number;
-  longitude: number;
-  timezone: string | null;
-  createdAt: Date | null;
-}
 
 export interface Category {
   id: string;
@@ -69,38 +54,12 @@ export interface ContactInfo {
   openingHoursDisplay: string | null;
 }
 
-export interface AccessibilityInfo {
-  poiId: string;
-  wheelchair: boolean | null;
-  elevator: boolean | null;
-  accessibleRestroom: boolean | null;
-  strollerFriendly: boolean | null;
-  dogFriendly: boolean | null;
-  parkingAvailable: boolean | null;
-  notes: string | null;
-}
-
-export interface Photo {
-  id: string;
-  poiId: string;
-  url: string;
-  caption: string | null;
-  source: string | null;
-  isPrimary: boolean | null;
-  sortOrder: number | null;
-}
-
 export interface Tag {
   id: string;
   name: string;
   slug: string;
   group: string;
   displayOrder: number | null;
-}
-
-export interface PoiTag {
-  poiId: string;
-  tagId: string;
 }
 
 export interface Cuisine {
@@ -110,12 +69,6 @@ export interface Cuisine {
   region: string | null;
   parentSlug: string | null;
   icon: string | null;
-}
-
-export interface PoiCuisine {
-  poiId: string;
-  cuisineId: string;
-  isPrimary: boolean | null;
 }
 
 export interface Dish {
@@ -162,19 +115,6 @@ export interface PoiDish {
   updatedAt: Date | null;
 }
 
-export interface PoiTranslation {
-  id: string;
-  poiId: string;
-  locale: string;
-  name: string | null;
-  description: string | null;
-  reviewSummary: string | null;
-  searchVector: string | null;
-  source: string | null;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-}
-
 export interface Remark {
   id: string;
   poiId: string;
@@ -194,31 +134,6 @@ export interface Remark {
   createdAt: Date | null;
 }
 
-export interface Event {
-  id: string;
-  poiId: string;
-  title: string;
-  description: string | null;
-  eventType: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  recurring: string | null;
-  ticketPrice: string | null;
-  isFree: boolean | null;
-  source: string | null;
-  createdAt: Date | null;
-}
-
-export interface EnrichmentLogEntry {
-  id: string;
-  poiId: string;
-  source: string;
-  status: string;
-  fieldsUpdated: string[] | null;
-  metadata: Record<string, unknown> | null;
-  createdAt: Date | null;
-}
-
 export interface User {
   id: string;
   email: string;
@@ -232,17 +147,6 @@ export interface User {
   createdAt: Date | null;
   updatedAt: Date | null;
   deletedAt: Date | null;
-}
-
-export interface AuthProvider {
-  id: string;
-  userId: string;
-  provider: string;
-  providerId: string;
-  passwordHash: string | null;
-  refreshToken: string | null;
-  expiresAt: Date | null;
-  createdAt: Date | null;
 }
 
 export interface UserPreference {
@@ -273,20 +177,6 @@ export interface UserVisit {
   visitedAt: Date | null;
   durationSec: number | null;
   source: string | null;
-}
-
-export interface UserSession {
-  id: string;
-  userId: string;
-  startedAt: Date | null;
-  endedAt: Date | null;
-  durationSec: number | null;
-  deviceType: string | null;
-  appVersion: string | null;
-  startLatitude: number | null;
-  startLongitude: number | null;
-  endLatitude: number | null;
-  endLongitude: number | null;
 }
 
 export interface BusinessAccount {
@@ -322,18 +212,6 @@ export interface AdCampaign {
   createdAt: Date | null;
 }
 
-export interface AdImpression {
-  id: string;
-  campaignId: string;
-  userId: string | null;
-  eventType: string;
-  placement: string;
-  costCents: number | null;
-  latitude: number | null;
-  longitude: number | null;
-  createdAt: Date | null;
-}
-
 export interface UserEngagement {
   id: string;
   userId: string;
@@ -362,9 +240,151 @@ export interface Recommendation {
 // Composite types
 // ---------------------------------------------------------------------------
 
-export type PoiWithCategory = Poi & { category: Category };
+export type PoiWithCategory = Poi & { category?: Category };
 
-export type RemarkWithPoi = Remark & { poi: Poi & { category?: Category } };
+export interface SearchFilters {
+  outdoor?: boolean;
+  budget?: number;
+  partySize?: number;
+  openNow?: boolean;
+  wifi?: boolean;
+  quiet?: boolean;
+  wheelchair?: boolean;
+  dogFriendly?: boolean;
+  freeEntry?: boolean;
+  parking?: boolean;
+}
+
+export interface SearchLocation {
+  latitude: number;
+  longitude: number;
+}
+
+export interface ParsedIntent {
+  category?: CategorySlug;
+  keywords: string[];
+  cuisineTypes?: string[];
+  filters: SearchFilters;
+  isDiscovery?: boolean;
+  source?: "fast-path" | "classifier" | "default";
+}
+
+export interface SearchResult {
+  id: string;
+  osmId?: number;
+  name: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  distance?: number;
+  score: number;
+  address?: string;
+  description?: string;
+  cuisine?: string;
+  amenityType?: string;
+  hasStory: boolean;
+  hasOutdoorSeating?: boolean;
+  hasWifi?: boolean;
+  remark?: Remark & { poi: Poi & { category?: Category } };
+  source: "typesense" | "semantic";
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  intent: ParsedIntent;
+  timing: {
+    parseMs: number;
+    typesenseMs: number;
+    semanticMs: number;
+    totalMs: number;
+  };
+}
+
+export interface SearchRequest {
+  query: string;
+  location: SearchLocation;
+  radius?: number;
+  limit?: number;
+}
+
+export interface ViewportBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+export interface ViewportContext {
+  center: SearchLocation;
+  bounds: ViewportBounds;
+  zoom: number;
+}
+
+export interface NominatimResult {
+  place_id: number;
+  licence: string;
+  osm_type: string;
+  osm_id: number;
+  lat: string;
+  lon: string;
+  class: string;
+  type: string;
+  place_rank: number;
+  importance: number;
+  addresstype: string;
+  name: string;
+  display_name: string;
+  address?: {
+    amenity?: string;
+    road?: string;
+    suburb?: string;
+    city?: string;
+    postcode?: string;
+    country?: string;
+  };
+  boundingbox: string[];
+}
+
+export interface OverpassElement {
+  type: "node" | "way" | "relation";
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
+}
+
+export interface ExternalPOI {
+  id: string;
+  osmId: number;
+  osmType: string;
+  name: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  distance?: number;
+  address?: string;
+  openingHours?: string;
+  phone?: string;
+  website?: string;
+  cuisine?: string;
+  hasWifi?: boolean;
+  hasOutdoorSeating?: boolean;
+  imageUrl?: string;
+  wikipediaUrl?: string;
+  extraTags?: Record<string, string>;
+  source: "nominatim" | "overpass";
+}
+
+export interface ExternalResult {
+  type: "external";
+  poi: ExternalPOI;
+  nearbyRemark?: Remark & { poi: Poi & { category?: Category } };
+  distance?: number;
+  score: number;
+}
+
+export type SearchStage = "idle" | "parsing" | "searching";
 
 // ---------------------------------------------------------------------------
 // Category slug union
@@ -386,20 +406,6 @@ export type CategorySlug =
   | "transport"
   | "education"
   | "services";
-
-// ---------------------------------------------------------------------------
-// Zod schemas
-// ---------------------------------------------------------------------------
-
-export const priceRangeSchema = z
-  .enum(["$", "$$", "$$$", "$$$$"])
-  .nullable()
-  .optional();
-
-export const explorationStyleSchema = z
-  .enum(["adventurous", "comfort", "balanced"])
-  .nullable()
-  .optional();
 
 // ---------------------------------------------------------------------------
 // Geo types

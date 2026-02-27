@@ -7,7 +7,7 @@ import { getRandomRemark } from "@/lib/db/queries/search";
 import { rankResults } from "@/lib/search/ranking";
 import { haversineDistance } from "@/lib/geo/distance";
 import { createLogger } from "@/lib/logger";
-import type { SearchResult, SearchResponse } from "@/lib/search/types";
+import type { SearchResult, SearchResponse } from "@/types/api";
 
 const log = createLogger("search");
 

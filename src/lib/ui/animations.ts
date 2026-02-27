@@ -53,44 +53,6 @@ export const springTransitions = {
   } as Transition,
 } as const;
 
-export const buttonVariants: Variants = {
-  idle: { scale: 1 },
-  pressed: { scale: 0.97 },
-  hover: { scale: 1.02 },
-};
-
-export const pinVariants: Variants = {
-  animate: {
-    scale: 1,
-    opacity: 1,
-  },
-  selected: {
-    scale: 1.15,
-    transition: springTransitions.bouncy,
-  },
-  hover: {
-    scale: 1.1,
-    transition: springTransitions.snappy,
-  },
-};
-
-export const sheetVariants: Variants = {
-  hidden: {
-    y: "100%",
-    opacity: 0.5,
-  },
-  visible: {
-    y: 0,
-    opacity: 1,
-    transition: springTransitions.smooth,
-  },
-  exit: {
-    y: "100%",
-    opacity: 0.5,
-    transition: { ...springTransitions.smooth, duration: 0.2 },
-  },
-};
-
 export const overlayVariants: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { duration: 0.2 } },
@@ -131,51 +93,6 @@ export const cardVariants: Variants = {
     scale: 1.01,
     boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12)",
     transition: springTransitions.snappy,
-  },
-};
-
-export const fadeInUp: Variants = {
-  initial: {
-    opacity: 0,
-    y: 20,
-  },
-  animate: {
-    opacity: 1,
-    y: 0,
-    transition: springTransitions.smooth,
-  },
-  exit: {
-    opacity: 0,
-    y: 20,
-    transition: { duration: 0.15 },
-  },
-};
-
-export const discoverButtonVariants: Variants = {
-  idle: {
-    scale: 1,
-  },
-  pressed: {
-    scale: 0.95,
-    transition: springTransitions.quick,
-  },
-  hover: {
-    scale: 1.05,
-    transition: springTransitions.snappy,
-  },
-};
-
-export const contentFadeVariants: Variants = {
-  hidden: {
-    opacity: 0,
-  },
-  visible: {
-    opacity: 1,
-    transition: { duration: 0.3 },
-  },
-  exit: {
-    opacity: 0,
-    transition: { duration: 0.15 },
   },
 };
 

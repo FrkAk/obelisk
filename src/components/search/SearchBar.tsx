@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import { springTransitions } from "@/lib/ui/animations";
 import { GlassButton } from "@/components/ui/GlassButton";
-import type { SearchStage } from "@/hooks/useSearch";
+import type { SearchStage } from "@/types/api";
 
 const STAGE_MESSAGES: Record<SearchStage, string> = {
   idle: "",

@@ -1,5 +1,3 @@
-"use server";
-
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { pois, categories } from "@/lib/db/schema";
@@ -10,6 +8,7 @@ import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { loadTags, loadContactInfo } from "@/lib/db/queries/pois";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
+import { getCategorySlug } from "@/lib/geo/categories";
 import type { CategorySlug, PoiProfile } from "@/types";
 import { getCurrentRemarkForPoi, insertRemark } from "@/lib/db/queries/remarks";
 
@@ -40,76 +39,6 @@ const bodySchema = z.object({
   poi: externalPoiSchema,
 });
 
-const CATEGORY_MAPPING: Record<string, CategorySlug> = {
-  food: "food",
-  history: "history",
-  art: "art",
-  nature: "nature",
-  architecture: "architecture",
-  hidden: "hidden",
-  views: "views",
-  culture: "culture",
-  shopping: "shopping",
-  nightlife: "nightlife",
-  sports: "sports",
-  health: "health",
-  transport: "transport",
-  education: "education",
-  services: "services",
-  cafe: "food",
-  restaurant: "food",
-  fast_food: "food",
-  biergarten: "food",
-  bar: "nightlife",
-  pub: "nightlife",
-  nightclub: "nightlife",
-  museum: "art",
-  gallery: "art",
-  park: "nature",
-  garden: "nature",
-  zoo: "nature",
-  church: "architecture",
-  cathedral: "architecture",
-  place_of_worship: "architecture",
-  mosque: "architecture",
-  synagogue: "architecture",
-  temple: "architecture",
-  castle: "history",
-  monument: "history",
-  memorial: "history",
-  ruins: "history",
-  theatre: "culture",
-  cinema: "culture",
-  library: "education",
-  university: "education",
-  school: "education",
-  college: "education",
-  viewpoint: "views",
-  attraction: "hidden",
-  fountain: "hidden",
-  food_and_drink: "food",
-  religion: "architecture",
-  park_like: "nature",
-  arts_and_entertainment: "culture",
-  historic: "history",
-  hospital: "health",
-  pharmacy: "health",
-  clinic: "health",
-  doctors: "health",
-  police: "services",
-  fire_station: "services",
-  bank: "services",
-  post_office: "services",
-  shop: "shopping",
-  clothes: "shopping",
-  supermarket: "shopping",
-  stadium: "sports",
-  sports_centre: "sports",
-  swimming_pool: "sports",
-  bus_station: "transport",
-  station: "transport",
-  parking: "transport",
-};
 
 /**
  * Generates a story for a specific external POI.
@@ -121,8 +50,6 @@ const CATEGORY_MAPPING: Record<string, CategorySlug> = {
  *     Generated remark with POI data, or cached remark if exists.
  */
 export async function POST(request: NextRequest) {
-  log.info("=== API CALLED ===");
-
   try {
     const body = await request.json();
     const parseResult = bodySchema.safeParse(body);
@@ -171,14 +98,8 @@ export async function POST(request: NextRequest) {
     return await generateAndSaveRemark(newPoi);
   } catch (error) {
     log.error("Error:", error);
-    const errorMessage =
-      error instanceof Error
-        ? error.message
-        : typeof error === "string"
-          ? error
-          : JSON.stringify(error) || "Unknown error";
     return NextResponse.json(
-      { error: "Failed to generate story", details: errorMessage },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
@@ -216,8 +137,7 @@ async function findPoiByOsmId(osmId: number) {
 async function createPoiFromExternal(
   externalPoi: z.infer<typeof externalPoiSchema>
 ) {
-  const categorySlug =
-    CATEGORY_MAPPING[externalPoi.category.toLowerCase()] || "hidden";
+  const categorySlug = getCategorySlug(externalPoi.category);
 
   const allCategories = await db.select().from(categories);
   const category = allCategories.find((c) => c.slug === categorySlug);

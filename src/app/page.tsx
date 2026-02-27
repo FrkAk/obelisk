@@ -11,16 +11,22 @@ import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
 import { useSearch } from "@/hooks/useSearch";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { Remark, Poi, Category } from "@/types/api";
-import type { SearchResult, ExternalPOI, ViewportBounds } from "@/lib/search/types";
+import type { Remark, PoiWithCategory, SearchResult, ExternalPOI, ViewportBounds } from "@/types/api";
 import { haversineDistance } from "@/lib/geo/distance";
 import { springTransitions } from "@/lib/ui/animations";
 
 type SheetMode = "story" | "search" | "poi" | null;
 
-type PoiWithCat = Poi & { category?: Category };
-
-function remarkPoiToExternalPOI(poi: PoiWithCat): ExternalPOI {
+/**
+ * Converts a PoiWithCategory from a remark query into an ExternalPOI shape.
+ *
+ * Args:
+ *     poi: POI with optional category data.
+ *
+ * Returns:
+ *     ExternalPOI suitable for the POI card component.
+ */
+function remarkPoiToExternalPOI(poi: PoiWithCategory): ExternalPOI {
   const tags = (poi.osmTags ?? {}) as Record<string, string>;
   return {
     id: poi.id,
@@ -48,7 +54,7 @@ interface ViewportCenter {
 }
 
 export default function Home() {
-  const [selectedRemark, setSelectedRemark] = useState<(Remark & { poi: PoiWithCat }) | null>(null);
+  const [selectedRemark, setSelectedRemark] = useState<(Remark & { poi: PoiWithCategory }) | null>(null);
   const [selectedPoi, setSelectedPoi] = useState<ExternalPOI | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
@@ -138,7 +144,7 @@ export default function Home() {
     };
   }, [selectedRemark]);
 
-  const handlePinClick = useCallback((remark: Remark & { poi: PoiWithCat }) => {
+  const handlePinClick = useCallback((remark: Remark & { poi: PoiWithCategory }) => {
     setSelectedRemark(remark);
     setSheetMode("story");
     setSheetOpen(true);

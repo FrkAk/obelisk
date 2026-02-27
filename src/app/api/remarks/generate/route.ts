@@ -1,9 +1,8 @@
-"use server";
-
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { pois, remarks, categories } from "@/lib/db/schema";
 import { eq, isNull, and, gte, lte } from "drizzle-orm";
+import { geoBounds } from "@/lib/geo/distance";
 import { generateStory } from "@/lib/ai/storyGenerator";
 import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
@@ -54,13 +53,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const latDelta = radius / 111320;
-    const lonDelta = radius / (111320 * Math.cos(lat * (Math.PI / 180)));
-
-    const minLat = lat - latDelta;
-    const maxLat = lat + latDelta;
-    const minLon = lon - lonDelta;
-    const maxLon = lon + lonDelta;
+    const { minLat, maxLat, minLon, maxLon } = geoBounds(lat, lon, radius);
 
     const poisWithoutRemarks = await db
       .select({
@@ -195,10 +188,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     log.error("Error generating remarks:", error);
     return NextResponse.json(
-      {
-        error: "Failed to generate stories",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

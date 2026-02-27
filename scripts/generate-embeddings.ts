@@ -75,6 +75,11 @@ async function fetchTargetPois(stale: boolean) {
     );
 }
 
+/**
+ * Generates vector embeddings for POIs missing them (or stale ones).
+ * Processes POIs in batches, building embedding text from profile + related
+ * data, then calling Ollama to produce 768-dim vectors stored in pgvector.
+ */
 async function generateEmbeddings() {
   const modeLabel = STALE_MODE ? "stale + missing" : "missing only";
   log.info(`Starting embedding generation (mode: ${modeLabel})...`);

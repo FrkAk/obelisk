@@ -113,6 +113,11 @@ async function loadContactMap(): Promise<Map<string, { openingHoursDisplay: stri
   return new Map(rows.map((r) => [r.poiId, r]));
 }
 
+/**
+ * Syncs all POIs from PostgreSQL to Typesense search index.
+ * Recreates the collection, loads related data (tags, cuisines,
+ * accessibility, contact), builds documents, and upserts in batches.
+ */
 async function syncTypesense() {
   log.info("Starting sync...");
 

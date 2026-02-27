@@ -17,6 +17,7 @@ export async function processWithConcurrency<T, R>(
   const results: R[] = new Array(items.length);
   let index = 0;
 
+  /** Pulls items from the shared index and processes them sequentially. */
   async function worker() {
     while (index < items.length) {
       const i = index++;

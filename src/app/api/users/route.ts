@@ -10,6 +10,15 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("users");
 
+const querySchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    email: z.string().email().optional(),
+  })
+  .refine((data) => data.id || data.email, {
+    message: "Provide either 'id' or 'email' query parameter",
+  });
+
 const createUserSchema = z.object({
   email: z.string().email(),
   displayName: z.string().min(1).max(100),
@@ -29,15 +38,19 @@ const updateUserSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const id = searchParams.get("id");
-    const email = searchParams.get("email");
+    const parseResult = querySchema.safeParse({
+      id: searchParams.get("id") ?? undefined,
+      email: searchParams.get("email") ?? undefined,
+    });
 
-    if (!id && !email) {
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: "Provide either 'id' or 'email' query parameter" },
+        { error: "Invalid parameters", details: parseResult.error.flatten() },
         { status: 400 },
       );
     }
+
+    const { id, email } = parseResult.data;
 
     const user = id ? await getUserById(id) : await getUserByEmail(email!);
 

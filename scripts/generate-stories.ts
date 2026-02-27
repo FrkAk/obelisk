@@ -13,6 +13,11 @@ const STORY_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
 const BATCH_LIMIT = parseInt(process.env.STORY_BATCH_LIMIT || "20", 10);
 const CONCURRENCY = parseInt(process.env.STORY_CONCURRENCY || "3", 10);
 
+/**
+ * Generates AI stories for POIs that lack current remarks.
+ * Fetches POIs without stories, builds context from profile and tags,
+ * generates stories via Ollama, and inserts them as remarks.
+ */
 async function main() {
   console.log("[stories] Checking Ollama availability...");
   const isHealthy = await checkOllamaHealth(STORY_MODEL);

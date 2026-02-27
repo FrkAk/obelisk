@@ -1,22 +1,15 @@
-import { eq, desc, sql, and, gte } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { db } from "../client";
 import {
   businessAccounts,
   adCampaigns,
   adImpressions,
-  recommendations,
-  pois,
-  categories,
 } from "../schema";
 import type {
   BusinessAccount,
   NewBusinessAccount,
   AdCampaign,
   NewAdCampaign,
-  AdImpression,
-  NewAdImpression,
-  Recommendation,
-  NewRecommendation,
 } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -153,39 +146,6 @@ export async function getCampaignsByBusiness(
 // ---------------------------------------------------------------------------
 
 /**
- * Record an ad impression/click event and increment the campaign spent amount.
- *
- * Args:
- *     campaignId: UUID of the campaign.
- *     data: Impression event fields.
- *
- * Returns:
- *     The newly created impression row.
- */
-export async function recordImpression(
-  campaignId: string,
-  data: Omit<NewAdImpression, "id" | "campaignId" | "createdAt">,
-): Promise<AdImpression> {
-  const costCents = data.costCents ?? 0;
-
-  const rows = await db
-    .insert(adImpressions)
-    .values({ ...data, campaignId })
-    .returning();
-
-  if (costCents > 0) {
-    await db
-      .update(adCampaigns)
-      .set({
-        spentAmount: sql`${adCampaigns.spentAmount} + ${costCents}`,
-      })
-      .where(eq(adCampaigns.id, campaignId));
-  }
-
-  return rows[0];
-}
-
-/**
  * Get aggregated stats for a campaign (impressions, clicks, total spend).
  *
  * Args:
@@ -208,86 +168,3 @@ export async function getCampaignStats(campaignId: string) {
   return rows;
 }
 
-// ---------------------------------------------------------------------------
-// Recommendations
-// ---------------------------------------------------------------------------
-
-/**
- * Create a recommendation entry for a user.
- *
- * Args:
- *     data: Recommendation payload.
- *
- * Returns:
- *     The newly created recommendation row.
- */
-export async function createRecommendation(
-  data: Omit<NewRecommendation, "id" | "createdAt" | "served" | "servedAt">,
-): Promise<Recommendation> {
-  const rows = await db
-    .insert(recommendations)
-    .values(data)
-    .onConflictDoUpdate({
-      target: [recommendations.userId, recommendations.poiId],
-      set: {
-        score: data.score,
-        reason: data.reason,
-        campaignId: data.campaignId,
-        expiresAt: data.expiresAt,
-        served: false,
-        servedAt: null,
-      },
-    })
-    .returning();
-  return rows[0];
-}
-
-/**
- * Get active (non-expired, unserved) recommendations for a user, highest score first.
- * Includes sponsored recommendations (those with a campaign_id).
- *
- * Args:
- *     userId: UUID of the user.
- *     limit: Max rows to return (default 10).
- *
- * Returns:
- *     Array of recommendation rows with POI name and category info.
- */
-export async function getRecommendationsForUser(
-  userId: string,
-  limit = 10,
-) {
-  const now = new Date();
-
-  return db
-    .select({
-      id: recommendations.id,
-      userId: recommendations.userId,
-      poiId: recommendations.poiId,
-      score: recommendations.score,
-      reason: recommendations.reason,
-      campaignId: recommendations.campaignId,
-      expiresAt: recommendations.expiresAt,
-      served: recommendations.served,
-      servedAt: recommendations.servedAt,
-      createdAt: recommendations.createdAt,
-      poiName: pois.name,
-      poiLatitude: pois.latitude,
-      poiLongitude: pois.longitude,
-      categoryName: categories.name,
-      categorySlug: categories.slug,
-      categoryColor: categories.color,
-    })
-    .from(recommendations)
-    .innerJoin(pois, eq(recommendations.poiId, pois.id))
-    .leftJoin(categories, eq(pois.categoryId, categories.id))
-    .where(
-      and(
-        eq(recommendations.userId, userId),
-        eq(recommendations.served, false),
-        gte(recommendations.expiresAt, now),
-      ),
-    )
-    .orderBy(desc(recommendations.score))
-    .limit(limit);
-}

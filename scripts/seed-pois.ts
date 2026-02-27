@@ -16,9 +16,6 @@ import type { CategorySlug } from "../src/types";
 import type { PoiProfile } from "../src/types/api";
 import { readPoisFromPbf } from "./lib/pbf-reader";
 import { processWithConcurrency } from "./lib/concurrency";
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Builds a full Wikipedia URL from an OSM wikipedia tag value.
@@ -35,10 +32,6 @@ function buildWikipediaUrl(osmTag: string): string | undefined {
   const [, lang, title] = match;
   return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
 }
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const MUNICH_CENTER = { lat: 48.137154, lon: 11.576124 };
 const SEED_RADIUS = parseInt(process.env.SEED_RADIUS || "100", 10);
@@ -66,10 +59,6 @@ const CATEGORY_DATA: Array<{
   { name: "Services", slug: "services", icon: "briefcase", color: "#A1887F" },
 ];
 
-// ---------------------------------------------------------------------------
-// PBF element type (matches shape produced by pbf-reader)
-// ---------------------------------------------------------------------------
-
 interface OverpassElement {
   type: string;
   id: number;
@@ -81,10 +70,15 @@ interface OverpassElement {
 
 const PBF_PATH = process.env.PBF_FILE_PATH || "data/Muenchen.osm.pbf";
 
-// ---------------------------------------------------------------------------
-// Category classification
-// ---------------------------------------------------------------------------
-
+/**
+ * Determines the category slug for a POI based on its OSM tags.
+ *
+ * Args:
+ *     osmTags: Raw OSM tags from the element.
+ *
+ * Returns:
+ *     CategorySlug matching the most appropriate category.
+ */
 function determineCategorySlug(osmTags: Record<string, string>): CategorySlug {
   if (osmTags.historic) return "history";
   if (osmTags.tourism === "museum" || osmTags.tourism === "gallery") return "art";
@@ -132,16 +126,30 @@ function determineCategorySlug(osmTags: Record<string, string>): CategorySlug {
   return "hidden";
 }
 
-// ---------------------------------------------------------------------------
-// OSM tag parsers for related tables
-// ---------------------------------------------------------------------------
-
+/**
+ * Splits a semicolon-delimited OSM tag value into trimmed parts.
+ *
+ * Args:
+ *     value: Semicolon-separated string or undefined.
+ *
+ * Returns:
+ *     Array of non-empty trimmed strings, or null if empty/undefined.
+ */
 function splitSemicolon(value: string | undefined): string[] | null {
   if (!value) return null;
   const parts = value.split(";").map((s) => s.trim()).filter(Boolean);
   return parts.length > 0 ? parts : null;
 }
 
+/**
+ * Extracts contact information from OSM tags.
+ *
+ * Args:
+ *     osmTags: Raw OSM tags from the element.
+ *
+ * Returns:
+ *     Object with phone, email, website, social media, and opening hours fields.
+ */
 function parseContactInfo(osmTags: Record<string, string>) {
   return {
     phone: splitSemicolon(osmTags.phone ?? osmTags["contact:phone"]),
@@ -154,6 +162,15 @@ function parseContactInfo(osmTags: Record<string, string>) {
   };
 }
 
+/**
+ * Checks if any contact fields are populated.
+ *
+ * Args:
+ *     data: Parsed contact info object.
+ *
+ * Returns:
+ *     True if at least one field is non-null.
+ */
 function hasContactData(data: ReturnType<typeof parseContactInfo>): boolean {
   return Object.values(data).some((v) => v !== null);
 }
@@ -168,6 +185,15 @@ interface AccessibilityData {
   notes: string | null;
 }
 
+/**
+ * Extracts accessibility information from OSM tags.
+ *
+ * Args:
+ *     osmTags: Raw OSM tags from the element.
+ *
+ * Returns:
+ *     AccessibilityData with wheelchair, elevator, dog-friendly, and parking fields.
+ */
 function parseAccessibility(osmTags: Record<string, string>): AccessibilityData {
   const wheelchairRaw = osmTags.wheelchair;
   let wheelchair: boolean | null = null;
@@ -193,6 +219,15 @@ function parseAccessibility(osmTags: Record<string, string>): AccessibilityData 
   };
 }
 
+/**
+ * Checks if any accessibility fields are populated.
+ *
+ * Args:
+ *     data: Parsed accessibility data object.
+ *
+ * Returns:
+ *     True if at least one field is non-null.
+ */
 function hasAccessibilityData(data: AccessibilityData): boolean {
   return (
     data.wheelchair !== null ||
@@ -203,10 +238,6 @@ function hasAccessibilityData(data: AccessibilityData): boolean {
     data.notes !== null
   );
 }
-
-// ---------------------------------------------------------------------------
-// Profile builder — extracts OSM data into a unified PoiProfile JSONB
-// ---------------------------------------------------------------------------
 
 /**
  * Builds a PoiProfile from OSM tags for the given category.
@@ -307,16 +338,30 @@ function buildProfile(osmTags: Record<string, string>, categorySlug: CategorySlu
   };
 }
 
-// ---------------------------------------------------------------------------
-// Helper parsers
-// ---------------------------------------------------------------------------
-
+/**
+ * Extracts a year number from a date string.
+ *
+ * Args:
+ *     dateStr: Date string, potentially with leading negative sign.
+ *
+ * Returns:
+ *     Parsed year as integer, or null if unparseable.
+ */
 function parseYear(dateStr: string): number | null {
   const match = dateStr.match(/^(-?\d{1,4})/);
   if (match) return parseInt(match[1]);
   return null;
 }
 
+/**
+ * Maps an OSM heritage tag value to a standardized level string.
+ *
+ * Args:
+ *     heritage: Raw heritage tag value.
+ *
+ * Returns:
+ *     Heritage level: "unesco", "national", "regional", or "local".
+ */
 function parseHeritageLevel(heritage: string): string | null {
   if (heritage.includes("1") || heritage.toLowerCase().includes("world")) return "unesco";
   if (heritage.includes("2") || heritage.toLowerCase().includes("national")) return "national";
@@ -325,12 +370,30 @@ function parseHeritageLevel(heritage: string): string | null {
   return "local";
 }
 
+/**
+ * Maps a SAC hiking scale value to a simplified difficulty string.
+ *
+ * Args:
+ *     sacScale: SAC scale value (e.g. "hiking", "T1", "mountain_hiking").
+ *
+ * Returns:
+ *     Difficulty level: "easy", "moderate", or "difficult".
+ */
 function mapTrailDifficulty(sacScale: string): string | null {
   if (sacScale === "hiking" || sacScale === "T1") return "easy";
   if (sacScale === "mountain_hiking" || sacScale === "T2") return "moderate";
   return "difficult";
 }
 
+/**
+ * Parses an OSM cuisine tag into normalized slug values.
+ *
+ * Args:
+ *     cuisineValue: Semicolon-separated cuisine string from OSM.
+ *
+ * Returns:
+ *     Array of lowercase, underscore-separated cuisine slugs.
+ */
 function parseCuisineTag(cuisineValue: string): string[] {
   return cuisineValue
     .split(";")
@@ -338,10 +401,16 @@ function parseCuisineTag(cuisineValue: string): string[] {
     .filter(Boolean);
 }
 
-// ---------------------------------------------------------------------------
-// OSM tags -> tag slugs mapping
-// ---------------------------------------------------------------------------
-
+/**
+ * Extracts tag slugs from OSM tags for linking to the tags table.
+ *
+ * Args:
+ *     osmTags: Raw OSM tags from the element.
+ *     categorySlug: Determined category for this POI.
+ *
+ * Returns:
+ *     Array of tag slug strings matching known tags.
+ */
 function extractTagSlugs(osmTags: Record<string, string>, categorySlug: CategorySlug): string[] {
   const slugs: string[] = [];
 
@@ -386,10 +455,6 @@ function extractTagSlugs(osmTags: Record<string, string>, categorySlug: Category
   return slugs;
 }
 
-// ---------------------------------------------------------------------------
-// Concurrency utilities
-// ---------------------------------------------------------------------------
-
 interface ProcessResult {
   pois: number;
   contacts: number;
@@ -399,10 +464,25 @@ interface ProcessResult {
   translations: number;
 }
 
+/**
+ * Creates an empty ProcessResult with all counters at zero.
+ *
+ * Returns:
+ *     ProcessResult with zeroed counters.
+ */
 function emptyResult(): ProcessResult {
   return { pois: 0, contacts: 0, accessibility: 0, cuisines: 0, tags: 0, translations: 0 };
 }
 
+/**
+ * Sums an array of ProcessResult objects into a single total.
+ *
+ * Args:
+ *     results: Array of ProcessResult objects.
+ *
+ * Returns:
+ *     Aggregated ProcessResult with summed counters.
+ */
 function sumResults(results: ProcessResult[]): ProcessResult {
   const totals = emptyResult();
   for (const r of results) {
@@ -416,17 +496,13 @@ function sumResults(results: ProcessResult[]): ProcessResult {
   return totals;
 }
 
-// processWithConcurrency imported from ./lib/concurrency
-
-// ---------------------------------------------------------------------------
-// Main seeding logic
-// ---------------------------------------------------------------------------
-
+/**
+ * Seeds the database with POIs from a local OSM PBF extract.
+ * Processes elements in batches with concurrent database writes.
+ */
 async function main() {
   console.log(`Seeding Obelisk POIs (radius: ${SEED_RADIUS}m)`);
   console.log("");
-
-  // --- Load reference data ---
 
   console.log("Seeding categories...");
   await db.insert(categories).values(CATEGORY_DATA).onConflictDoNothing();
@@ -464,8 +540,6 @@ async function main() {
     console.warn("Warning: No tags found. Run seed-tags.ts first. Tag linking will be skipped.");
   }
 
-  // --- Fetch POIs ---
-
   console.log("");
   console.log("Reading Munich POIs from PBF extract...");
   let elements = await readPoisFromPbf(PBF_PATH, MUNICH_CENTER, SEED_RADIUS);
@@ -476,8 +550,6 @@ async function main() {
     elements = getFallbackElements();
   }
 
-  // --- Process and insert POIs ---
-
   console.log("");
   console.log("Processing POIs...");
 
@@ -485,6 +557,15 @@ async function main() {
   const BATCH_SIZE = 50;
   const CONCURRENCY = 20;
 
+  /**
+   * Processes a single OSM element: upserts the POI and inserts related data.
+   *
+   * Args:
+   *     el: OverpassElement from the PBF reader.
+   *
+   * Returns:
+   *     ProcessResult with counts of inserted rows.
+   */
   async function processElement(el: OverpassElement): Promise<ProcessResult> {
     const result = emptyResult();
 
@@ -608,11 +689,17 @@ async function main() {
   process.exit(0);
 }
 
-
-// ---------------------------------------------------------------------------
-// Batch insert helpers (Layer 3: multi-row inserts)
-// ---------------------------------------------------------------------------
-
+/**
+ * Inserts cuisine links for a POI based on its OSM cuisine tag.
+ *
+ * Args:
+ *     poiId: Database ID of the POI.
+ *     osmTags: Raw OSM tags from the element.
+ *     cuisineSlugMap: Map of cuisine slug to database ID.
+ *
+ * Returns:
+ *     Number of cuisine links inserted.
+ */
 async function insertCuisinesForPoi(
   poiId: string,
   osmTags: Record<string, string>,
@@ -633,6 +720,18 @@ async function insertCuisinesForPoi(
   return cuisineValues.length;
 }
 
+/**
+ * Inserts tag links for a POI based on its OSM tags and category.
+ *
+ * Args:
+ *     poiId: Database ID of the POI.
+ *     osmTags: Raw OSM tags from the element.
+ *     categorySlug: Determined category for this POI.
+ *     tagSlugMap: Map of tag slug to database ID.
+ *
+ * Returns:
+ *     Number of tag links inserted.
+ */
 async function insertTagsForPoi(
   poiId: string,
   osmTags: Record<string, string>,
@@ -654,6 +753,16 @@ async function insertTagsForPoi(
   return tagValues.length;
 }
 
+/**
+ * Inserts localized name translations for a POI from OSM name:lang tags.
+ *
+ * Args:
+ *     poiId: Database ID of the POI.
+ *     osmTags: Raw OSM tags from the element.
+ *
+ * Returns:
+ *     Number of translations inserted.
+ */
 async function insertTranslationsForPoi(
   poiId: string,
   osmTags: Record<string, string>,
@@ -671,10 +780,12 @@ async function insertTranslationsForPoi(
   return translationValues.length;
 }
 
-// ---------------------------------------------------------------------------
-// Fallback data (when Overpass is unavailable)
-// ---------------------------------------------------------------------------
-
+/**
+ * Returns hardcoded Munich landmark POIs as fallback data.
+ *
+ * Returns:
+ *     Array of OverpassElement objects for well-known Munich landmarks.
+ */
 function getFallbackElements(): OverpassElement[] {
   return [
     { type: "node", id: 1, lat: 48.1374, lon: 11.5755, tags: { name: "Marienplatz", historic: "square", "name:en": "Mary's Square", "name:de": "Marienplatz" } },

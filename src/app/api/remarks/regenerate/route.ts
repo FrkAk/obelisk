@@ -1,5 +1,3 @@
-"use server";
-
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { pois } from "@/lib/db/schema";
@@ -30,8 +28,6 @@ const bodySchema = z.object({
  *     The newly generated remark with version bumped.
  */
 export async function POST(request: NextRequest) {
-  log.info("=== API CALLED ===");
-
   try {
     const body = await request.json();
     const parseResult = bodySchema.safeParse(body);
@@ -150,10 +146,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     log.error("Error regenerating story:", error);
     return NextResponse.json(
-      {
-        error: "Failed to regenerate story",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

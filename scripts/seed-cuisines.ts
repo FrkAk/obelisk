@@ -10,7 +10,6 @@ interface CuisineEntry {
 }
 
 const CUISINE_DATA: CuisineEntry[] = [
-  // ---- European (top-level) ----
   { slug: "german", name: "German", region: "european", icon: "🇩🇪" },
   { slug: "bavarian", name: "Bavarian", region: "european", parentSlug: "german", icon: "🥨" },
   { slug: "franconian", name: "Franconian", region: "european", parentSlug: "german" },
@@ -46,7 +45,6 @@ const CUISINE_DATA: CuisineEntry[] = [
   { slug: "georgian", name: "Georgian", region: "european" },
   { slug: "mediterranean", name: "Mediterranean", region: "european" },
 
-  // ---- East Asian ----
   { slug: "japanese", name: "Japanese", region: "east_asian", icon: "🇯🇵" },
   { slug: "sushi", name: "Sushi", region: "east_asian", parentSlug: "japanese", icon: "🍣" },
   { slug: "ramen", name: "Ramen", region: "east_asian", parentSlug: "japanese", icon: "🍜" },
@@ -62,7 +60,6 @@ const CUISINE_DATA: CuisineEntry[] = [
   { slug: "taiwanese", name: "Taiwanese", region: "east_asian" },
   { slug: "mongolian", name: "Mongolian", region: "east_asian" },
 
-  // ---- Southeast Asian ----
   { slug: "thai", name: "Thai", region: "southeast_asian", icon: "🇹🇭" },
   { slug: "vietnamese", name: "Vietnamese", region: "southeast_asian", icon: "🇻🇳" },
   { slug: "pho", name: "Pho", region: "southeast_asian", parentSlug: "vietnamese" },
@@ -72,7 +69,6 @@ const CUISINE_DATA: CuisineEntry[] = [
   { slug: "singaporean", name: "Singaporean", region: "southeast_asian" },
   { slug: "burmese", name: "Burmese", region: "southeast_asian" },
 
-  // ---- South Asian ----
   { slug: "indian", name: "Indian", region: "south_asian", icon: "🇮🇳" },
   { slug: "curry", name: "Curry", region: "south_asian", parentSlug: "indian", icon: "🍛" },
   { slug: "tandoori", name: "Tandoori", region: "south_asian", parentSlug: "indian" },
@@ -83,7 +79,6 @@ const CUISINE_DATA: CuisineEntry[] = [
   { slug: "bangladeshi", name: "Bangladeshi", region: "south_asian" },
   { slug: "afghan", name: "Afghan", region: "south_asian" },
 
-  // ---- Middle Eastern ----
   { slug: "turkish", name: "Turkish", region: "middle_eastern", icon: "🇹🇷" },
   { slug: "kebab", name: "Kebab", region: "middle_eastern", parentSlug: "turkish", icon: "🥙" },
   { slug: "doner", name: "Döner", region: "middle_eastern", parentSlug: "turkish" },
@@ -98,7 +93,6 @@ const CUISINE_DATA: CuisineEntry[] = [
   { slug: "arab", name: "Arab", region: "middle_eastern" },
   { slug: "yemeni", name: "Yemeni", region: "middle_eastern" },
 
-  // ---- African ----
   { slug: "african", name: "African", region: "african" },
   { slug: "ethiopian", name: "Ethiopian", region: "african", parentSlug: "african" },
   { slug: "eritrean", name: "Eritrean", region: "african", parentSlug: "african" },
@@ -109,7 +103,6 @@ const CUISINE_DATA: CuisineEntry[] = [
   { slug: "tunisian", name: "Tunisian", region: "african", parentSlug: "african" },
   { slug: "senegalese", name: "Senegalese", region: "african", parentSlug: "african" },
 
-  // ---- Americas ----
   { slug: "american", name: "American", region: "american", icon: "🇺🇸" },
   { slug: "burger", name: "Burger", region: "american", parentSlug: "american", icon: "🍔" },
   { slug: "steak", name: "Steak", region: "american", parentSlug: "american", icon: "🥩" },
@@ -129,7 +122,6 @@ const CUISINE_DATA: CuisineEntry[] = [
   { slug: "caribbean", name: "Caribbean", region: "latin_american" },
   { slug: "jamaican", name: "Jamaican", region: "latin_american", parentSlug: "caribbean" },
 
-  // ---- Beverages / Specialty ----
   { slug: "coffee", name: "Coffee", region: "global", icon: "☕" },
   { slug: "tea", name: "Tea", region: "global", icon: "🍵" },
   { slug: "bubble_tea", name: "Bubble Tea", region: "global", parentSlug: "tea", icon: "🧋" },
@@ -143,7 +135,6 @@ const CUISINE_DATA: CuisineEntry[] = [
   { slug: "dessert", name: "Dessert", region: "global", icon: "🍮" },
   { slug: "donut", name: "Donut", region: "global", parentSlug: "bakery", icon: "🍩" },
 
-  // ---- Cooking styles / Generic ----
   { slug: "vegetarian", name: "Vegetarian", region: "global", icon: "🥗" },
   { slug: "vegan", name: "Vegan", region: "global", icon: "🌱" },
   { slug: "organic", name: "Organic", region: "global" },
@@ -174,6 +165,10 @@ const CUISINE_DATA: CuisineEntry[] = [
   { slug: "breakfast", name: "Breakfast", region: "global" },
 ];
 
+/**
+ * Seeds the cuisine taxonomy into the database.
+ * Inserts top-level cuisines first, then children with parent references.
+ */
 async function main() {
   console.log("Seeding cuisines...");
 

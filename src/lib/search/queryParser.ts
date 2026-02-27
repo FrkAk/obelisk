@@ -1,6 +1,6 @@
 import { classifyQuery } from "./queryClassifier";
 import { createLogger } from "@/lib/logger";
-import type { ParsedIntent } from "./types";
+import type { ParsedIntent } from "@/types/api";
 
 const log = createLogger("queryParser");
 

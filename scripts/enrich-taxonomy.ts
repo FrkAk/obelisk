@@ -13,10 +13,6 @@ const BATCH_SIZE = parseInt(process.env.ENRICH_BATCH_SIZE || "50", 10);
 const CONCURRENCY = parseInt(process.env.ENRICH_CONCURRENCY || "3", 10);
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "gemma3:4b-it-qat";
 
-// ---------------------------------------------------------------------------
-// Taxonomy data types
-// ---------------------------------------------------------------------------
-
 interface TagEntry {
   keywords: string[];
   products: string[];
@@ -32,10 +28,6 @@ interface BrandEntry {
   priceTier: string;
 }
 
-// ---------------------------------------------------------------------------
-// Load taxonomy JSON files
-// ---------------------------------------------------------------------------
-
 /**
  * Loads and parses a JSON file from the data directory.
  *
@@ -49,10 +41,6 @@ function loadJson<T>(path: string): T {
   const raw = readFileSync(path, "utf-8");
   return JSON.parse(raw) as T;
 }
-
-// ---------------------------------------------------------------------------
-// Primary OSM tag determination
-// ---------------------------------------------------------------------------
 
 const TAG_KEY_PRIORITY = ["shop", "amenity", "tourism", "historic", "leisure", "natural", "building"];
 
@@ -76,10 +64,6 @@ function determinePrimaryTag(osmTags: Record<string, string>): string | null {
   if (osmTags.healthcare) return `healthcare=${osmTags.healthcare}`;
   return null;
 }
-
-// ---------------------------------------------------------------------------
-// LLM summary generation
-// ---------------------------------------------------------------------------
 
 /**
  * Builds the LLM prompt for generating a place description.
@@ -139,10 +123,11 @@ function buildSummaryPrompt(
   return lines.join("\n");
 }
 
-// ---------------------------------------------------------------------------
-// Main enrichment logic
-// ---------------------------------------------------------------------------
-
+/**
+ * Runs the taxonomy enrichment pipeline: loads taxonomy maps, iterates
+ * through unenriched POIs, merges keywords/products, generates LLM
+ * summaries, and updates the database.
+ */
 async function main() {
   log.info("Starting taxonomy enrichment pipeline...");
   log.info(`Config: batchSize=${BATCH_SIZE}, concurrency=${CONCURRENCY}, model=${OLLAMA_MODEL}`);

@@ -8,6 +8,10 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("engagement");
 
+const querySchema = z.object({
+  userId: z.string().uuid(),
+});
+
 const engagementSchema = z.object({
   userId: z.string().uuid(),
   poiId: z.string().uuid().nullable().optional(),
@@ -26,14 +30,18 @@ const engagementSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.nextUrl.searchParams.get("userId");
+    const parseResult = querySchema.safeParse({
+      userId: request.nextUrl.searchParams.get("userId"),
+    });
 
-    if (!userId) {
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: "Missing 'userId' query parameter" },
+        { error: "Invalid parameters", details: parseResult.error.flatten() },
         { status: 400 },
       );
     }
+
+    const { userId } = parseResult.data;
 
     const stats = await getUserEngagementStats(userId);
     return NextResponse.json({ stats });

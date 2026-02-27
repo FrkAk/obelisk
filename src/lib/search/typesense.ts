@@ -1,6 +1,6 @@
 import Typesense from "typesense";
 import { createLogger } from "@/lib/logger";
-import type { SearchLocation } from "./types";
+import type { SearchLocation } from "@/types/api";
 
 const log = createLogger("typesense");
 
@@ -248,49 +248,6 @@ export async function searchAutocomplete(
 }
 
 /**
- * Browses POIs by category with optional geo filtering.
- *
- * Args:
- *     category: The category slug to filter by.
- *     location: Optional user location for geo filtering.
- *     radiusKm: Search radius in kilometers.
- *     limit: Maximum number of results to return.
- *
- * Returns:
- *     Array of POI documents in the specified category.
- */
-export async function browseByCategory(
-  category: string,
-  location?: SearchLocation,
-  radiusKm: number = 10,
-  limit: number = 20
-): Promise<TypesensePoiDocument[]> {
-  const filterParts: string[] = [`category:=${category}`];
-
-  if (location) {
-    filterParts.push(
-      `location:(${location.latitude},${location.longitude},${radiusKm} km)`
-    );
-  }
-
-  const searchParameters = {
-    q: "*",
-    filter_by: filterParts.join(" && "),
-    sort_by: location
-      ? `location(${location.latitude},${location.longitude}):asc`
-      : undefined,
-    per_page: limit,
-  };
-
-  const response = await client
-    .collections<TypesensePoiDocument>(COLLECTION_NAME)
-    .documents()
-    .search(searchParameters);
-
-  return (response.hits ?? []).map((hit) => hit.document!);
-}
-
-/**
  * Bulk upserts documents into the Typesense POI collection.
  *
  * Args:
@@ -308,28 +265,6 @@ export async function upsertDocuments(
     .collections<TypesensePoiDocument>(COLLECTION_NAME)
     .documents()
     .import(documents, { action: "upsert" });
-}
-
-/**
- * Fetches a single document from the Typesense POI collection.
- *
- * Args:
- *     id: The document ID to fetch.
- *
- * Returns:
- *     The POI document, or null if not found.
- */
-export async function getDocument(
-  id: string
-): Promise<TypesensePoiDocument | null> {
-  try {
-    return await client
-      .collections<TypesensePoiDocument>(COLLECTION_NAME)
-      .documents(id)
-      .retrieve();
-  } catch {
-    return null;
-  }
 }
 
 export type { TypesensePoiDocument, TypesenseSearchFilters };

@@ -2,6 +2,9 @@ import { db } from "../src/lib/db/client";
 import { regions } from "../src/lib/db/schema";
 import { eq } from "drizzle-orm";
 
+/**
+ * Seeds the region hierarchy: Germany -> Munich.
+ */
 async function main() {
   console.log("Seeding regions...");
 

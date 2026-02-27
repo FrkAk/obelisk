@@ -15,10 +15,6 @@ const NSI_FILE = join(DATA_DIR, "nsi", "nsi.json");
 const WIKIDATA_FILE = join(DATA_DIR, "wikidata_brands.json");
 const OUTPUT_FILE = join(DATA_DIR, "brand_enrichment_map.json");
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 interface NsiItem {
   displayName: string;
   id: string;
@@ -45,10 +41,6 @@ interface BrandEntry {
   nsiPath: string;
   priceTier: string;
 }
-
-// ---------------------------------------------------------------------------
-// NSI loader
-// ---------------------------------------------------------------------------
 
 /**
  * Loads NSI data and builds a map from Wikidata QID to brand info.
@@ -82,10 +74,6 @@ function loadNsi(): Map<string, { name: string; nsiPath: string; tags: Record<st
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// Wikidata loader
-// ---------------------------------------------------------------------------
-
 /**
  * Loads Wikidata SPARQL results and groups products/industries by QID.
  *
@@ -118,10 +106,6 @@ function loadWikidata(): Map<string, { name: string; industries: Set<string>; pr
 
   return result;
 }
-
-// ---------------------------------------------------------------------------
-// Price tier estimation
-// ---------------------------------------------------------------------------
 
 const LUXURY_BRANDS = new Set([
   "Gucci", "Louis Vuitton", "Prada", "Hermès", "Chanel", "Burberry", "Dior",
@@ -171,10 +155,6 @@ function estimatePriceTier(name: string, nsiPath: string, industry: string): str
 
   return "$$";
 }
-
-// ---------------------------------------------------------------------------
-// Product inference from NSI path
-// ---------------------------------------------------------------------------
 
 const PATH_PRODUCTS: Record<string, string[]> = {
   "brands/shop/clothes": ["clothing", "apparel"],
@@ -236,10 +216,6 @@ const PATH_PRODUCTS: Record<string, string[]> = {
 function inferProducts(nsiPath: string): string[] {
   return PATH_PRODUCTS[nsiPath] ?? [];
 }
-
-// ---------------------------------------------------------------------------
-// Main build logic
-// ---------------------------------------------------------------------------
 
 /**
  * Builds the brand enrichment map by merging NSI and Wikidata data.
@@ -319,10 +295,6 @@ function nsiPathToIndustry(nsiPath: string): string {
       return displaySub;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Execute
-// ---------------------------------------------------------------------------
 
 console.log("Building brand enrichment map...");
 

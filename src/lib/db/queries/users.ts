@@ -4,7 +4,6 @@ import {
   users,
   userPreferences,
   userSavedPois,
-  userVisits,
   pois,
   categories,
 } from "../schema";
@@ -13,7 +12,6 @@ import type {
   NewUser,
   UserPreference,
   UserSavedPoi,
-  UserVisit,
 } from "@/types";
 
 /**
@@ -243,58 +241,3 @@ export async function removeSavedPoi(
   return rows.length > 0;
 }
 
-/**
- * Record a user visit to a POI.
- *
- * Args:
- *     userId: UUID of the user.
- *     poiId: UUID of the POI.
- *     source: How the visit was detected ('geofence', 'manual', 'checkin').
- *     durationSec: Optional visit duration in seconds.
- *
- * Returns:
- *     The newly created visit row.
- */
-export async function recordVisit(
-  userId: string,
-  poiId: string,
-  source: string,
-  durationSec?: number,
-): Promise<UserVisit> {
-  const rows = await db
-    .insert(userVisits)
-    .values({ userId, poiId, source, durationSec })
-    .returning();
-  return rows[0];
-}
-
-/**
- * Get a user's visit history, newest first.
- *
- * Args:
- *     userId: UUID of the user.
- *     limit: Max rows to return (default 50).
- *
- * Returns:
- *     Array of visit rows with POI name and category info.
- */
-export async function getUserVisitHistory(userId: string, limit = 50) {
-  return db
-    .select({
-      id: userVisits.id,
-      userId: userVisits.userId,
-      poiId: userVisits.poiId,
-      visitedAt: userVisits.visitedAt,
-      durationSec: userVisits.durationSec,
-      source: userVisits.source,
-      poiName: pois.name,
-      categoryName: categories.name,
-      categorySlug: categories.slug,
-    })
-    .from(userVisits)
-    .innerJoin(pois, eq(userVisits.poiId, pois.id))
-    .leftJoin(categories, eq(pois.categoryId, categories.id))
-    .where(eq(userVisits.userId, userId))
-    .orderBy(desc(userVisits.visitedAt))
-    .limit(limit);
-}

@@ -9,6 +9,15 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("business");
 
+const querySchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    userId: z.string().uuid().optional(),
+  })
+  .refine((data) => data.id || data.userId, {
+    message: "Provide either 'id' or 'userId' query parameter",
+  });
+
 const createBusinessSchema = z.object({
   userId: z.string().uuid(),
   businessName: z.string().min(1).max(255),
@@ -22,15 +31,19 @@ const createBusinessSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const id = searchParams.get("id");
-    const userId = searchParams.get("userId");
+    const parseResult = querySchema.safeParse({
+      id: searchParams.get("id") ?? undefined,
+      userId: searchParams.get("userId") ?? undefined,
+    });
 
-    if (!id && !userId) {
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: "Provide either 'id' or 'userId' query parameter" },
+        { error: "Invalid parameters", details: parseResult.error.flatten() },
         { status: 400 },
       );
     }
+
+    const { id, userId } = parseResult.data;
 
     const account = id
       ? await getBusinessAccount(id)

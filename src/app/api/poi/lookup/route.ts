@@ -1,16 +1,19 @@
-"use server";
-
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { pois, remarks, categories } from "@/lib/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
+import { geoBounds } from "@/lib/geo/distance";
+import { getCategorySlug, OSM_CATEGORY_MAP } from "@/lib/geo/categories";
 import { z } from "zod";
-import type { ExternalPOI } from "@/lib/search/types";
-import type { CategorySlug } from "@/types";
+import type { ExternalPOI } from "@/types/api";
+import {
+  type RemarkWithPoi,
+  remarkPoiSelect,
+  mapRowToRemarkWithPoi,
+} from "@/lib/db/queries/remarks";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("poi-lookup");
-import type { RemarkWithPoi } from "@/lib/db/queries/search";
 
 const bodySchema = z.object({
   name: z.string(),
@@ -19,126 +22,6 @@ const bodySchema = z.object({
   category: z.string().optional(),
 });
 
-const OSM_CATEGORY_MAPPING: Record<string, string> = {
-  restaurant: "food",
-  cafe: "food",
-  fast_food: "food",
-  biergarten: "food",
-  food_court: "food",
-  ice_cream: "food",
-  bakery: "food",
-  deli: "food",
-  confectionery: "food",
-  food_and_drink: "food",
-  food_and_drink_stores: "food",
-
-  bar: "nightlife",
-  pub: "nightlife",
-  nightclub: "nightlife",
-
-  museum: "art",
-  gallery: "art",
-
-  theatre: "culture",
-  cinema: "culture",
-  arts_centre: "culture",
-  community_centre: "culture",
-  arts_and_entertainment: "culture",
-
-  university: "education",
-  school: "education",
-  college: "education",
-  library: "education",
-  education: "education",
-  kindergarten: "education",
-
-  hospital: "health",
-  clinic: "health",
-  pharmacy: "health",
-  doctors: "health",
-  dentist: "health",
-  veterinary: "health",
-
-  police: "services",
-  fire_station: "services",
-  bank: "services",
-  post_office: "services",
-  atm: "services",
-  bureau_de_change: "services",
-  commercial_services: "services",
-
-  shop: "shopping",
-  clothes: "shopping",
-  supermarket: "shopping",
-  mall: "shopping",
-  department_store: "shopping",
-  marketplace: "shopping",
-
-  stadium: "sports",
-  sports_centre: "sports",
-  swimming_pool: "sports",
-  fitness_centre: "sports",
-  pitch: "sports",
-
-  bus_station: "transport",
-  station: "transport",
-  parking: "transport",
-  fuel: "transport",
-  car_rental: "transport",
-  taxi: "transport",
-  motorist: "transport",
-
-  park: "nature",
-  garden: "nature",
-  nature_reserve: "nature",
-  zoo: "nature",
-  aquarium: "nature",
-  botanical_garden: "nature",
-  playground: "nature",
-  dog_park: "nature",
-  park_like: "nature",
-
-  church: "architecture",
-  cathedral: "architecture",
-  chapel: "architecture",
-  mosque: "architecture",
-  synagogue: "architecture",
-  temple: "architecture",
-  shrine: "architecture",
-  place_of_worship: "architecture",
-  monastery: "architecture",
-  tower: "architecture",
-  townhall: "architecture",
-  courthouse: "architecture",
-  religion: "architecture",
-  "religious-christian": "architecture",
-  "religious-muslim": "architecture",
-  "religious-jewish": "architecture",
-  "religious-buddhist": "architecture",
-  "religious-shinto": "architecture",
-
-  castle: "history",
-  monument: "history",
-  memorial: "history",
-  archaeological_site: "history",
-  ruins: "history",
-  battlefield: "history",
-  city_gate: "history",
-  wayside_shrine: "history",
-  wayside_cross: "history",
-  historic: "history",
-
-  viewpoint: "views",
-
-  attraction: "hidden",
-  hotel: "hidden",
-  hostel: "hidden",
-  fountain: "hidden",
-  lodging: "hidden",
-  general: "hidden",
-  visitor_amenities: "hidden",
-  industrial: "hidden",
-};
 
 /**
  * Looks up a specific POI by coordinates and name.
@@ -199,7 +82,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     log.error("Error looking up POI:", error);
     return NextResponse.json(
-      { error: "Failed to lookup POI", details: error instanceof Error ? error.message : "Unknown error" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
@@ -210,8 +93,7 @@ async function findInDatabase(
   latitude: number,
   longitude: number
 ): Promise<{ poi: ExternalPOI; remark: RemarkWithPoi | null } | null> {
-  const latDelta = 50 / 111320;
-  const lonDelta = 50 / (111320 * Math.cos(latitude * (Math.PI / 180)));
+  const { minLat, maxLat, minLon, maxLon } = geoBounds(latitude, longitude, 50);
 
   const nearbyPois = await db
     .select({
@@ -233,10 +115,10 @@ async function findInDatabase(
     .leftJoin(categories, eq(pois.categoryId, categories.id))
     .where(
       and(
-        gte(pois.latitude, latitude - latDelta),
-        lte(pois.latitude, latitude + latDelta),
-        gte(pois.longitude, longitude - lonDelta),
-        lte(pois.longitude, longitude + lonDelta)
+        gte(pois.latitude, minLat),
+        lte(pois.latitude, maxLat),
+        gte(pois.longitude, minLon),
+        lte(pois.longitude, maxLon)
       )
     );
 
@@ -253,76 +135,15 @@ async function findInDatabase(
   if (!matchingPoi) return null;
 
   const remarkResult = await db
-    .select({
-      remarkId: remarks.id,
-      remarkPoiId: remarks.poiId,
-      remarkTitle: remarks.title,
-      remarkTeaser: remarks.teaser,
-      remarkContent: remarks.content,
-      remarkLocalTip: remarks.localTip,
-      remarkDurationSeconds: remarks.durationSeconds,
-      remarkAudioUrl: remarks.audioUrl,
-      remarkCreatedAt: remarks.createdAt,
-      poiId: pois.id,
-      poiOsmId: pois.osmId,
-      poiName: pois.name,
-      poiCategoryId: pois.categoryId,
-      poiLatitude: pois.latitude,
-      poiLongitude: pois.longitude,
-      poiAddress: pois.address,
-      poiWikipediaUrl: pois.wikipediaUrl,
-      poiImageUrl: pois.imageUrl,
-      poiOsmTags: pois.osmTags,
-      poiCreatedAt: pois.createdAt,
-      categoryId: categories.id,
-      categoryName: categories.name,
-      categorySlug: categories.slug,
-      categoryIcon: categories.icon,
-      categoryColor: categories.color,
-    })
+    .select(remarkPoiSelect())
     .from(remarks)
     .innerJoin(pois, eq(remarks.poiId, pois.id))
     .leftJoin(categories, eq(pois.categoryId, categories.id))
     .where(and(eq(remarks.poiId, matchingPoi.id), eq(remarks.isCurrent, true)))
     .limit(1);
 
-  let remark: RemarkWithPoi | null = null;
-  if (remarkResult.length > 0) {
-    const row = remarkResult[0];
-    remark = {
-      id: row.remarkId,
-      poiId: row.remarkPoiId!,
-      title: row.remarkTitle,
-      teaser: row.remarkTeaser,
-      content: row.remarkContent,
-      localTip: row.remarkLocalTip,
-      durationSeconds: row.remarkDurationSeconds ?? 45,
-      audioUrl: row.remarkAudioUrl,
-      createdAt: row.remarkCreatedAt ?? new Date(),
-      poi: {
-        id: row.poiId,
-        osmId: row.poiOsmId,
-        name: row.poiName,
-        categoryId: row.poiCategoryId!,
-        latitude: row.poiLatitude,
-        longitude: row.poiLongitude,
-        address: row.poiAddress,
-        wikipediaUrl: row.poiWikipediaUrl,
-        imageUrl: row.poiImageUrl,
-        osmTags: row.poiOsmTags,
-        createdAt: row.poiCreatedAt ?? new Date(),
-        category: row.categoryId
-          ? {
-              id: row.categoryId,
-              name: row.categoryName!,
-              slug: row.categorySlug! as CategorySlug,
-              icon: row.categoryIcon!,
-              color: row.categoryColor!,
-            }
-          : undefined,
-      },
-    };
-  }
+  const remark: RemarkWithPoi | null =
+    remarkResult.length > 0 ? mapRowToRemarkWithPoi(remarkResult[0]) : null;
 
   const externalPoi: ExternalPOI = {
     id: `db-${matchingPoi.id}`,
@@ -425,12 +246,12 @@ function mapOsmTypeToCategory(
   hint?: string,
   extraTags?: Record<string, string>
 ): string {
-  if (hint && OSM_CATEGORY_MAPPING[hint]) {
-    return OSM_CATEGORY_MAPPING[hint];
+  if (hint && OSM_CATEGORY_MAP[hint]) {
+    return OSM_CATEGORY_MAP[hint];
   }
 
-  if (OSM_CATEGORY_MAPPING[type]) {
-    return OSM_CATEGORY_MAPPING[type];
+  if (OSM_CATEGORY_MAP[type]) {
+    return OSM_CATEGORY_MAP[type];
   }
 
   if (extraTags) {
@@ -480,7 +301,7 @@ function createSyntheticPoi(
     osmId: syntheticId,
     osmType: "node",
     name,
-    category: category ? (OSM_CATEGORY_MAPPING[category] || "hidden") : "hidden",
+    category: category ? getCategorySlug(category) : "hidden",
     latitude,
     longitude,
     source: "nominatim",

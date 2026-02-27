@@ -10,6 +10,16 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("campaigns");
 
+const querySchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    businessId: z.string().uuid().optional(),
+    stats: z.enum(["true", "false"]).optional(),
+  })
+  .refine((data) => data.id || data.businessId, {
+    message: "Provide 'id' or 'businessId' query parameter",
+  });
+
 const createCampaignSchema = z.object({
   businessId: z.string().uuid(),
   poiId: z.string().uuid(),
@@ -28,9 +38,20 @@ const createCampaignSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const id = searchParams.get("id");
-    const businessId = searchParams.get("businessId");
-    const stats = searchParams.get("stats");
+    const parseResult = querySchema.safeParse({
+      id: searchParams.get("id") ?? undefined,
+      businessId: searchParams.get("businessId") ?? undefined,
+      stats: searchParams.get("stats") ?? undefined,
+    });
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Invalid parameters", details: parseResult.error.flatten() },
+        { status: 400 },
+      );
+    }
+
+    const { id, businessId, stats } = parseResult.data;
 
     if (id && stats === "true") {
       const campaignStats = await getCampaignStats(id);
@@ -48,15 +69,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ campaign });
     }
 
-    if (businessId) {
-      const campaigns = await getCampaignsByBusiness(businessId);
-      return NextResponse.json({ campaigns, total: campaigns.length });
-    }
-
-    return NextResponse.json(
-      { error: "Provide 'id' or 'businessId' query parameter" },
-      { status: 400 },
-    );
+    const campaigns = await getCampaignsByBusiness(businessId!);
+    return NextResponse.json({ campaigns, total: campaigns.length });
   } catch (error) {
     log.error("Error fetching campaigns:", error);
     return NextResponse.json(

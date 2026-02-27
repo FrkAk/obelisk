@@ -42,7 +42,13 @@ export type RemarkWithPoi = {
   };
 };
 
-function remarkPoiSelect() {
+/**
+ * Returns the Drizzle select object for remark + POI + category joins.
+ *
+ * Returns:
+ *     Object mapping column aliases to Drizzle column references.
+ */
+export function remarkPoiSelect() {
   return {
     remarkId: remarks.id,
     remarkPoiId: remarks.poiId,
@@ -78,7 +84,7 @@ function remarkPoiSelect() {
   };
 }
 
-interface RemarkPoiRow {
+export interface RemarkPoiRow {
   remarkId: string;
   remarkPoiId: string | null;
   remarkTitle: string;
@@ -112,7 +118,16 @@ interface RemarkPoiRow {
   categoryColor: string | null;
 }
 
-function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
+/**
+ * Maps a flat remark+POI+category row into a nested RemarkWithPoi object.
+ *
+ * Args:
+ *     row: Flat row from a remarkPoiSelect query.
+ *
+ * Returns:
+ *     Nested RemarkWithPoi with poi and category objects.
+ */
+export function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
   return {
     id: row.remarkId,
     poiId: row.remarkPoiId!,

@@ -16,10 +16,6 @@ const TAGINFO_DIR = join(DATA_DIR, "taginfo");
 const TAXONOMY_FILE = join(DATA_DIR, "google_product_taxonomy.txt");
 const OUTPUT_FILE = join(DATA_DIR, "tag_enrichment_map.json");
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 interface TagInfoEntry {
   value: string;
   count: number;
@@ -32,10 +28,6 @@ interface TagEnrichmentEntry {
   subtags: string[];
   googleTaxonomy: string[];
 }
-
-// ---------------------------------------------------------------------------
-// Google Product Taxonomy loader
-// ---------------------------------------------------------------------------
 
 /**
  * Loads and parses the Google Product Taxonomy file into a list of category paths.
@@ -50,10 +42,6 @@ function loadGoogleTaxonomy(): string[] {
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith("#"));
 }
-
-// ---------------------------------------------------------------------------
-// Taginfo loader
-// ---------------------------------------------------------------------------
 
 /**
  * Loads a taginfo JSON file and returns the data entries.
@@ -70,10 +58,6 @@ function loadTagInfo(filename: string): TagInfoEntry[] {
   const raw = JSON.parse(readFileSync(filepath, "utf-8"));
   return raw.data ?? [];
 }
-
-// ---------------------------------------------------------------------------
-// Google Taxonomy matching
-// ---------------------------------------------------------------------------
 
 /**
  * Finds Google taxonomy paths that match a set of search terms.
@@ -105,10 +89,6 @@ function findTaxonomyMatches(taxonomyLines: string[], searchTerms: string[]): st
   return [...matches].slice(0, 5);
 }
 
-// ---------------------------------------------------------------------------
-// Subtag extraction
-// ---------------------------------------------------------------------------
-
 /**
  * Extracts unique subtag values from a taginfo file.
  *
@@ -126,18 +106,6 @@ function getSubtags(filename: string, minCount: number = 100): string[] {
     .map((e) => e.value)
     .sort();
 }
-
-// ---------------------------------------------------------------------------
-// OSM tag -> enrichment mapping
-// ---------------------------------------------------------------------------
-
-/**
- * Mapping from OSM tag values to semantic keywords, products, and Google
- * taxonomy search terms. Organized by OSM key (shop, amenity, etc.).
- *
- * For product-oriented tags (shops), we map to Google taxonomy.
- * For service-oriented tags (restaurants, parks), we use domain keywords only.
- */
 
 interface TagMapping {
   keywords: string[];
@@ -1021,10 +989,6 @@ const HISTORIC_MAPPINGS: Record<string, TagMapping> = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Main build logic
-// ---------------------------------------------------------------------------
-
 /**
  * Builds the tag enrichment map by combining OSM taginfo data,
  * manual mappings, and Google Product Taxonomy cross-references.
@@ -1033,6 +997,15 @@ function buildTagEnrichmentMap(): Record<string, TagEnrichmentEntry> {
   const taxonomy = loadGoogleTaxonomy();
   const result: Record<string, TagEnrichmentEntry> = {};
 
+  /**
+   * Processes a set of tag mappings for an OSM key and merges them into the result.
+   *
+   * Args:
+   *     osmKey: OSM key name (e.g. "shop", "amenity").
+   *     mappings: Manual mappings for known tag values.
+   *     tagInfoFile: Taginfo JSON filename for this key.
+   *     subtags: Optional map of tag value to subtag filename.
+   */
   function addEntries(
     osmKey: string,
     mappings: Record<string, TagMapping>,
@@ -1093,10 +1066,6 @@ function buildTagEnrichmentMap(): Record<string, TagEnrichmentEntry> {
 
   return result;
 }
-
-// ---------------------------------------------------------------------------
-// Execute
-// ---------------------------------------------------------------------------
 
 console.log("Building tag enrichment map...");
 

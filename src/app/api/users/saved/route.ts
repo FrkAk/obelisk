@@ -9,6 +9,10 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("users-saved");
 
+const querySchema = z.object({
+  userId: z.string().uuid(),
+});
+
 const saveSchema = z.object({
   userId: z.string().uuid(),
   poiId: z.string().uuid(),
@@ -22,14 +26,18 @@ const deleteSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.nextUrl.searchParams.get("userId");
+    const parseResult = querySchema.safeParse({
+      userId: request.nextUrl.searchParams.get("userId"),
+    });
 
-    if (!userId) {
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: "Missing 'userId' query parameter" },
+        { error: "Invalid parameters", details: parseResult.error.flatten() },
         { status: 400 },
       );
     }
+
+    const { userId } = parseResult.data;
 
     const saved = await getUserSavedPoisList(userId);
     return NextResponse.json({ saved, total: saved.length });

@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchAutocomplete } from "@/lib/search/typesense";
+import { z } from "zod";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("autocomplete");
+
+const querySchema = z.object({
+  q: z.string().min(2),
+  lat: z.coerce.number().min(-90).max(90).default(0),
+  lon: z.coerce.number().min(-180).max(180).default(0),
+});
 
 /**
  * Handles autocomplete requests for the search bar.
@@ -14,13 +21,18 @@ const log = createLogger("autocomplete");
  *     JSON response with an array of autocomplete suggestions.
  */
 export async function GET(request: NextRequest) {
-  const q = request.nextUrl.searchParams.get("q");
-  const lat = parseFloat(request.nextUrl.searchParams.get("lat") || "0");
-  const lon = parseFloat(request.nextUrl.searchParams.get("lon") || "0");
+  const searchParams = request.nextUrl.searchParams;
+  const parseResult = querySchema.safeParse({
+    q: searchParams.get("q"),
+    lat: searchParams.get("lat") ?? 0,
+    lon: searchParams.get("lon") ?? 0,
+  });
 
-  if (!q || q.length < 2) {
+  if (!parseResult.success) {
     return NextResponse.json({ suggestions: [] });
   }
+
+  const { q, lat, lon } = parseResult.data;
 
   try {
     const location = lat && lon ? { latitude: lat, longitude: lon } : undefined;
@@ -28,6 +40,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ suggestions });
   } catch (error) {
     log.error("Error:", error);
-    return NextResponse.json({ suggestions: [] });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

@@ -1,19 +1,13 @@
-import { generateText, SEARCH_MODEL } from "@/lib/ai/ollama";
+import { classifyQuery } from "./queryClassifier";
 import { createLogger } from "@/lib/logger";
-import type { ParsedIntent, SearchFilters } from "./types";
-import type { CategorySlug } from "@/types";
+import type { ParsedIntent } from "./types";
 
 const log = createLogger("queryParser");
-
-const VALID_CATEGORIES: CategorySlug[] = [
-  "history", "food", "art", "nature", "architecture",
-  "hidden", "views", "culture", "shopping", "nightlife",
-  "sports", "health", "transport", "education", "services",
-];
 
 const DEFAULT_INTENT: ParsedIntent = {
   filters: {},
   keywords: [],
+  source: "default",
 };
 
 const FAST_PATH: Record<string, ParsedIntent> = {
@@ -45,10 +39,12 @@ const FAST_PATH: Record<string, ParsedIntent> = {
   restaurant: { category: "food", keywords: ["restaurant"], filters: {} },
   bakery: { category: "food", keywords: ["bakery"], filters: {} },
   "bäckerei": { category: "food", keywords: ["bakery"], filters: {} },
+  backerei: { category: "food", keywords: ["bakery"], filters: {} },
   metzgerei: { category: "food", keywords: ["butcher", "shop"], filters: {} },
   butcher: { category: "food", keywords: ["butcher", "shop"], filters: {} },
   breakfast: { category: "food", keywords: ["cafe", "breakfast", "restaurant"], filters: {} },
   "frühstück": { category: "food", keywords: ["cafe", "breakfast", "restaurant"], filters: {} },
+  fruhstuck: { category: "food", keywords: ["cafe", "breakfast", "restaurant"], filters: {} },
   brunch: { category: "food", keywords: ["cafe", "brunch", "restaurant"], filters: {} },
   "ice cream": { category: "food", keywords: ["ice_cream"], filters: {} },
   eis: { category: "food", keywords: ["ice_cream"], filters: {} },
@@ -102,6 +98,7 @@ const FAST_PATH: Record<string, ParsedIntent> = {
   movie: { category: "culture", keywords: ["cinema"], filters: {} },
   library: { category: "education", keywords: ["library"], filters: {} },
   "bücherei": { category: "education", keywords: ["library"], filters: {} },
+  bucherei: { category: "education", keywords: ["library"], filters: {} },
   bibliothek: { category: "education", keywords: ["library"], filters: {} },
   "opera": { category: "culture", keywords: ["opera", "theatre"], filters: {} },
   "concert": { category: "culture", keywords: ["concert_hall", "music_venue"], filters: {} },
@@ -197,17 +194,18 @@ const FAST_PATH: Record<string, ParsedIntent> = {
 
   university: { category: "education", keywords: ["university"], filters: {} },
   "universität": { category: "education", keywords: ["university"], filters: {} },
+  universitat: { category: "education", keywords: ["university"], filters: {} },
   uni: { category: "education", keywords: ["university"], filters: {} },
   school: { category: "education", keywords: ["school"], filters: {} },
   schule: { category: "education", keywords: ["school"], filters: {} },
   kindergarten: { category: "education", keywords: ["kindergarten"], filters: {} },
   kita: { category: "education", keywords: ["kindergarten"], filters: {} },
 
-  church: { category: "architecture", keywords: ["church", "place_of_worship"], filters: {} },
-  kirche: { category: "architecture", keywords: ["church", "place_of_worship"], filters: {} },
-  mosque: { category: "architecture", keywords: ["mosque", "place_of_worship"], filters: {} },
-  moschee: { category: "architecture", keywords: ["mosque", "place_of_worship"], filters: {} },
-  synagogue: { category: "architecture", keywords: ["synagogue", "place_of_worship"], filters: {} },
+  church: { category: "culture", keywords: ["church", "place_of_worship"], filters: {} },
+  kirche: { category: "culture", keywords: ["church", "place_of_worship"], filters: {} },
+  mosque: { category: "culture", keywords: ["mosque", "place_of_worship"], filters: {} },
+  moschee: { category: "culture", keywords: ["mosque", "place_of_worship"], filters: {} },
+  synagogue: { category: "culture", keywords: ["synagogue", "place_of_worship"], filters: {} },
   castle: { category: "architecture", keywords: ["castle"], filters: {} },
   schloss: { category: "architecture", keywords: ["castle"], filters: {} },
   palace: { category: "architecture", keywords: ["palace", "castle"], filters: {} },
@@ -218,14 +216,19 @@ const FAST_PATH: Record<string, ParsedIntent> = {
   statue: { category: "architecture", keywords: ["statue", "monument"], filters: {} },
   bridge: { category: "architecture", keywords: ["bridge"], filters: {} },
   "brücke": { category: "architecture", keywords: ["bridge"], filters: {} },
+  brucke: { category: "architecture", keywords: ["bridge"], filters: {} },
   tower: { category: "architecture", keywords: ["tower"], filters: {} },
   turm: { category: "architecture", keywords: ["tower"], filters: {} },
 
-  hotel: { category: "hidden", keywords: ["hotel"], filters: {} },
-  hostel: { category: "hidden", keywords: ["hostel"], filters: {} },
-  airbnb: { category: "hidden", keywords: ["guest_house"], filters: {} },
-  "guest house": { category: "hidden", keywords: ["guest_house"], filters: {} },
-  pension: { category: "hidden", keywords: ["guest_house"], filters: {} },
+  hotel: { category: "services", keywords: ["hotel"], filters: {} },
+  hostel: { category: "services", keywords: ["hostel"], filters: {} },
+  airbnb: { category: "services", keywords: ["guest_house"], filters: {} },
+  "guest house": { category: "services", keywords: ["guest_house"], filters: {} },
+  pension: { category: "services", keywords: ["guest_house"], filters: {} },
+
+  clothes: { category: "shopping", keywords: ["clothes", "shop"], filters: {} },
+  shoes: { category: "shopping", keywords: ["shoes", "shop"], filters: {} },
+  hairdresser: { category: "services", keywords: ["hairdresser"], filters: {} },
 
   viewpoint: { category: "views", keywords: ["viewpoint"], filters: {} },
   aussichtspunkt: { category: "views", keywords: ["viewpoint"], filters: {} },
@@ -237,57 +240,15 @@ const DISCOVERY_QUERIES = new Set([
   "show me something", "what's around", "nearby", "interesting",
 ]);
 
-const QUERY_PARSE_PROMPT = `You are a search query parser for a Munich city discovery app. Parse the query and output labeled fields.
-
-Categories: history, food, art, nature, architecture, hidden, views, culture, shopping, nightlife, sports, health, transport, education, services
-
-Output EXACTLY in this format (one field per line):
-MODE: name or keyword
-KEYWORDS: comma, separated, keywords
-CATEGORY: slug or none
-PLACE_NAME: name or none
-CUISINE: type or none
-
-Examples:
-Query: "Marienplatz"
-MODE: name
-KEYWORDS: marienplatz
-CATEGORY: none
-PLACE_NAME: Marienplatz
-CUISINE: none
-
-Query: "quiet café with wifi"
-MODE: keyword
-KEYWORDS: cafe, coffee
-CATEGORY: food
-PLACE_NAME: none
-CUISINE: cafe
-
-Query: "Zara"
-MODE: name
-KEYWORDS: zara
-CATEGORY: none
-PLACE_NAME: Zara
-CUISINE: none
-
-Query: "lunch for 5, outdoor"
-MODE: keyword
-KEYWORDS: lunch, restaurant
-CATEGORY: food
-PLACE_NAME: none
-CUISINE: none
-
-Now parse this query:
-Query: "{{QUERY}}"`;
-
 /**
- * Parses a search query into structured intent using fast-path lookup or LLM fallback.
+ * Parses a search query into structured intent using fast-path lookup
+ * or embedding-based classification fallback.
  *
  * Args:
  *     query: The user's search query string.
  *
  * Returns:
- *     Structured intent with category, keywords, filters, and optional place name.
+ *     Structured intent with category, keywords, cuisine types, and filters.
  */
 export async function parseQueryIntent(query: string): Promise<ParsedIntent> {
   if (!query.trim()) {
@@ -303,10 +264,25 @@ export async function parseQueryIntent(query: string): Promise<ParsedIntent> {
   const fastResult = lookupFastPath(normalized);
   if (fastResult) {
     log.info(`Fast-path: "${query}"`);
-    return fastResult;
+    return { ...fastResult, source: "fast-path" };
   }
 
-  return llmFallback(query, normalized);
+  if (normalized.length < 3) {
+    return DEFAULT_INTENT;
+  }
+
+  try {
+    const classification = await classifyQuery(query);
+    log.info(`Classifier: "${query}"`);
+    return {
+      keywords: [],
+      ...classification,
+      source: "classifier",
+    };
+  } catch (error) {
+    log.warn(`Classifier failed for: "${query}"`, error);
+    return DEFAULT_INTENT;
+  }
 }
 
 /**
@@ -350,160 +326,4 @@ function lookupFastPath(normalized: string): ParsedIntent | undefined {
   }
 
   return undefined;
-}
-
-/**
- * Falls back to LLM-based query parsing using labeled text format.
- *
- * Args:
- *     query: Original query string.
- *     normalized: Lowercase trimmed query string.
- *
- * Returns:
- *     Parsed intent from LLM response, or heuristic fallback on failure.
- */
-async function llmFallback(query: string, normalized: string): Promise<ParsedIntent> {
-  try {
-    const prompt = QUERY_PARSE_PROMPT.replace("{{QUERY}}", query);
-    const response = await generateText(prompt, SEARCH_MODEL, {
-      temperature: 0.1,
-      num_predict: 100,
-    });
-    log.info(`LLM raw response: ${response}`);
-
-    const parsed = parseLabeledResponse(response);
-    if (parsed.keywords.length > 0 || parsed.placeName || parsed.category) {
-      return parsed;
-    }
-
-    return heuristicParse(normalized);
-  } catch (error) {
-    log.warn(`LLM fallback failed for: "${query}"`, error);
-    return heuristicParse(normalized);
-  }
-}
-
-/**
- * Parses labeled text format from LLM response into a ParsedIntent.
- *
- * Args:
- *     response: Raw LLM response with labeled lines.
- *
- * Returns:
- *     Parsed intent extracted from the labeled fields.
- */
-function parseLabeledResponse(response: string): ParsedIntent {
-  const fields: Record<string, string> = {};
-
-  for (const line of response.split("\n")) {
-    const match = line.match(/^(\w+):\s*(.+)$/);
-    if (match) {
-      fields[match[1].toLowerCase()] = match[2].trim();
-    }
-  }
-
-  const keywords = extractKeywords(fields.keywords);
-  const category = extractCategory(fields.category);
-  const placeName = extractOptionalField(fields.place_name);
-  const cuisine = extractOptionalField(fields.cuisine);
-  const isNameMode = fields.mode?.toLowerCase() === "name";
-
-  const filters = extractFiltersFromKeywords(keywords);
-
-  return {
-    category,
-    keywords,
-    placeName: placeName ?? (isNameMode ? fields.keywords?.trim() : undefined),
-    cuisineTypes: cuisine ? [cuisine] : undefined,
-    filters,
-  };
-}
-
-/**
- * Extracts a comma-separated keyword list from the LLM response field.
- *
- * Args:
- *     raw: Raw keywords string from LLM output.
- *
- * Returns:
- *     Array of cleaned keyword strings.
- */
-function extractKeywords(raw: string | undefined): string[] {
-  if (!raw || raw === "none") return [];
-  return raw
-    .split(",")
-    .map((k) => k.trim().toLowerCase())
-    .filter((k) => k.length > 0 && k !== "none");
-}
-
-/**
- * Validates and extracts a category slug from the LLM response.
- *
- * Args:
- *     raw: Raw category string from LLM output.
- *
- * Returns:
- *     Valid CategorySlug or undefined.
- */
-function extractCategory(raw: string | undefined): CategorySlug | undefined {
-  if (!raw || raw === "none") return undefined;
-  const cleaned = raw.trim().toLowerCase() as CategorySlug;
-  return VALID_CATEGORIES.includes(cleaned) ? cleaned : undefined;
-}
-
-/**
- * Extracts an optional string field, returning undefined for "none" values.
- *
- * Args:
- *     raw: Raw field string from LLM output.
- *
- * Returns:
- *     Cleaned string or undefined.
- */
-function extractOptionalField(raw: string | undefined): string | undefined {
-  if (!raw || raw.toLowerCase() === "none") return undefined;
-  return raw.trim();
-}
-
-/**
- * Extracts search filters from keyword list based on known filter keywords.
- *
- * Args:
- *     keywords: Array of keyword strings.
- *
- * Returns:
- *     SearchFilters object with detected filter values.
- */
-function extractFiltersFromKeywords(keywords: string[]): SearchFilters {
-  const filters: SearchFilters = {};
-  for (const kw of keywords) {
-    if (kw === "outdoor" || kw === "terrace" || kw === "patio") filters.outdoor = true;
-    if (kw === "wifi" || kw === "internet") filters.wifi = true;
-    if (kw === "quiet" || kw === "calm" || kw === "peaceful") filters.quiet = true;
-  }
-  return filters;
-}
-
-/**
- * Last-resort heuristic parser when both fast-path and LLM fail.
- *
- * Args:
- *     normalized: Lowercase trimmed query string.
- *
- * Returns:
- *     Best-effort ParsedIntent based on word analysis.
- */
-function heuristicParse(normalized: string): ParsedIntent {
-  const words = normalized
-    .replace(/[^\w\sÀ-ÿ]/g, "")
-    .split(/\s+/)
-    .filter((w) => w.length > 1);
-
-  const isNameQuery = words.length <= 2 && /^[A-ZÀ-Ÿ]/.test(normalized.trim());
-
-  return {
-    keywords: words.slice(0, 5),
-    placeName: isNameQuery ? normalized.trim() : undefined,
-    filters: {},
-  };
 }

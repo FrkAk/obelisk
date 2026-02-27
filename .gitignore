@@ -45,11 +45,17 @@ drizzle/*.sql
 # database dumps
 /db/
 
+# OSM data extracts
+/data/
+
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+
+# Removed services (Docker-owned leftovers)
+/searxng/
 
 # Env
 !.env.example.*

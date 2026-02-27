@@ -1,10 +1,11 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { GlassCard, GlassPill } from "@/components/ui";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { GlassPill } from "@/components/ui/GlassPill";
 import { springTransitions, searchResultVariants } from "@/lib/ui/animations";
-import { CATEGORY_COLORS } from "@/types";
-import type { CategorySlug } from "@/types";
+import { CATEGORY_COLORS } from "@/types/api";
+import type { CategorySlug } from "@/types/api";
 import type { SearchResult } from "@/lib/search/types";
 
 interface SearchResultsProps {

@@ -1,23 +1,12 @@
-import type { CategorySlug, Remark, Poi } from "@/types";
-
-export type SearchQueryType =
-  | "simple"
-  | "contextual"
-  | "complex"
-  | "discovery"
-  | "route";
-
-export type SearchMode = "name" | "keyword" | "conversational";
+import type { CategorySlug, Remark, Poi, Category } from "@/types";
 
 export interface ParsedIntent {
-  type?: SearchQueryType;
-  mode?: SearchMode;
   category?: CategorySlug;
   keywords: string[];
-  placeName?: string;
   cuisineTypes?: string[];
   filters: SearchFilters;
   isDiscovery?: boolean;
+  source?: "fast-path" | "classifier" | "default";
 }
 
 export interface SearchFilters {
@@ -27,6 +16,10 @@ export interface SearchFilters {
   openNow?: boolean;
   wifi?: boolean;
   quiet?: boolean;
+  wheelchair?: boolean;
+  dogFriendly?: boolean;
+  freeEntry?: boolean;
+  parking?: boolean;
 }
 
 export interface SearchLocation {
@@ -50,8 +43,8 @@ export interface SearchResult {
   hasStory: boolean;
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
-  remark?: Remark & { poi: Poi };
-  source: "typesense" | "semantic" | "obelisk-db";
+  remark?: Remark & { poi: Poi & { category?: Category } };
+  source: "typesense" | "semantic";
 }
 
 export interface SearchResponse {
@@ -61,7 +54,6 @@ export interface SearchResponse {
     parseMs: number;
     typesenseMs: number;
     semanticMs: number;
-    obeliskMs: number;
     totalMs: number;
   };
 }
@@ -137,20 +129,15 @@ export interface ExternalPOI {
   hasWifi?: boolean;
   hasOutdoorSeating?: boolean;
   imageUrl?: string;
-  source: "nominatim" | "overpass" | "obelisk-db";
-}
-
-export interface ObeliskResult {
-  type: "remark";
-  remark: Remark & { poi: Poi };
-  distance?: number;
-  score: number;
+  wikipediaUrl?: string;
+  extraTags?: Record<string, string>;
+  source: "nominatim" | "overpass";
 }
 
 export interface ExternalResult {
   type: "external";
   poi: ExternalPOI;
-  nearbyRemark?: Remark & { poi: Poi };
+  nearbyRemark?: Remark & { poi: Poi & { category?: Category } };
   distance?: number;
   score: number;
 }

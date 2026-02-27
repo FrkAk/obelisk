@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getNearbyPois } from "@/lib/db/queries/pois";
 import { getRemarksByPoiIds } from "@/lib/db/queries/remarks";
 import { z } from "zod";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("remarks");
 
 const querySchema = z.object({
   lat: z.coerce.number().min(-90).max(90),
@@ -31,25 +34,12 @@ export async function GET(request: NextRequest) {
     const poiIds = nearbyPois.map((poi) => poi.id);
     const remarksData = await getRemarksByPoiIds(poiIds);
 
-    const remarksWithPoi = remarksData.map((remark) => ({
-      id: remark.id,
-      poiId: remark.poiId,
-      title: remark.title,
-      teaser: remark.teaser,
-      content: remark.content,
-      localTip: remark.localTip,
-      durationSeconds: remark.durationSeconds,
-      audioUrl: remark.audioUrl,
-      createdAt: remark.createdAt,
-      poi: remark.poi,
-    }));
-
     return NextResponse.json({
-      remarks: remarksWithPoi,
-      total: remarksWithPoi.length,
+      remarks: remarksData,
+      total: remarksData.length,
     });
   } catch (error) {
-    console.error("Error fetching remarks:", error);
+    log.error("Error fetching remarks:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

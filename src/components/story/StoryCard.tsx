@@ -2,13 +2,13 @@
 
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
-import { GlassPill } from "@/components/ui";
-import type { Remark, Poi, CategorySlug } from "@/types";
-import { CATEGORY_COLORS } from "@/types";
+import { GlassPill } from "@/components/ui/GlassPill";
+import type { Remark, Poi, CategorySlug, Category } from "@/types/api";
+import { CATEGORY_COLORS } from "@/types/api";
 import { springTransitions } from "@/lib/ui/animations";
 
 interface StoryCardProps {
-  remark: Remark & { poi: Poi };
+  remark: Remark & { poi: Poi & { category?: Category } };
   onNavigate?: () => void;
   onRegenerate?: () => void;
   isRegenerating?: boolean;

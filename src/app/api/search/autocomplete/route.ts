@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchAutocomplete } from "@/lib/search/typesense";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("autocomplete");
 
 /**
  * Handles autocomplete requests for the search bar.
@@ -24,7 +27,7 @@ export async function GET(request: NextRequest) {
     const suggestions = await searchAutocomplete(q, location);
     return NextResponse.json({ suggestions });
   } catch (error) {
-    console.error("[autocomplete] Error:", error);
+    log.error("Error:", error);
     return NextResponse.json({ suggestions: [] });
   }
 }

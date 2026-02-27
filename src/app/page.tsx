@@ -11,14 +11,16 @@ import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
 import { useSearch } from "@/hooks/useSearch";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { Remark, Poi } from "@/types";
+import type { Remark, Poi, Category } from "@/types/api";
 import type { SearchResult, ExternalPOI, ViewportBounds } from "@/lib/search/types";
 import { haversineDistance } from "@/lib/geo/distance";
 import { springTransitions } from "@/lib/ui/animations";
 
 type SheetMode = "story" | "search" | "poi" | null;
 
-function remarkPoiToExternalPOI(poi: Poi): ExternalPOI {
+type PoiWithCat = Poi & { category?: Category };
+
+function remarkPoiToExternalPOI(poi: PoiWithCat): ExternalPOI {
   const tags = (poi.osmTags ?? {}) as Record<string, string>;
   return {
     id: poi.id,
@@ -46,7 +48,7 @@ interface ViewportCenter {
 }
 
 export default function Home() {
-  const [selectedRemark, setSelectedRemark] = useState<(Remark & { poi: Poi }) | null>(null);
+  const [selectedRemark, setSelectedRemark] = useState<(Remark & { poi: PoiWithCat }) | null>(null);
   const [selectedPoi, setSelectedPoi] = useState<ExternalPOI | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
@@ -136,7 +138,7 @@ export default function Home() {
     };
   }, [selectedRemark]);
 
-  const handlePinClick = useCallback((remark: Remark & { poi: Poi }) => {
+  const handlePinClick = useCallback((remark: Remark & { poi: PoiWithCat }) => {
     setSelectedRemark(remark);
     setSheetMode("story");
     setSheetOpen(true);
@@ -281,7 +283,7 @@ export default function Home() {
         cuisine: result.cuisine,
         hasWifi: result.hasWifi,
         hasOutdoorSeating: result.hasOutdoorSeating,
-        source: result.source === "obelisk-db" ? "obelisk-db" : "overpass",
+        source: "overpass",
       };
       setSelectedPoi(externalPoi);
       setSelectedRemark(null);

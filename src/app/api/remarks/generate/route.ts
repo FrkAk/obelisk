@@ -5,8 +5,13 @@ import { db } from "@/lib/db/client";
 import { pois, remarks, categories } from "@/lib/db/schema";
 import { eq, isNull, and, gte, lte } from "drizzle-orm";
 import { generateStory } from "@/lib/ai/storyGenerator";
+import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
+import { insertRemark } from "@/lib/db/queries/remarks";
 import { z } from "zod";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("generate");
 
 const bodySchema = z.object({
   lat: z.coerce.number().min(-90).max(90),
@@ -64,6 +69,7 @@ export async function POST(request: NextRequest) {
         address: pois.address,
         wikipediaUrl: pois.wikipediaUrl,
         osmTags: pois.osmTags,
+        profile: pois.profile,
         latitude: pois.latitude,
         longitude: pois.longitude,
         categoryName: categories.name,
@@ -92,6 +98,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    let skippedCount = 0;
     const generatedRemarks: Array<{
       id: string;
       poiId: string;
@@ -113,27 +120,47 @@ export async function POST(request: NextRequest) {
 
     for (const poi of poisWithoutRemarks) {
       try {
-        const story = await generateStory({
-          name: poi.name,
+        const profile = (poi.profile as import("@/types").PoiProfile | null) ?? null;
+        const storyCtx: StoryPoiContext = {
+          poi: {
+            id: poi.id,
+            osmId: null,
+            name: poi.name,
+            categoryId: null,
+            regionId: null,
+            latitude: poi.latitude,
+            longitude: poi.longitude,
+            address: poi.address,
+            locale: "de-DE",
+            osmType: null,
+            osmTags: poi.osmTags,
+            profile,
+            wikipediaUrl: poi.wikipediaUrl,
+            imageUrl: null,
+            embedding: null,
+            searchVector: null,
+            createdAt: null,
+            updatedAt: null,
+          },
+          categorySlug: poi.categorySlug ?? "hidden",
           categoryName: poi.categoryName || "Hidden Gems",
-          address: poi.address,
-          latitude: poi.latitude,
-          longitude: poi.longitude,
-          wikipediaUrl: poi.wikipediaUrl,
-          osmTags: poi.osmTags,
-        });
+          profile,
+          tags: [],
+        };
 
-        const [insertedRemark] = await db
-          .insert(remarks)
-          .values({
-            poiId: poi.id,
-            title: story.title.slice(0, 100),
-            teaser: story.teaser.slice(0, 100),
-            content: story.content,
-            localTip: story.localTip,
-            durationSeconds: story.durationSeconds,
-          })
-          .returning();
+        const story = await generateStory(storyCtx);
+
+        if (!story) {
+          log.info(`Skipped "${poi.name}" — insufficient data`);
+          skippedCount++;
+          continue;
+        }
+
+        const insertedRemark = await insertRemark({
+          poiId: poi.id,
+          locale: "de-DE",
+          story,
+        });
 
         generatedRemarks.push({
           id: insertedRemark.id,
@@ -156,18 +183,22 @@ export async function POST(request: NextRequest) {
 
         await new Promise((r) => setTimeout(r, 300));
       } catch (error) {
-        console.error(`Failed to generate story for ${poi.name}:`, error);
+        log.error(`Failed to generate story for ${poi.name}:`, error);
       }
     }
 
     return NextResponse.json({
       generated: generatedRemarks.length,
+      skipped: skippedCount,
       remarks: generatedRemarks,
     });
   } catch (error) {
-    console.error("Error generating remarks:", error);
+    log.error("Error generating remarks:", error);
     return NextResponse.json(
-      { error: "Failed to generate stories", details: error instanceof Error ? error.message : "Unknown error" },
+      {
+        error: "Failed to generate stories",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }

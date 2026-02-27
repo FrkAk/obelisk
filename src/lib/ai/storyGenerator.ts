@@ -1,94 +1,35 @@
 import { generateText } from "./ollama";
 import { detectLocale, buildLanguagePrompt } from "./localization";
 import type { LocaleInfo } from "./localization";
-import type { WebsiteContent } from "@/lib/web/scraper";
-import type { WebSearchContext } from "@/lib/web/webSearch";
+import type { Poi, Tag, PoiProfile, ContactInfo } from "@/types";
+import { createLogger } from "@/lib/logger";
 
-interface PoiContext {
-  name: string;
+const log = createLogger("storyGenerator");
+
+export interface StoryPoiContext {
+  poi: Poi;
+  categorySlug: string;
   categoryName: string;
-  address?: string | null;
-  latitude?: number;
-  longitude?: number;
-  wikipediaUrl?: string | null;
-  osmTags?: Record<string, string> | null;
+  profile: PoiProfile | null;
+  tags: Tag[];
+  contactInfo?: ContactInfo | null;
 }
 
-interface EnhancedPoiContext extends PoiContext {
-  websiteContent?: WebsiteContent | null;
-  webSearchContext?: WebSearchContext | null;
-}
-
-interface GeneratedStory {
+export interface GeneratedStory {
   title: string;
   teaser: string;
   content: string;
   localTip: string;
   durationSeconds: number;
+  confidence: "high" | "medium" | "low";
+  modelId: string;
+  contextSources: Record<string, unknown>;
 }
 
 interface CategoryPersona {
   voice: string;
   perspective: string;
   tipStyle: string;
-}
-
-interface ConfidenceSignals {
-  level: "high" | "medium" | "low";
-  hasWebsite: boolean;
-  hasPhone: boolean;
-  hasOpeningHours: boolean;
-  hasRichContent: boolean;
-  hasWebSearchResults: boolean;
-  hasScrapedWebContent: boolean;
-  concerns: string[];
-}
-
-function assessConfidence(
-  osmTags?: Record<string, string> | null,
-  websiteContent?: WebsiteContent | null,
-  webSearchContext?: WebSearchContext | null
-): ConfidenceSignals {
-  const concerns: string[] = [];
-
-  const hasWebsite = !!(
-    osmTags?.website ||
-    osmTags?.["contact:website"] ||
-    (websiteContent && !websiteContent.error)
-  );
-  const hasPhone = !!(osmTags?.phone || osmTags?.["contact:phone"] || osmTags?.["contact:mobile"]);
-  const hasOpeningHours = !!osmTags?.opening_hours;
-  const hasRichContent = !!(
-    websiteContent &&
-    !websiteContent.error &&
-    websiteContent.mainContent &&
-    websiteContent.mainContent.length > 100
-  );
-  const hasWebSearchResults = !!(webSearchContext && webSearchContext.results.length > 0);
-  const hasScrapedWebContent = !!(
-    webSearchContext &&
-    webSearchContext.scrapedContent &&
-    webSearchContext.scrapedContent.length > 0
-  );
-
-  if (!hasWebsite) concerns.push("no website found");
-  if (!hasPhone) concerns.push("no contact info");
-  if (!hasOpeningHours) concerns.push("hours unknown");
-
-  let score = 0;
-  if (hasWebsite) score += 2;
-  if (hasPhone) score += 1;
-  if (hasOpeningHours) score += 1;
-  if (hasRichContent) score += 2;
-  if (hasWebSearchResults) score += 2;
-  if (hasScrapedWebContent) score += 1;
-
-  let level: "high" | "medium" | "low";
-  if (score >= 4) level = "high";
-  else if (score >= 2) level = "medium";
-  else level = "low";
-
-  return { level, hasWebsite, hasPhone, hasOpeningHours, hasRichContent, hasWebSearchResults, hasScrapedWebContent, concerns };
 }
 
 const CATEGORY_PERSONAS: Record<string, CategoryPersona> = {
@@ -104,7 +45,7 @@ const CATEGORY_PERSONAS: Record<string, CategoryPersona> = {
   },
   art: {
     voice: "You're the artsy friend who sees beauty everywhere and knows the local creative scene inside out. You appreciate both classic masterpieces and street art, and you understand what makes a space culturally significant.",
-    perspective: "Focus on the artistic and creative aspects - the aesthetic, the cultural value, what makes it visually or artistically special. Speak like you're sharing a gallery discovery.",
+    perspective: "Focus on the artistic and creative aspects - the aesthetic, the cultural value, what makes it visually or artistically special.",
     tipStyle: "Share an art lover's tip - best lighting time, hidden details to notice, or how to truly appreciate what's here.",
   },
   nature: {
@@ -134,38 +75,38 @@ const CATEGORY_PERSONAS: Record<string, CategoryPersona> = {
   },
   shopping: {
     voice: "You're the fashion-forward friend who knows every boutique, market, and hidden shop. You love finding unique items and know where to get the best deals.",
-    perspective: "Focus on what makes this shop unique - the vibe, the selection, the experience. What would someone find here that they can't get elsewhere?",
-    tipStyle: "Share a shopper's tip - best time to visit for sales, unique items to look for, or nearby shops worth combining into a trip.",
+    perspective: "Focus on what makes this shop unique - the vibe, the selection, the experience.",
+    tipStyle: "Share a shopper's tip - best time to visit for sales, unique items to look for, or nearby shops worth combining.",
   },
   nightlife: {
     voice: "You're the friend who knows every bar, club, and late-night spot. You know which places have the best cocktails, the liveliest crowds, and the hidden speakeasies.",
     perspective: "Focus on the atmosphere, the drinks, the crowd, and what makes this spot stand out after dark.",
     tipStyle: "Share a nightlife insider tip - best nights to go, signature drinks, or how to get past the door.",
   },
-  sports: {
-    voice: "You're the athletic friend who knows every gym, stadium, and sports venue. You're always up for a game and know where to watch or play.",
-    perspective: "Focus on the sports experience - the facilities, the energy, the community. What makes this place great for athletes or fans?",
-    tipStyle: "Share a sports tip - best times for open sessions, what to bring, or upcoming events to catch.",
-  },
-  health: {
-    voice: "You're the practical friend who always knows a good doctor, the nearest pharmacy, and which hospital has the shortest wait. You're calm in emergencies.",
-    perspective: "Focus on practical info - what services are available, how accessible it is, and any notable specialties.",
-    tipStyle: "Share a practical health tip - best times to avoid crowds, whether appointments are needed, or nearby alternatives.",
-  },
   transport: {
-    voice: "You're the friend who knows every shortcut, every transit line, and always gets where they're going efficiently. You've memorized the train schedule.",
-    perspective: "Focus on connectivity and convenience - what routes pass through here, how it connects to the rest of the city.",
-    tipStyle: "Share a commuter's tip - which platform to use, connections to catch, or time-saving tricks.",
+    voice: "You're the friend who knows every bus line, metro connection, and shortcut through the city. You appreciate the engineering behind transit systems and know which stations have stories to tell.",
+    perspective: "Focus on the transit experience - the connections, the architecture of the station, its role in the city's mobility. What makes this stop more than just a place to wait?",
+    tipStyle: "Share a transit insider tip - best connections, off-peak times, or interesting features of this station.",
   },
   education: {
-    voice: "You're the intellectually curious friend who's always learning something new. You know every library, lecture hall, and study spot in town.",
-    perspective: "Focus on the learning environment - the resources, the atmosphere, the history of the institution.",
-    tipStyle: "Share an insider tip - public lectures, library hours, or hidden study spots worth checking out.",
+    voice: "You're the intellectually curious friend who loves campus walks and library visits. You know which institutions shaped the city's academic identity and where knowledge comes alive.",
+    perspective: "Focus on the academic and intellectual significance - what's taught or researched here, who walked these halls, what makes this institution special.",
+    tipStyle: "Share an education insider tip - public lectures, library access, campus tours, or notable spots to visit.",
+  },
+  health: {
+    voice: "You're the wellness-minded friend who knows every spa, clinic, and healing spot in town. You value places that care for body and mind.",
+    perspective: "Focus on the care and wellness aspect - what services are offered, the atmosphere, the history of healing at this location.",
+    tipStyle: "Share a practical health tip - booking advice, what to expect, or hidden wellness features.",
+  },
+  sports: {
+    voice: "You're the sports enthusiast who knows every pitch, pool, and arena. You live for match days and morning runs, and you know the stories behind the venues.",
+    perspective: "Focus on the sporting experience - the atmosphere, the history of competitions here, what activities are available.",
+    tipStyle: "Share a sports insider tip - best times to visit, equipment rental, or the best spot to watch a match.",
   },
   services: {
-    voice: "You're the organized friend who knows exactly which bank has no lines, which post office is fastest, and where to find every public service.",
-    perspective: "Focus on practical utility - what services are offered, efficiency, and any notable features of the building or institution.",
-    tipStyle: "Share a practical tip - best times to visit, what documents to bring, or how to avoid the queue.",
+    voice: "You're the practical friend who knows how the city works. You've navigated every bureaucracy and know which service points have surprising histories.",
+    perspective: "Focus on what makes this service point noteworthy beyond its function - its architecture, history, or role in the community.",
+    tipStyle: "Share a practical tip - best times to avoid queues, online alternatives, or an interesting historical detail.",
   },
 };
 
@@ -175,356 +116,472 @@ const DEFAULT_PERSONA: CategoryPersona = {
   tipStyle: "Share a practical local tip for visiting this place.",
 };
 
-function getPersonaForCategory(categoryName: string): CategoryPersona {
-  const normalized = categoryName.toLowerCase();
-
-  if (normalized.includes("food") || normalized.includes("cafe") || normalized.includes("restaurant")) {
-    return CATEGORY_PERSONAS.food;
-  }
-  if (normalized.includes("nightlife") || normalized.includes("bar") || normalized.includes("pub") || normalized.includes("club")) {
-    return CATEGORY_PERSONAS.nightlife;
-  }
-  if (normalized.includes("shopping") || normalized.includes("shop")) {
-    return CATEGORY_PERSONAS.shopping;
-  }
-  if (normalized.includes("sports") || normalized.includes("gym") || normalized.includes("fitness") || normalized.includes("stadium")) {
-    return CATEGORY_PERSONAS.sports;
-  }
-  if (normalized.includes("health") || normalized.includes("hospital") || normalized.includes("pharmacy")) {
-    return CATEGORY_PERSONAS.health;
-  }
-  if (normalized.includes("transport") || normalized.includes("station") || normalized.includes("parking")) {
-    return CATEGORY_PERSONAS.transport;
-  }
-  if (normalized.includes("education") || normalized.includes("school") || normalized.includes("university")) {
-    return CATEGORY_PERSONAS.education;
-  }
-  if (normalized.includes("services") || normalized.includes("bank") || normalized.includes("post")) {
-    return CATEGORY_PERSONAS.services;
-  }
-  if (normalized.includes("history") || normalized.includes("historic")) {
-    return CATEGORY_PERSONAS.history;
-  }
-  if (normalized.includes("art") || normalized.includes("museum") || normalized.includes("gallery")) {
-    return CATEGORY_PERSONAS.art;
-  }
-  if (normalized.includes("nature") || normalized.includes("park") || normalized.includes("garden")) {
-    return CATEGORY_PERSONAS.nature;
-  }
-  if (normalized.includes("architecture") || normalized.includes("building")) {
-    return CATEGORY_PERSONAS.architecture;
-  }
-  if (normalized.includes("view") || normalized.includes("scenic")) {
-    return CATEGORY_PERSONAS.views;
-  }
-  if (normalized.includes("culture") || normalized.includes("theatre") || normalized.includes("theater")) {
-    return CATEGORY_PERSONAS.culture;
-  }
-  if (normalized.includes("hidden")) {
-    return CATEGORY_PERSONAS.hidden;
-  }
-
-  return CATEGORY_PERSONAS[normalized] || DEFAULT_PERSONA;
+function getPersona(categorySlug: string): CategoryPersona {
+  return CATEGORY_PERSONAS[categorySlug] ?? DEFAULT_PERSONA;
 }
 
-function buildHonestyGuidelines(confidence: ConfidenceSignals): string {
-  if (confidence.level === "low") {
+/**
+ * Scores POI data richness to determine story generation confidence level.
+ * Based on JSONB profile completeness: keywords, products, summary, and tags.
+ *
+ * Args:
+ *     ctx: Full POI context with JSONB profile and metadata.
+ *
+ * Returns:
+ *     Confidence level: "high" (score >= 5), "medium" (>= 2), or "low".
+ */
+function assessConfidence(ctx: StoryPoiContext): "high" | "medium" | "low" {
+  let score = 0;
+  const profile = ctx.profile;
+
+  if (profile) {
+    if ((profile.keywords?.length ?? 0) >= 3) score += 2;
+    else if ((profile.keywords?.length ?? 0) > 0) score += 1;
+
+    if ((profile.products?.length ?? 0) >= 3) score += 2;
+    else if ((profile.products?.length ?? 0) > 0) score += 1;
+
+    if (profile.summary) score += 2;
+    if (Object.keys(profile.attributes ?? {}).length > 0) score += 1;
+  }
+
+  if (ctx.tags.length > 0) score += 1;
+  if (ctx.contactInfo != null) score += 1;
+  if (ctx.poi.wikipediaUrl) score += 1;
+
+  if (score >= 5) return "high";
+  if (score >= 2) return "medium";
+  return "low";
+}
+
+/**
+ * Builds a metadata object summarizing the data sources used for story generation.
+ *
+ * Args:
+ *     ctx: Full POI context with JSONB profile and metadata.
+ *
+ * Returns:
+ *     Metadata record with profile stats, tag counts, and flags.
+ */
+function buildContextSources(ctx: StoryPoiContext): Record<string, unknown> {
+  const profile = ctx.profile;
+  return {
+    categorySlug: ctx.categorySlug,
+    keywordCount: profile?.keywords?.length ?? 0,
+    productCount: profile?.products?.length ?? 0,
+    hasSummary: !!profile?.summary,
+    enrichmentSource: profile?.enrichmentSource ?? "none",
+    attributeCount: Object.keys(profile?.attributes ?? {}).length,
+    tagCount: ctx.tags.length,
+    hasContactInfo: ctx.contactInfo != null,
+    hasWikipedia: !!ctx.poi.wikipediaUrl,
+  };
+}
+
+function buildHonestyGuidelines(confidence: "high" | "medium" | "low"): string {
+  if (confidence === "low") {
     return `HONESTY REQUIREMENT: You have very limited information about this place. Be upfront about it:
 - Say something like "I haven't checked this place out myself" or "I don't have much info on this one"
 - DO NOT pretend you know things you don't
 - DO NOT make up positive claims
-- It's okay to say "might be worth checking out" instead of "you'll love it"
-- If you can't recommend it confidently, say so
-- Concerns to mention: ${confidence.concerns.join(", ")}`;
+- It's okay to say "might be worth checking out" instead of "you'll love it"`;
   }
 
-  if (confidence.level === "medium") {
+  if (confidence === "medium") {
     return `HONESTY REQUIREMENT: You have some basic information but not a complete picture:
 - Be genuine - share what you know, admit what you don't
-- Don't oversell - phrases like "seems interesting" are better than "amazing"
-- If there are gaps in info, acknowledge them naturally
-- A good friend doesn't hype up places they haven't properly vetted`;
+- Don't oversell - phrases like "seems interesting" are better than "amazing"`;
   }
 
   return `HONESTY REQUIREMENT: You have good information to work with, but still:
 - Only share what the data supports
 - Be enthusiastic if warranted, but don't exaggerate
-- If something seems off or concerning, mention it
 - Your reputation depends on being trustworthy, not just positive`;
 }
 
-function buildBasicPrompt(poi: PoiContext, additionalInfo: string, confidence: ConfidenceSignals, locale: LocaleInfo): string {
-  const persona = getPersonaForCategory(poi.categoryName);
-  const honestyGuidelines = buildHonestyGuidelines(confidence);
-  const languagePrompt = buildLanguagePrompt(locale);
+/**
+ * Builds a human-readable context string from a JSONB PoiProfile for the LLM prompt.
+ * Formats keywords, products, summary, subtype, and attributes into a newline-separated string.
+ *
+ * Args:
+ *     profile: JSONB profile data from the pois table.
+ *
+ * Returns:
+ *     Newline-separated profile summary string for the LLM prompt.
+ */
+function buildProfileContext(profile: PoiProfile | null): string {
+  if (!profile) return "No profile data available.";
 
-  return `${persona.voice}
+  const parts: string[] = [];
 
-IMPORTANT - YOUR REPUTATION MATTERS: You're known for being honest and trustworthy. Friends come to you because you tell it like it is - you don't recommend places you haven't vetted, and you're upfront when you don't know something.
+  if (profile.subtype) parts.push(`Type: ${profile.subtype}`);
+  if (profile.summary) parts.push(`Description: ${profile.summary}`);
+  if (profile.keywords && profile.keywords.length > 0) parts.push(`Keywords: ${profile.keywords.join(", ")}`);
+  if (profile.products && profile.products.length > 0) parts.push(`Products/Services: ${profile.products.join(", ")}`);
 
-Place: {name}
-Category: {category}
-Address: {address}
-Additional info: {info}
+  for (const [key, value] of Object.entries(profile.attributes ?? {})) {
+    if (value != null && value !== "") {
+      if (Array.isArray(value)) {
+        if (value.length > 0) parts.push(`${key}: ${value.join(", ")}`);
+      } else {
+        parts.push(`${key}: ${String(value)}`);
+      }
+    }
+  }
 
-${honestyGuidelines}
-
-${languagePrompt}
-
-${persona.perspective}
-
-Write:
-1. TITLE: A honest title - intriguing but not misleading (3-5 words)
-2. TEASER: A hook that reflects your actual knowledge level (3-5 words)
-3. STORY: A 40-word honest take in your voice. If you lack info, say so naturally. Don't fake enthusiasm. A real friend would say "I haven't been here yet, but..." rather than pretending to know.
-4. LOCAL_TIP: ${persona.tipStyle} - but only if you actually have useful advice. If not, give a general tip or say to check their website/call ahead.
-
-Format your response EXACTLY like this:
-TITLE: [your title]
-TEASER: [your teaser]
-STORY: [your story]
-LOCAL_TIP: [your tip]`
-    .replace("{name}", poi.name)
-    .replace("{category}", poi.categoryName)
-    .replace("{address}", poi.address || "the neighborhood")
-    .replace("{info}", additionalInfo);
+  return parts.length > 0 ? parts.join("\n") : "Limited profile data available.";
 }
 
-function buildEnhancedPrompt(
-  poi: EnhancedPoiContext,
-  websiteInfo: string,
-  webResearchInfo: string,
-  additionalInfo: string,
-  confidence: ConfidenceSignals,
-  locale: LocaleInfo
+const CATEGORY_FEW_SHOT: Partial<Record<string, string>> = {
+  shopping: `TITLE: The Vintage Goldmine
+TEASER: Vintage finds, no crowds
+STORY: On a quiet Gasse off the main drag, this Laden has the kind of curated selection you won't find in any Kaufhaus. The owner knows every piece by heart and the vibe is relaxed — no pushy sales, just good finds.
+LOCAL_TIP: Go on weekday mornings when new stock hits the shelves. Ask about their alterations service.`,
+  food: `TITLE: Honest Bavarian Comfort
+TEASER: Schnitzel done right
+STORY: This Wirtshaus does one thing and does it well — proper Bavarian comfort food without the tourist markup. The Schnitzel is hand-pounded and the Kartoffelsalat is made fresh. Nothing fancy, just gemütlich and real.
+LOCAL_TIP: Skip the English menu and point at what the Stammgäste are having. The Tagesgericht is always the move.`,
+  culture: `TITLE: The Quiet Stage
+TEASER: Seats so close you feel it
+STORY: While everyone queues for the big Staatstheater, this kleine Bühne puts on shows that actually surprise you. The intimate space means every seat is a good one, and the crowd is a mix of students and regulars who know what's up.
+LOCAL_TIP: Check their Abendkasse — last-minute tickets are half price and almost always available on weeknights.`,
+  history: `TITLE: Walls That Remember
+TEASER: Centuries in one courtyard
+STORY: Most people walk right past this unassuming Altbau without a second glance. But these walls have seen centuries — from medieval Handwerker to wartime shelter. The courtyard alone tells more stories than most museums in the Altstadt.
+LOCAL_TIP: Visit at dusk when the courtyard is empty and the old Laternen flicker on. That's when you feel the history.`,
+  art: `TITLE: Color on Every Corner
+TEASER: Watch artists at work
+STORY: This Atelier doubles as gallery and workspace, and you can watch Künstler at work most afternoons. The rotating exhibits favor local talent over big names, and the vibe is refreshingly ungezwungen — no velvet ropes here.
+LOCAL_TIP: First Thursday each month is Vernissage night — free wine, the artists are there, and it's genuinely good.`,
+};
+
+/**
+ * Builds the full LLM prompt for story generation using persona, profile, and locale.
+ *
+ * Args:
+ *     ctx: Full POI context with profile, tags, and contact info.
+ *     confidence: Data richness confidence level.
+ *     locale: Detected locale for language and cultural flavor.
+ *
+ * Returns:
+ *     Assembled prompt string for the LLM.
+ */
+function buildPrompt(
+  ctx: StoryPoiContext,
+  confidence: "high" | "medium" | "low",
+  locale: LocaleInfo,
 ): string {
-  const persona = getPersonaForCategory(poi.categoryName);
-  const honestyGuidelines = buildHonestyGuidelines(confidence);
+  const persona = getPersona(ctx.categorySlug);
+  const profileContext = buildProfileContext(ctx.profile);
+  const honesty = buildHonestyGuidelines(confidence);
   const languagePrompt = buildLanguagePrompt(locale);
+  const tagNames = ctx.tags.map((t) => t.name).join(", ");
+  const fewShot = CATEGORY_FEW_SHOT[ctx.categorySlug] ?? CATEGORY_FEW_SHOT["food"]!;
 
   return `${persona.voice}
 
-You're a LOCAL who actually lives here. You speak from personal experience and neighborhood knowledge, NOT like a travel website or review aggregator.
+IMPORTANT - YOUR REPUTATION MATTERS: You're known for being honest and trustworthy. Friends come to you because you tell it like it is.
 
-Place: {name}
-Category: {category}
-Address: {address}
+Place: ${ctx.poi.name}
+Category: ${ctx.categoryName}
+Address: ${ctx.poi.address ?? "the neighborhood"}
+Tags: ${tagNames || "none"}
 
-BACKGROUND INFO (use to inform your perspective, but DON'T quote directly):
-{websiteInfo}
-{webResearch}
-{info}
+STRUCTURED PROFILE DATA:
+${profileContext}
 
-${honestyGuidelines}
+${honesty}
 
 ${languagePrompt}
 
 ${persona.perspective}
 
-CRITICAL RULES FOR SOUNDING LOCAL:
+CRITICAL RULES:
 - NEVER cite review scores, star ratings, or "X reviews" - locals don't talk like that
 - NEVER quote website marketing copy or taglines
 - DO talk about the vibe, atmosphere, what makes it special to YOU
-- DO mention specific things you'd notice walking in (decor, smell, crowd)
-- DO share personal opinions: "I love...", "Not my favorite but...", "My friends swear by..."
 - Sound like you're texting a friend, not writing a Tripadvisor review
+- Write in plain text only. No asterisks, no bold, no italics, no markdown formatting.
+- NEVER use these filler phrases: "you know?", "not flashy", "tucked away", "a real find", "a real gem", "a proper"
+- NEVER start with "Okay, so"
+- Each story must sound fresh — avoid repeating patterns from other stories
+
+GROUNDING: Only mention specific dishes, products, or services that appear in the STRUCTURED PROFILE DATA above. Do not invent menu items, nearby businesses, or events.
 
 Write:
 1. TITLE: Catchy, local-feeling (3-5 words)
-2. TEASER: Hook that sounds personal (3-5 words)
-3. STORY: 60 words MAX. Talk like you've actually been there. Share the vibe, your honest take, what you'd tell a friend visiting.
-4. LOCAL_TIP: ${persona.tipStyle}
+2. TEASER: Write an ORIGINAL short hook (3-7 words) specific to THIS place.
+   Do NOT use generic phrases. Make it specific to what makes this place unique.
+   Bad: "Where locals actually go", "A proper local spot", "Worth the detour"
+   Good: "Schnitzel worth the queue", "Books & coffee since 1892", "Bavaria's tiniest gallery"
+3. STORY: 2-3 SHORT sentences. Be concise.
+4. LOCAL_TIP: 1-2 sentences. ${persona.tipStyle}
+   IMPORTANT: Do NOT start with "If you're". Vary your opener.
+   Do NOT invent staff names, specific dishes, or nearby businesses not in the data above.
+   Only recommend items/services explicitly listed in the STRUCTURED PROFILE DATA.
 
-Format your response EXACTLY like this:
+Here is an example of EXACTLY the voice, length, and format I want:
+
+${fewShot}
+
+Now write yours for "${ctx.poi.name}". Format your response EXACTLY like this:
 TITLE: [your title]
 TEASER: [your teaser]
 STORY: [your story]
-LOCAL_TIP: [your tip]`
-    .replace("{name}", poi.name)
-    .replace("{category}", poi.categoryName)
-    .replace("{address}", poi.address || "the neighborhood")
-    .replace("{websiteInfo}", websiteInfo)
-    .replace("{webResearch}", webResearchInfo)
-    .replace("{info}", additionalInfo);
+LOCAL_TIP: [your tip]`;
+}
+
+const BANNED_TEASERS = [
+  "seriously",
+  "you need to",
+  "trust me",
+  "this place is",
+  "where locals actually",
+  "a proper local",
+  "munich's best-kept",
+  "off the beaten",
+  "worth the detour",
+  "not in the guidebooks",
+  "a neighborhood favorite",
+  "the real deal",
+];
+
+const FALLBACK_TEASERS_BY_CATEGORY: Record<string, string[]> = {
+  food: ["Taste this", "Fork-ready", "Table for one?", "Menu highlight"],
+  history: ["Time-stamped", "Past meets present", "History underfoot", "Echoes remain"],
+  shopping: ["Shelf life", "Browse this", "Find of the day", "Curated picks"],
+  nightlife: ["After hours", "Night moves", "Late-night pick", "Dark horse"],
+  art: ["Eye candy", "Canvas & more", "Gallery worthy", "Creative corner"],
+  culture: ["Stage-side", "Scene stealer", "Curtain up", "Culture fix"],
+  health: ["Self-care stop", "Wellness check", "Healing hands", "Care spot"],
+  sports: ["Game on", "On the pitch", "Athletic pick", "Sweat spot"],
+  nature: ["Green escape", "Fresh air fix", "Leaf it to us", "Nature break"],
+  architecture: ["Built different", "Stone & story", "Design eye", "Facade first"],
+  views: ["Eyes up", "View finder", "Scenic stop", "Panorama pick"],
+  hidden: ["Stumble upon this", "Off-radar", "Detour worthy", "Secret spot"],
+  education: ["Brain fuel", "Learn here", "Knowledge nook", "Study break"],
+  services: ["Local essential", "City staple", "Need this", "Go-to spot"],
+  transport: ["Hub life", "Transit gem", "Connection point", "On the move"],
+};
+
+const GENERIC_FALLBACKS = ["Tap to discover", "Check this out", "Spot this", "Local pick"];
+
+/**
+ * Selects a random fallback teaser from the category-specific pool.
+ *
+ * Args:
+ *     categorySlug: Category slug for pool selection.
+ *
+ * Returns:
+ *     Random fallback teaser string.
+ */
+function getRandomFallbackTeaser(categorySlug: string): string {
+  const pool = FALLBACK_TEASERS_BY_CATEGORY[categorySlug] ?? GENERIC_FALLBACKS;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 /**
- * Generates a story for a POI using the LLM with category-specific persona.
- * Includes honesty assessment based on available data.
+ * Strips markdown formatting from text (bold, italic, headers).
  *
  * Args:
- *     poi: Context about the POI.
+ *     text: Raw text possibly containing markdown.
  *
  * Returns:
- *     The generated story with title, teaser, content, and local tip.
+ *     Plain text with markdown formatting removed.
  */
-export async function generateStory(poi: PoiContext): Promise<GeneratedStory> {
-  const additionalInfo = buildAdditionalInfo(poi.osmTags);
-  const confidence = assessConfidence(poi.osmTags, null);
-  const locale = await detectLocale(poi.address, poi.latitude, poi.longitude);
-
-  console.log(`[storyGenerator] Confidence for "${poi.name}": ${confidence.level} (concerns: ${confidence.concerns.join(", ") || "none"})`);
-  console.log(`[storyGenerator] Locale: ${locale.country} (${locale.language})`);
-
-  const prompt = buildBasicPrompt(poi, additionalInfo, confidence, locale);
-
-  const response = await generateText(prompt);
-  return parseStoryResponse(response);
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
+    .replace(/_{1,3}([^_]+)_{1,3}/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/`([^`]+)`/g, "$1");
 }
 
 /**
- * Generates an enhanced story for a POI using website content, web search, and category-specific persona.
- * Includes honesty assessment based on available data.
+ * Truncates text to a maximum word count at a sentence boundary.
  *
  * Args:
- *     poi: Context about the POI including optional website content and web search context.
+ *     text: Text to truncate.
+ *     maxWords: Maximum number of words allowed.
  *
  * Returns:
- *     The generated story with title, teaser, content, and local tip.
+ *     Truncated text ending at a sentence boundary.
  */
-export async function generateEnhancedStory(poi: EnhancedPoiContext): Promise<GeneratedStory> {
-  const additionalInfo = buildAdditionalInfo(poi.osmTags);
-  const confidence = assessConfidence(poi.osmTags, poi.websiteContent, poi.webSearchContext);
-  const locale = await detectLocale(poi.address, poi.latitude, poi.longitude);
+function truncateAtSentence(text: string, maxWords: number): string {
+  const words = text.split(/\s+/);
+  if (words.length <= maxWords) return text;
 
-  console.log(`[storyGenerator] Confidence for "${poi.name}": ${confidence.level} (concerns: ${confidence.concerns.join(", ") || "none"})`);
-  console.log(`[storyGenerator] Locale: ${locale.country} (${locale.language})`);
-  console.log(`[storyGenerator] Web search: ${confidence.hasWebSearchResults ? "yes" : "no"}, Scraped: ${confidence.hasScrapedWebContent ? "yes" : "no"}`);
+  const truncated = words.slice(0, maxWords).join(" ");
+  const lastSentenceEnd = Math.max(
+    truncated.lastIndexOf("."),
+    truncated.lastIndexOf("!"),
+    truncated.lastIndexOf("?"),
+  );
 
-  const hasWebsiteInfo = poi.websiteContent &&
-    !poi.websiteContent.error &&
-    (poi.websiteContent.title || poi.websiteContent.description || poi.websiteContent.mainContent);
-
-  const hasWebResearch = poi.webSearchContext && poi.webSearchContext.results.length > 0;
-
-  if (!hasWebsiteInfo && !hasWebResearch) {
-    const prompt = buildBasicPrompt(poi, additionalInfo, confidence, locale);
-    const response = await generateText(prompt);
-    return parseStoryResponse(response);
+  if (lastSentenceEnd > truncated.length * 0.4) {
+    return truncated.slice(0, lastSentenceEnd + 1);
   }
-
-  const websiteInfo = hasWebsiteInfo
-    ? buildWebsiteInfoString(poi.websiteContent!)
-    : "No website info available";
-
-  const webResearchInfo = hasWebResearch
-    ? buildWebResearchString(poi.webSearchContext!)
-    : "No web research available";
-
-  const prompt = buildEnhancedPrompt(poi, websiteInfo, webResearchInfo, additionalInfo, confidence, locale);
-
-  const response = await generateText(prompt);
-  return parseStoryResponse(response);
+  return truncated + ".";
 }
 
-function buildAdditionalInfo(osmTags?: Record<string, string> | null): string {
-  if (!osmTags) return "No additional info";
+const BANNED_CONTENT_PHRASES = [
+  "you know?",
+  "you know,",
+  ", you know",
+  "not flashy",
+  "tucked away",
+  "a real find",
+  "a real gem",
+  "a proper gem",
+  "don't hesitate to ask",
+  "don't be afraid to ask",
+  "trust me,",
+  "Trust me,",
+];
 
-  const relevantTags = Object.entries(osmTags)
-    .filter(([key]) => !key.startsWith("addr:") && key !== "name" && !key.startsWith("contact:"))
-    .map(([key, value]) => `${key}: ${value}`)
-    .slice(0, 5);
-
-  return relevantTags.length > 0 ? relevantTags.join(", ") : "No additional info";
+/**
+ * Strips banned filler phrases from LLM-generated content and cleans up whitespace.
+ *
+ * Args:
+ *     content: Raw content string from LLM output.
+ *
+ * Returns:
+ *     Sanitized content with banned phrases removed and whitespace normalized.
+ */
+function sanitizeContent(content: string): string {
+  let result = content;
+  for (const phrase of BANNED_CONTENT_PHRASES) {
+    result = result.replaceAll(phrase, "");
+  }
+  return result.replace(/\s{2,}/g, " ").replace(/\s+([.,!?])/g, "$1").trim();
 }
 
-function buildWebsiteInfoString(content: WebsiteContent): string {
-  const parts: string[] = [];
-
-  if (content.title) {
-    parts.push(`Title: ${content.title}`);
+/**
+ * Sanitizes a teaser string by rejecting banned patterns and replacing with a category fallback.
+ *
+ * Args:
+ *     teaser: Raw teaser text from LLM output.
+ *     categorySlug: Category slug for fallback pool selection.
+ *
+ * Returns:
+ *     Sanitized teaser, replaced with a random category fallback if banned.
+ */
+function sanitizeTeaser(teaser: string, categorySlug: string): string {
+  const lower = teaser.toLowerCase().trim();
+  const isBanned = BANNED_TEASERS.some((b) => lower.startsWith(b));
+  if (isBanned) {
+    return getRandomFallbackTeaser(categorySlug);
   }
-  if (content.description) {
-    parts.push(`Description: ${content.description}`);
-  }
-  if (content.mainContent) {
-    parts.push(`Content: ${content.mainContent}`);
-  }
-
-  return parts.length > 0 ? parts.join("\n") : "No website info available";
+  return teaser;
 }
 
-const MAX_SNIPPET_LENGTH = 150;
-const MAX_SCRAPED_LENGTH = 200;
-const MAX_SEARCH_RESULTS = 3;
-
-function buildWebResearchString(context: WebSearchContext): string {
-  const parts: string[] = [];
-
-  if (context.results.length > 0) {
-    const snippets = context.results
-      .slice(0, MAX_SEARCH_RESULTS)
-      .map((r) => {
-        const truncatedSnippet = r.snippet.length > MAX_SNIPPET_LENGTH
-          ? r.snippet.slice(0, MAX_SNIPPET_LENGTH) + "..."
-          : r.snippet;
-        return `- ${r.title.slice(0, 50)}: ${truncatedSnippet}`;
-      })
-      .join("\n");
-    parts.push(`Web search results:\n${snippets}`);
-  }
-
-  if (context.scrapedContent && context.scrapedContent.length > 0) {
-    const scraped = context.scrapedContent
-      .slice(0, 2)
-      .filter((s) => s.content)
-      .map((s) => {
-        const title = (s.title || s.url).slice(0, 40);
-        const content = s.content!.slice(0, MAX_SCRAPED_LENGTH);
-        return `From ${title}: ${content}...`;
-      })
-      .join("\n");
-    parts.push(`\nDetailed content:\n${scraped}`);
-  }
-
-  return parts.length > 0 ? parts.join("\n") : "No web research available";
-}
-
-function parseStoryResponse(response: string): GeneratedStory {
+function parseStoryResponse(response: string, categorySlug: string): {
+  title: string;
+  teaser: string;
+  content: string;
+  localTip: string;
+  durationSeconds: number;
+} {
   const titleMatch = response.match(/TITLE:\s*(.+?)(?=\nTEASER:|$)/is);
   const teaserMatch = response.match(/TEASER:\s*(.+?)(?=\nSTORY:|$)/is);
   const storyMatch = response.match(/STORY:\s*(.+?)(?=\nLOCAL_TIP:|$)/is);
   const tipMatch = response.match(/LOCAL_TIP:\s*(.+?)$/is);
 
-  const content = storyMatch?.[1]?.trim() || response.slice(0, 300);
+  const rawContent = stripMarkdown(storyMatch?.[1]?.trim() || response.slice(0, 300));
+  const cleanContent = sanitizeContent(rawContent);
+  const content = truncateAtSentence(cleanContent, 100);
+  const rawTeaser = stripMarkdown(teaserMatch?.[1]?.trim() || "Tap to discover");
+  const teaser = sanitizeTeaser(rawTeaser, categorySlug);
+  const rawTitle = stripMarkdown(titleMatch?.[1]?.trim() || "A Hidden Story");
+  const rawTip = stripMarkdown(tipMatch?.[1]?.trim() || "Ask locals for more stories!");
+  const localTip = sanitizeContent(rawTip);
+
   const wordCount = content.split(/\s+/).length;
   const durationSeconds = Math.max(30, Math.min(90, Math.round(wordCount * 0.5 + 15)));
 
-  const title = (titleMatch?.[1]?.trim() || "A Hidden Story").slice(0, 100);
-  const teaser = (teaserMatch?.[1]?.trim() || "Tap to discover").slice(0, 100);
-
   return {
-    title,
-    teaser,
+    title: rawTitle.slice(0, 100),
+    teaser: teaser.slice(0, 100),
     content,
-    localTip: tipMatch?.[1]?.trim() || "Ask locals for more stories!",
+    localTip,
     durationSeconds,
   };
 }
 
 /**
- * Generates stories for multiple POIs with rate limiting.
+ * Generates a story for a POI using structured profile data and category-specific persona.
+ * Returns null when the POI has insufficient data for reliable story generation.
  *
  * Args:
- *     pois: Array of POI contexts.
+ *     ctx: Full POI context with profile, tags, cuisines, dishes, and contact info.
+ *     model: Ollama model ID to use (defaults to OLLAMA_MODEL env).
+ *
+ * Returns:
+ *     Generated story with confidence level, model ID, and context sources, or null if insufficient data.
+ */
+export async function generateStory(
+  ctx: StoryPoiContext,
+  model?: string,
+): Promise<GeneratedStory | null> {
+  const confidence = assessConfidence(ctx);
+  const hasKeywords = (ctx.profile?.keywords?.length ?? 0) > 0;
+  const hasProducts = (ctx.profile?.products?.length ?? 0) > 0;
+
+  if (confidence === "low" && !hasKeywords && !hasProducts) {
+    log.info(`Skipping "${ctx.poi.name}" — insufficient data for reliable story`);
+    return null;
+  }
+
+  const locale = await detectLocale(ctx.poi.address, ctx.poi.latitude, ctx.poi.longitude);
+  const usedModel = model ?? (process.env.OLLAMA_MODEL || "gemma3:4b-it-qat");
+
+  log.info(`Generating for "${ctx.poi.name}" | confidence: ${confidence} | locale: ${locale.country}`);
+
+  const prompt = buildPrompt(ctx, confidence, locale);
+  const response = await generateText(prompt, usedModel);
+  const parsed = parseStoryResponse(response, ctx.categorySlug);
+
+  return {
+    ...parsed,
+    confidence,
+    modelId: usedModel,
+    contextSources: buildContextSources(ctx),
+  };
+}
+
+/**
+ * Generates stories for multiple POIs sequentially with a delay between each.
+ * Skips POIs where generateStory returns null (insufficient data).
+ *
+ * Args:
+ *     contexts: Array of story POI contexts.
+ *     model: Ollama model ID.
  *     delayMs: Delay between requests in milliseconds.
  *
  * Returns:
- *     Array of generated stories with POI IDs.
+ *     Array of generated stories with POI IDs (excludes skipped POIs).
  */
 export async function generateStoriesBatch(
-  poisWithIds: Array<{ id: string; poi: PoiContext }>,
-  delayMs: number = 1000
+  contexts: Array<{ id: string; ctx: StoryPoiContext }>,
+  model?: string,
+  delayMs: number = 300,
 ): Promise<Array<{ poiId: string; story: GeneratedStory }>> {
   const results: Array<{ poiId: string; story: GeneratedStory }> = [];
 
-  for (const { id, poi } of poisWithIds) {
+  for (const { id, ctx } of contexts) {
     try {
-      const story = await generateStory(poi);
+      const story = await generateStory(ctx, model);
+      if (!story) {
+        log.info(`Skipped: ${ctx.poi.name} (insufficient data)`);
+        continue;
+      }
       results.push({ poiId: id, story });
-      console.log(`Generated story for: ${poi.name}`);
+      log.info(`Generated: ${ctx.poi.name}`);
     } catch (error) {
-      console.error(`Failed to generate story for ${poi.name}:`, error);
+      log.error(
+        `Failed for ${ctx.poi.name}:`,
+        error instanceof Error ? error.message : error,
+      );
     }
 
     if (delayMs > 0) {

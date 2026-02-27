@@ -7,7 +7,7 @@ import type {
   ParsedIntent,
   ViewportContext,
 } from "@/lib/search/types";
-import type { CategorySlug } from "@/types";
+import type { CategorySlug } from "@/types/api";
 
 export type SearchStage = "idle" | "parsing" | "searching";
 

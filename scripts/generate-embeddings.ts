@@ -1,105 +1,203 @@
 import { db } from "../src/lib/db/client";
-import { pois } from "../src/lib/db/schema";
-import { isNull } from "drizzle-orm";
-import { sql } from "drizzle-orm";
-import { EMBED_MODEL } from "../src/lib/ai/ollama";
+import {
+  pois,
+  categories,
+} from "../src/lib/db/schema";
+import { eq, isNull, sql, or } from "drizzle-orm";
+import { EMBED_MODEL, checkOllamaHealth } from "../src/lib/ai/ollama";
+import { buildEmbeddingText } from "../src/lib/ai/embeddingBuilder";
+import { embedTexts } from "../src/lib/ai/embeddings";
+import {
+  loadTags,
+  loadCuisines,
+  loadContactInfo,
+  loadAccessibilityInfo,
+} from "../src/lib/db/queries/pois";
+import type { Poi, PoiProfile } from "../src/types";
+import { createLogger } from "../src/lib/logger";
 
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-const BATCH_SIZE = 10;
+const log = createLogger("embeddings");
 
-interface EmbedResponse {
-  embeddings: number[][];
-}
+const BATCH_SIZE = parseInt(process.env.EMBED_BATCH_SIZE || "25", 10);
+const STALE_MODE = process.argv.includes("--stale");
 
-async function embedText(text: string): Promise<number[]> {
-  const response = await fetch(`${OLLAMA_URL}/api/embed`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: EMBED_MODEL,
-      input: text,
-    }),
-  });
+const POI_SELECT_FIELDS = {
+  id: pois.id,
+  osmId: pois.osmId,
+  name: pois.name,
+  categoryId: pois.categoryId,
+  regionId: pois.regionId,
+  latitude: pois.latitude,
+  longitude: pois.longitude,
+  address: pois.address,
+  locale: pois.locale,
+  osmType: pois.osmType,
+  osmTags: pois.osmTags,
+  profile: pois.profile,
+  wikipediaUrl: pois.wikipediaUrl,
+  imageUrl: pois.imageUrl,
+  embedding: pois.embedding,
+  searchVector: pois.searchVector,
+  createdAt: pois.createdAt,
+  updatedAt: pois.updatedAt,
+  categorySlug: categories.slug,
+} as const;
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    throw new Error(`Ollama embed error: ${response.status} - ${errorText}`);
+/**
+ * Fetches POIs that need embedding generation.
+ * In default mode, selects all POIs without embeddings.
+ * In stale mode, also includes POIs whose profile was updated after embedding.
+ *
+ * Args:
+ *     stale: Whether to include stale embeddings.
+ *
+ * Returns:
+ *     Array of POI rows with category slug.
+ */
+async function fetchTargetPois(stale: boolean) {
+  if (!stale) {
+    return db
+      .select(POI_SELECT_FIELDS)
+      .from(pois)
+      .leftJoin(categories, eq(pois.categoryId, categories.id))
+      .where(isNull(pois.embedding));
   }
 
-  const data: EmbedResponse = await response.json();
-
-  if (!data.embeddings || data.embeddings.length === 0) {
-    throw new Error("Ollama returned empty embeddings");
-  }
-
-  return data.embeddings[0];
-}
-
-function buildEmbeddingText(poi: {
-  name: string;
-  osmAmenity: string | null;
-  osmCuisine: string | null;
-  description: string | null;
-}): string {
-  const parts = [poi.name];
-  if (poi.osmAmenity) parts.push(poi.osmAmenity);
-  if (poi.osmCuisine) parts.push(poi.osmCuisine);
-  if (poi.description) parts.push(poi.description);
-  return parts.join(". ");
+  return db
+    .select(POI_SELECT_FIELDS)
+    .from(pois)
+    .leftJoin(categories, eq(pois.categoryId, categories.id))
+    .where(
+      or(
+        isNull(pois.embedding),
+        sql`${pois.updatedAt} > ${pois.createdAt}`,
+      ),
+    );
 }
 
 async function generateEmbeddings() {
-  console.log("[embeddings] Starting embedding generation...");
+  const modeLabel = STALE_MODE ? "stale + missing" : "missing only";
+  log.info(`Starting embedding generation (mode: ${modeLabel})...`);
 
-  const unembeddedPois = await db
-    .select({
-      id: pois.id,
-      name: pois.name,
-      osmAmenity: pois.osmAmenity,
-      osmCuisine: pois.osmCuisine,
-      description: pois.description,
-    })
-    .from(pois)
-    .where(isNull(pois.embedding));
+  const healthy = await checkOllamaHealth(EMBED_MODEL);
+  if (!healthy) {
+    log.error(`Ollama not available or model ${EMBED_MODEL} not loaded.`);
+    log.info(`Run: ollama pull ${EMBED_MODEL}`);
+    process.exit(1);
+  }
 
-  console.log(`[embeddings] Found ${unembeddedPois.length} POIs without embeddings`);
+  const targetPois = await fetchTargetPois(STALE_MODE);
 
-  if (unembeddedPois.length === 0) {
-    console.log("[embeddings] Nothing to do");
+  log.info(`Found ${targetPois.length} POIs to embed (batch size: ${BATCH_SIZE})`);
+
+  if (targetPois.length === 0) {
+    log.info("Nothing to do");
     process.exit(0);
   }
 
   let processed = 0;
   let errors = 0;
 
-  for (let i = 0; i < unembeddedPois.length; i += BATCH_SIZE) {
-    const batch = unembeddedPois.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < targetPois.length; i += BATCH_SIZE) {
+    const batch = targetPois.slice(i, i + BATCH_SIZE);
 
-    for (const poi of batch) {
-      try {
-        const text = buildEmbeddingText(poi);
-        const embedding = await embedText(text);
-        const vectorStr = `[${embedding.join(",")}]`;
+    const contexts: Array<{ poi: Poi; text: string }> = [];
 
-        await db.execute(
-          sql`UPDATE pois SET embedding = ${vectorStr}::vector WHERE id = ${poi.id}`
+    const contextResults = await Promise.allSettled(
+      batch.map(async (row) => {
+        const poi: Poi = {
+          id: row.id,
+          osmId: row.osmId,
+          name: row.name,
+          categoryId: row.categoryId,
+          regionId: row.regionId,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          address: row.address,
+          locale: row.locale,
+          osmType: row.osmType,
+          osmTags: row.osmTags,
+          profile: row.profile as PoiProfile | null,
+          wikipediaUrl: row.wikipediaUrl,
+          imageUrl: row.imageUrl,
+          embedding: row.embedding,
+          searchVector: row.searchVector,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        };
+
+        const profile = (row.profile as PoiProfile) ?? null;
+
+        const [poiTagList, poiCuisineList, contact, accessibility] =
+          await Promise.all([
+            loadTags(poi.id),
+            loadCuisines(poi.id),
+            loadContactInfo(poi.id),
+            loadAccessibilityInfo(poi.id),
+          ]);
+
+        const text = buildEmbeddingText(
+          poi,
+          profile,
+          poiTagList,
+          poiCuisineList,
+          contact,
+          accessibility,
         );
 
-        processed++;
-      } catch (error) {
+        return { poi, text };
+      }),
+    );
+
+    for (let j = 0; j < contextResults.length; j++) {
+      const result = contextResults[j];
+      if (result.status === "fulfilled") {
+        contexts.push(result.value);
+      } else {
         errors++;
-        console.error(`[embeddings] Error for "${poi.name}":`, error instanceof Error ? error.message : error);
+        log.error(`Context load failed for "${batch[j].name}": ${result.reason}`);
       }
     }
 
-    console.log(`[embeddings] Progress: ${processed + errors}/${unembeddedPois.length} (${errors} errors)`);
+    if (contexts.length === 0) continue;
+
+    try {
+      const texts = contexts.map((c) => c.text);
+      const embeddings = await embedTexts(texts);
+
+      await Promise.all(
+        contexts.map(async (ctx, j) => {
+          const vectorStr = `[${embeddings[j].join(",")}]`;
+
+          await db.execute(
+            sql`UPDATE pois
+                SET embedding = ${vectorStr}::vector,
+                    search_vector = to_tsvector('simple', ${ctx.text}),
+                    updated_at = now()
+                WHERE id = ${ctx.poi.id}`,
+          );
+
+          processed++;
+        }),
+      );
+    } catch (error) {
+      errors += contexts.length;
+      log.error(
+        "Batch embed failed:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+
+    log.info(
+      `Progress: ${processed + errors}/${targetPois.length} (${errors} errors)`,
+    );
   }
 
-  console.log(`[embeddings] Done! Processed: ${processed}, Errors: ${errors}`);
+  log.success(`Done! Processed: ${processed}, Errors: ${errors}`);
   process.exit(0);
 }
 
 generateEmbeddings().catch((error) => {
-  console.error("[embeddings] Fatal error:", error);
+  log.error("Fatal error:", error);
   process.exit(1);
 });

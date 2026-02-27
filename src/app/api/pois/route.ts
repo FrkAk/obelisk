@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getNearbyPois } from "@/lib/db/queries/pois";
 import { z } from "zod";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("pois");
 
 const querySchema = z.object({
   lat: z.coerce.number().min(-90).max(90),
@@ -33,7 +36,7 @@ export async function GET(request: NextRequest) {
       total: pois.length,
     });
   } catch (error) {
-    console.error("Error fetching POIs:", error);
+    log.error("Error fetching POIs:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

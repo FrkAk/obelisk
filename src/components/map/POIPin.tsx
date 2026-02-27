@@ -1,12 +1,12 @@
 "use client";
 
 import { memo } from "react";
-import { Marker } from "react-map-gl";
-import type { Remark, Poi, CategorySlug } from "@/types";
-import { CATEGORY_COLORS } from "@/types";
+import { Marker } from "react-map-gl/mapbox";
+import type { Remark, Poi, CategorySlug, Category } from "@/types/api";
+import { CATEGORY_COLORS } from "@/types/api";
 
 interface POIPinProps {
-  remark: Remark & { poi: Poi };
+  remark: Remark & { poi: Poi & { category?: Category } };
   isSelected?: boolean;
   onClick?: () => void;
 }

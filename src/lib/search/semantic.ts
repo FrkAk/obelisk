@@ -3,7 +3,8 @@ import { sql } from "drizzle-orm";
 import { haversineDistance } from "@/lib/geo/distance";
 import { EMBED_MODEL } from "@/lib/ai/ollama";
 
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
+const MIN_SIMILARITY = 0.35;
 
 interface EmbedResponse {
   embeddings: number[][];
@@ -27,7 +28,7 @@ interface SemanticSearchResult {
  *     text: The text to embed.
  *
  * Returns:
- *     A 1024-dimensional embedding vector.
+ *     A 768-dimensional embedding vector.
  *
  * Raises:
  *     Error: When the Ollama API call fails.
@@ -65,6 +66,7 @@ export async function embedText(text: string): Promise<number[]> {
  *     longitude: Center longitude for geo filtering.
  *     radiusMeters: Search radius in meters.
  *     limit: Maximum number of results.
+ *     keywords: Optional keywords to augment the embedding query text.
  *
  * Returns:
  *     Array of POIs ranked by semantic similarity, filtered by geo bounds.
@@ -74,9 +76,13 @@ export async function semanticSearch(
   latitude: number,
   longitude: number,
   radiusMeters: number,
-  limit: number = 10
+  limit: number = 10,
+  keywords?: string[]
 ): Promise<SemanticSearchResult[]> {
-  const queryEmbedding = await embedText(queryText);
+  const embeddingText = keywords?.length
+    ? `${queryText} ${keywords.join(" ")}`
+    : queryText;
+  const queryEmbedding = await embedText(embeddingText);
 
   const latDelta = radiusMeters / 111320;
   const lonDelta = radiusMeters / (111320 * Math.cos(latitude * (Math.PI / 180)));
@@ -102,6 +108,7 @@ export async function semanticSearch(
     WHERE p.embedding IS NOT NULL
       AND p.latitude BETWEEN ${minLat} AND ${maxLat}
       AND p.longitude BETWEEN ${minLon} AND ${maxLon}
+      AND 1 - (p.embedding <=> ${vectorStr}::vector) > ${MIN_SIMILARITY}
     ORDER BY p.embedding <=> ${vectorStr}::vector
     LIMIT ${limit}
   `);

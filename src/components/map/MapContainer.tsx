@@ -6,15 +6,12 @@ import { MapView, type MapBounds } from "./MapView";
 import { POIPin } from "./POIPin";
 import { ClusterPin } from "./ClusterPin";
 import { UserLocationMarker } from "./UserLocationMarker";
-import type { Remark, Poi, GeoLocation, CategorySlug, Category } from "@/types/api";
+import type { Remark, GeoLocation, CategorySlug, PoiWithCategory, ViewportBounds } from "@/types/api";
 import { CATEGORY_COLORS } from "@/types/api";
-import type { ViewportBounds } from "@/lib/search/types";
-
-type PoiWithCat = Poi & { category?: Category };
 
 interface MapContainerProps {
-  remarks: (Remark & { poi: PoiWithCat })[];
-  onPinClick: (remark: Remark & { poi: PoiWithCat }) => void;
+  remarks: (Remark & { poi: PoiWithCategory })[];
+  onPinClick: (remark: Remark & { poi: PoiWithCategory }) => void;
   onViewportChange?: (center: { latitude: number; longitude: number }) => void;
   onViewportUpdate?: (update: { center: { latitude: number; longitude: number }; bounds: ViewportBounds; zoom: number }) => void;
   onPoiClick?: (poi: { name: string; latitude: number; longitude: number; category?: string }) => void;
@@ -24,7 +21,7 @@ interface MapContainerProps {
   flyToLocation?: { latitude: number; longitude: number; ts: number } | null;
 }
 
-type RemarkProperties = { remark: Remark & { poi: PoiWithCat } };
+type RemarkProperties = { remark: Remark & { poi: PoiWithCategory } };
 type ClusterFeature = Supercluster.ClusterFeature<RemarkProperties>;
 type PointFeature = Supercluster.PointFeature<RemarkProperties>;
 
@@ -161,7 +158,7 @@ export function MapContainer({
         {userLocation && <UserLocationMarker location={userLocation} />}
         {clusters.map((cluster) => {
           const [longitude, latitude] = cluster.geometry.coordinates;
-          const props = cluster.properties as { cluster?: boolean; cluster_id?: number; point_count?: number; remark?: Remark & { poi: PoiWithCat } };
+          const props = cluster.properties as { cluster?: boolean; cluster_id?: number; point_count?: number; remark?: Remark & { poi: PoiWithCategory } };
 
           if (props.cluster && props.cluster_id !== undefined) {
             const clusterData = cluster as ClusterFeature;

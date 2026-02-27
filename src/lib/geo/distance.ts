@@ -39,6 +39,40 @@ function toRadians(degrees: number): number {
   return degrees * (Math.PI / 180);
 }
 
+interface GeoBounds {
+  minLat: number;
+  maxLat: number;
+  minLon: number;
+  maxLon: number;
+}
+
+/**
+ * Calculates a rectangular bounding box around a center point.
+ *
+ * Args:
+ *     latitude: Center latitude in degrees.
+ *     longitude: Center longitude in degrees.
+ *     radiusMeters: Radius in meters from the center point.
+ *
+ * Returns:
+ *     Bounding box with minLat, maxLat, minLon, maxLon.
+ */
+export function geoBounds(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number
+): GeoBounds {
+  const latDelta = radiusMeters / 111320;
+  const lonDelta = radiusMeters / (111320 * Math.cos(toRadians(latitude)));
+
+  return {
+    minLat: latitude - latDelta,
+    maxLat: latitude + latDelta,
+    minLon: longitude - lonDelta,
+    maxLon: longitude + lonDelta,
+  };
+}
+
 /**
  * Checks if a point is within a certain radius of another point.
  *
@@ -62,26 +96,3 @@ export function isWithinRadius(
   return haversineDistance(userLat, userLon, targetLat, targetLon) <= radiusMeters;
 }
 
-/**
- * Sorts POIs by distance from a given location.
- *
- * Args:
- *     userLat: User's latitude.
- *     userLon: User's longitude.
- *     pois: Array of POIs with latitude and longitude.
- *
- * Returns:
- *     POIs sorted by distance from closest to farthest.
- */
-export function sortByDistance<T extends { latitude: number; longitude: number }>(
-  userLat: number,
-  userLon: number,
-  pois: T[]
-): (T & { distance: number })[] {
-  return pois
-    .map((poi) => ({
-      ...poi,
-      distance: haversineDistance(userLat, userLon, poi.latitude, poi.longitude),
-    }))
-    .sort((a, b) => a.distance - b.distance);
-}

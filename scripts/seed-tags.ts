@@ -8,6 +8,16 @@ interface TagEntry {
   displayOrder?: number;
 }
 
+/**
+ * Creates TagEntry objects from a group name and list of display names.
+ *
+ * Args:
+ *     group: Tag group identifier (e.g. "atmosphere", "dietary").
+ *     entries: Array of human-readable tag names.
+ *
+ * Returns:
+ *     Array of TagEntry objects with auto-generated slugs and display order.
+ */
 function buildGroup(group: string, entries: string[]): TagEntry[] {
   return entries.map((name, i) => ({
     name,
@@ -18,7 +28,6 @@ function buildGroup(group: string, entries: string[]): TagEntry[] {
 }
 
 const TAG_DATA: TagEntry[] = [
-  // Atmosphere
   ...buildGroup("atmosphere", [
     "Romantic",
     "Cozy",
@@ -42,7 +51,6 @@ const TAG_DATA: TagEntry[] = [
     "Rooftop",
   ]),
 
-  // Architectural style
   ...buildGroup("architectural_style", [
     "Baroque",
     "Gothic",
@@ -66,7 +74,6 @@ const TAG_DATA: TagEntry[] = [
     "Postmodern",
   ]),
 
-  // Era
   ...buildGroup("era", [
     "Ancient",
     "Medieval",
@@ -85,7 +92,6 @@ const TAG_DATA: TagEntry[] = [
     "Viking",
   ]),
 
-  // Music genre
   ...buildGroup("music_genre", [
     "Techno",
     "House",
@@ -109,7 +115,6 @@ const TAG_DATA: TagEntry[] = [
     "Drum and Bass",
   ]),
 
-  // Facility
   ...buildGroup("facility", [
     "WiFi",
     "Parking",
@@ -133,7 +138,6 @@ const TAG_DATA: TagEntry[] = [
     "Private Rooms",
   ]),
 
-  // Dietary
   ...buildGroup("dietary", [
     "Vegetarian",
     "Vegan",
@@ -151,7 +155,6 @@ const TAG_DATA: TagEntry[] = [
     "Sugar-Free",
   ]),
 
-  // Art medium
   ...buildGroup("art_medium", [
     "Oil Painting",
     "Watercolor",
@@ -174,7 +177,6 @@ const TAG_DATA: TagEntry[] = [
     "Metalwork",
   ]),
 
-  // Best season
   ...buildGroup("best_season", [
     "Spring",
     "Summer",
@@ -187,7 +189,6 @@ const TAG_DATA: TagEntry[] = [
     "Harvest Season",
   ]),
 
-  // Wildlife
   ...buildGroup("wildlife", [
     "Birds",
     "Deer",
@@ -203,7 +204,6 @@ const TAG_DATA: TagEntry[] = [
     "Bats",
   ]),
 
-  // Product category (for shopping)
   ...buildGroup("product_category", [
     "Fashion",
     "Books",
@@ -227,7 +227,6 @@ const TAG_DATA: TagEntry[] = [
     "Flea Market",
   ]),
 
-  // Cuisine (duplicated from cuisines table for tag-based search)
   ...buildGroup("cuisine", [
     "German",
     "Bavarian",
@@ -259,6 +258,9 @@ const TAG_DATA: TagEntry[] = [
   ]),
 ];
 
+/**
+ * Seeds the tags table with predefined tag groups in batches.
+ */
 async function main() {
   console.log("Seeding tags...");
 

@@ -228,6 +228,9 @@ async function downloadWikidata(): Promise<void> {
   console.log(`  OK ${formatBytes(bytes)}`);
 }
 
+/**
+ * Downloads all external datasets required for the enrichment pipeline.
+ */
 async function main(): Promise<void> {
   console.log("Downloading external datasets...");
   if (FORCE) console.log("  --force: re-downloading all files");

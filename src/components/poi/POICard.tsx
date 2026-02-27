@@ -6,9 +6,9 @@ import ReactMarkdown from "react-markdown";
 import { GlassPill } from "@/components/ui/GlassPill";
 import { ShimmerText } from "@/components/ui/ShimmerText";
 import { springTransitions } from "@/lib/ui/animations";
-import type { ExternalPOI } from "@/lib/search/types";
-import type { Remark, Poi, CategorySlug, Category } from "@/types";
-import { CATEGORY_COLORS } from "@/types";
+import { CATEGORY_ICONS } from "@/lib/ui/constants";
+import type { ExternalPOI, Remark, Poi, CategorySlug, Category } from "@/types/api";
+import { CATEGORY_COLORS } from "@/types/api";
 
 interface POICardProps {
   poi: ExternalPOI;
@@ -22,24 +22,6 @@ interface POICardProps {
   cooldownRemaining?: number;
   autoGenerate?: boolean;
 }
-
-const CATEGORY_ICONS: Record<string, string> = {
-  food: "☕",
-  history: "🏛️",
-  art: "🎨",
-  nature: "🌳",
-  architecture: "🏗️",
-  hidden: "✨",
-  views: "👀",
-  culture: "🎭",
-  shopping: "🛍️",
-  nightlife: "🌙",
-  sports: "⚽",
-  health: "🏥",
-  transport: "🚇",
-  education: "🎓",
-  services: "🏢",
-};
 
 function formatDistance(meters?: number): string {
   if (!meters) return "";
@@ -77,7 +59,7 @@ export function POICard({
   cooldownRemaining = 0,
   autoGenerate = true,
 }: POICardProps) {
-  const categoryIcon = CATEGORY_ICONS[poi.category] || "📍";
+  const categoryIcon = CATEGORY_ICONS[poi.category as CategorySlug] ?? "📍";
   const categoryColor = CATEGORY_COLORS[poi.category as CategorySlug] || CATEGORY_COLORS.history;
   const hasStory = !!remark;
   const isLoading = isGenerating || isRegenerating;

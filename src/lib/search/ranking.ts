@@ -1,4 +1,4 @@
-import type { SearchResult } from "./types";
+import type { SearchResult } from "@/types/api";
 
 interface SemanticResult {
   poiId: string;

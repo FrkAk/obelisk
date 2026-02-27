@@ -3,10 +3,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useGeolocation } from "./useGeolocation";
 import { haversineDistance } from "@/lib/geo/distance";
-import type { Remark, Poi, GeofenceConfig, Category } from "@/types/api";
+import type { Remark, GeofenceConfig, PoiWithCategory } from "@/types/api";
 import { DEFAULT_GEOFENCE_CONFIG } from "@/types/api";
-
-type PoiWithCat = Poi & { category?: Category };
 
 interface NotificationHistory {
   remarkId: string;
@@ -14,12 +12,12 @@ interface NotificationHistory {
 }
 
 export function useGeofence(
-  remarks: (Remark & { poi: PoiWithCat })[],
+  remarks: (Remark & { poi: PoiWithCategory })[],
   config: GeofenceConfig = DEFAULT_GEOFENCE_CONFIG
 ) {
   const { location } = useGeolocation();
   const [triggeredRemark, setTriggeredRemark] = useState<
-    (Remark & { poi: PoiWithCat }) | null
+    (Remark & { poi: PoiWithCategory }) | null
   >(null);
 
   const notificationHistoryRef = useRef<NotificationHistory[]>([]);

@@ -6,10 +6,9 @@ import type {
   SearchResponse,
   ParsedIntent,
   ViewportContext,
-} from "@/lib/search/types";
-import type { CategorySlug } from "@/types/api";
-
-export type SearchStage = "idle" | "parsing" | "searching";
+  CategorySlug,
+  SearchStage,
+} from "@/types/api";
 
 interface UseSearchOptions {
   radius?: number;

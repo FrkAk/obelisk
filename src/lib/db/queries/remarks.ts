@@ -12,7 +12,6 @@ export type RemarkWithPoi = {
   content: string;
   localTip: string | null;
   durationSeconds: number;
-  audioUrl: string | null;
   createdAt: Date;
   locale: string | null;
   version: number;
@@ -42,7 +41,13 @@ export type RemarkWithPoi = {
   };
 };
 
-function remarkPoiSelect() {
+/**
+ * Returns the Drizzle select object for remark + POI + category joins.
+ *
+ * Returns:
+ *     Object mapping column aliases to Drizzle column references.
+ */
+export function remarkPoiSelect() {
   return {
     remarkId: remarks.id,
     remarkPoiId: remarks.poiId,
@@ -51,7 +56,6 @@ function remarkPoiSelect() {
     remarkContent: remarks.content,
     remarkLocalTip: remarks.localTip,
     remarkDurationSeconds: remarks.durationSeconds,
-    remarkAudioUrl: remarks.audioUrl,
     remarkCreatedAt: remarks.createdAt,
     remarkLocale: remarks.locale,
     remarkVersion: remarks.version,
@@ -78,7 +82,7 @@ function remarkPoiSelect() {
   };
 }
 
-interface RemarkPoiRow {
+export interface RemarkPoiRow {
   remarkId: string;
   remarkPoiId: string | null;
   remarkTitle: string;
@@ -86,7 +90,6 @@ interface RemarkPoiRow {
   remarkContent: string;
   remarkLocalTip: string | null;
   remarkDurationSeconds: number | null;
-  remarkAudioUrl: string | null;
   remarkCreatedAt: Date | null;
   remarkLocale: string | null;
   remarkVersion: number;
@@ -112,7 +115,16 @@ interface RemarkPoiRow {
   categoryColor: string | null;
 }
 
-function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
+/**
+ * Maps a flat remark+POI+category row into a nested RemarkWithPoi object.
+ *
+ * Args:
+ *     row: Flat row from a remarkPoiSelect query.
+ *
+ * Returns:
+ *     Nested RemarkWithPoi with poi and category objects.
+ */
+export function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
   return {
     id: row.remarkId,
     poiId: row.remarkPoiId!,
@@ -121,7 +133,6 @@ function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
     content: row.remarkContent,
     localTip: row.remarkLocalTip,
     durationSeconds: row.remarkDurationSeconds ?? 45,
-    audioUrl: row.remarkAudioUrl,
     createdAt: row.remarkCreatedAt ?? new Date(),
     locale: row.remarkLocale,
     version: row.remarkVersion,
@@ -183,7 +194,6 @@ export async function insertRemark(params: {
       durationSeconds: params.story.durationSeconds,
       modelId: params.story.modelId,
       confidence: params.story.confidence,
-      contextSources: params.story.contextSources,
     })
     .returning();
   return inserted;
@@ -336,7 +346,6 @@ export async function versionBumpRemark(
       durationSeconds: story.durationSeconds,
       modelId: story.modelId,
       confidence: story.confidence,
-      contextSources: story.contextSources,
     })
     .returning();
 

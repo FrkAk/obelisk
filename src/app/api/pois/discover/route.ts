@@ -1,11 +1,11 @@
-"use server";
-
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { pois, categories } from "@/lib/db/schema";
 import { z } from "zod";
 import { inArray } from "drizzle-orm";
-import type { CategorySlug } from "@/types";
+import type { CategorySlug, OverpassElement } from "@/types/api";
+import { executeOverpassQuery } from "@/lib/search/overpass";
+import { getCategorySlugFromTags } from "@/lib/geo/categories";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("discover");
@@ -16,27 +16,8 @@ const querySchema = z.object({
   radius: z.coerce.number().min(500).max(5000).default(2000),
 });
 
-interface OverpassElement {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
-
-interface OverpassResponse {
-  elements: OverpassElement[];
-}
-
-const OVERPASS_SERVERS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-];
-
 /**
- * Fetches POIs from Overpass API around a location with retry logic.
+ * Fetches POIs from Overpass API around a location.
  *
  * Args:
  *     lat: Center latitude.
@@ -66,55 +47,8 @@ async function fetchPoisFromOverpass(
     out body;
   `;
 
-  for (let attempt = 0; attempt < OVERPASS_SERVERS.length; attempt++) {
-    const server = OVERPASS_SERVERS[attempt];
-    try {
-      log.info(`Trying Overpass server ${attempt + 1}/${OVERPASS_SERVERS.length}: ${server}`);
-
-      const response = await fetch(server, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `data=${encodeURIComponent(overpassQuery)}`,
-        signal: AbortSignal.timeout(45000),
-      });
-
-      if (!response.ok) {
-        log.warn(`Server ${server} returned ${response.status}: ${response.statusText}`);
-        continue;
-      }
-
-      const data: OverpassResponse = await response.json();
-      log.success(`Found ${data.elements.length} elements from ${server}`);
-      return data.elements;
-    } catch (error) {
-      log.warn(`Server ${server} failed:`, error instanceof Error ? error.message : error);
-      if (attempt === OVERPASS_SERVERS.length - 1) {
-        throw new Error("All Overpass servers failed. Please try again later.");
-      }
-    }
-  }
-
-  return [];
-}
-
-/**
- * Determines the category slug based on OSM tags.
- *
- * Args:
- *     tags: OSM tags from Overpass.
- *
- * Returns:
- *     The appropriate category slug.
- */
-function determineCategorySlug(tags: Record<string, string>): CategorySlug {
-  if (tags.historic) return "history";
-  if (tags.tourism === "museum") return "art";
-  if (tags.tourism === "viewpoint") return "views";
-  if (tags.amenity === "biergarten" || tags.amenity === "restaurant") return "food";
-  if (tags.leisure === "park" || tags.natural) return "nature";
-  if (tags.amenity === "theatre") return "culture";
-  if (tags.architect || tags.building === "church") return "architecture";
-  return "hidden";
+  const data = await executeOverpassQuery(overpassQuery);
+  return data.elements ?? [];
 }
 
 export async function POST(request: NextRequest) {
@@ -168,7 +102,7 @@ export async function POST(request: NextRequest) {
         if (!elLat || !elLon) return null;
 
         const tags = el.tags || {};
-        const categorySlug = determineCategorySlug(tags);
+        const categorySlug = getCategorySlugFromTags(tags);
         const categoryId = categoryMap.get(categorySlug);
 
         return {
@@ -208,7 +142,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     log.error("Error discovering POIs:", error);
     return NextResponse.json(
-      { error: "Failed to discover POIs", details: error instanceof Error ? error.message : "Unknown error" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

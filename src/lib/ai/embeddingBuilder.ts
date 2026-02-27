@@ -1,4 +1,4 @@
-import type { Poi, Tag, Cuisine, ContactInfo, PoiProfile } from "@/types";
+import type { Poi, Tag, Cuisine, PoiProfile } from "@/types";
 
 /**
  * Builds a semantically rich embedding text string from POI data and its JSONB profile.
@@ -9,7 +9,6 @@ import type { Poi, Tag, Cuisine, ContactInfo, PoiProfile } from "@/types";
  *     profile: The JSONB profile data from pois.profile column.
  *     tags: Array of tags associated with the POI.
  *     cuisines: Array of cuisines associated with the POI.
- *     contactInfo: Optional contact info for opening hours.
  *     accessibility: Optional accessibility flags.
  *
  * Returns:
@@ -20,7 +19,6 @@ export function buildEmbeddingText(
   profile: PoiProfile | null,
   tags: Tag[],
   cuisines?: Cuisine[],
-  contactInfo?: ContactInfo | null,
   accessibility?: {
     wheelchair?: boolean | null;
     dogFriendly?: boolean | null;
@@ -56,10 +54,6 @@ export function buildEmbeddingText(
   }
 
   parts.push(poi.address);
-
-  if (contactInfo?.openingHoursDisplay) {
-    parts.push(contactInfo.openingHoursDisplay);
-  }
 
   const osmTags = poi.osmTags as Record<string, string> | null;
   if (osmTags?.cuisine) parts.push(osmTags.cuisine);

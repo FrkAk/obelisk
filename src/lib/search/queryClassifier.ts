@@ -1,7 +1,6 @@
 import { embedTexts } from "@/lib/ai/embeddings";
 import { createLogger } from "@/lib/logger";
-import type { CategorySlug } from "@/types";
-import type { SearchFilters } from "./types";
+import type { CategorySlug, SearchFilters } from "@/types/api";
 
 const log = createLogger("queryClassifier");
 

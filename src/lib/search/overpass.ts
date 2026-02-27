@@ -1,5 +1,4 @@
-import type { OverpassElement, ExternalPOI, SearchLocation } from "./types";
-import { haversineDistance } from "@/lib/geo/distance";
+import type { OverpassElement, ExternalPOI } from "@/types/api";
 
 const OVERPASS_SERVERS = [
   "https://overpass-api.de/api/interpreter",
@@ -36,141 +35,19 @@ export async function fetchPOIDetails(
 }
 
 /**
- * Enriches multiple POIs with detailed information from Overpass.
+ * Executes an Overpass API query with automatic server failover.
  *
  * Args:
- *     pois: Array of POIs to enrich.
+ *     query: The Overpass QL query string.
+ *     retryCount: Current retry attempt (used for server rotation).
  *
  * Returns:
- *     Array of enriched POIs.
+ *     Parsed JSON response containing Overpass elements.
+ *
+ * Raises:
+ *     Error: When all Overpass servers fail.
  */
-export async function enrichPOIs(pois: ExternalPOI[]): Promise<ExternalPOI[]> {
-  const enrichedPois: ExternalPOI[] = [];
-
-  for (const poi of pois.slice(0, 10)) {
-    try {
-      const details = await fetchPOIDetails(poi.osmId, poi.osmType);
-      if (details) {
-        enrichedPois.push({ ...poi, ...details });
-      } else {
-        enrichedPois.push(poi);
-      }
-      await delay(100);
-    } catch {
-      enrichedPois.push(poi);
-    }
-  }
-
-  return enrichedPois;
-}
-
-/**
- * Searches for POIs by amenity type within a bounding box using Overpass.
- *
- * Args:
- *     amenityTypes: Array of OSM amenity types to search for.
- *     location: Center location for the search.
- *     radius: Search radius in meters.
- *
- * Returns:
- *     Array of POIs matching the criteria.
- */
-export async function searchByAmenityOverpass(
-  amenityTypes: string[],
-  location: SearchLocation,
-  radius: number = 500
-): Promise<ExternalPOI[]> {
-  const amenityFilter = amenityTypes.map((t) => `["amenity"="${t}"]`).join("");
-
-  const query = `
-    [out:json][timeout:25];
-    (
-      node${amenityFilter}(around:${radius},${location.latitude},${location.longitude});
-      way${amenityFilter}(around:${radius},${location.latitude},${location.longitude});
-    );
-    out body center;
-  `;
-
-  const data = await executeOverpassQuery(query);
-  if (!data.elements) return [];
-
-  return data.elements
-    .filter((el: OverpassElement) => el.tags?.name)
-    .map((el: OverpassElement) => {
-      const lat = el.lat ?? el.center?.lat ?? 0;
-      const lon = el.lon ?? el.center?.lon ?? 0;
-
-      return {
-        id: `overpass-${el.id}`,
-        osmId: el.id,
-        osmType: el.type,
-        name: el.tags?.name ?? "Unknown",
-        category: mapAmenityToCategory(el.tags?.amenity ?? ""),
-        latitude: lat,
-        longitude: lon,
-        distance: haversineDistance(location.latitude, location.longitude, lat, lon),
-        ...extractPOIDetails(el),
-        source: "overpass" as const,
-      };
-    })
-    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
-}
-
-/**
- * Searches for POIs with specific tags (e.g., wifi, outdoor seating).
- *
- * Args:
- *     tags: Record of tag key-value pairs to search for.
- *     location: Center location for the search.
- *     radius: Search radius in meters.
- *
- * Returns:
- *     Array of POIs matching the tag criteria.
- */
-export async function searchByTags(
-  tags: Record<string, string>,
-  location: SearchLocation,
-  radius: number = 500
-): Promise<ExternalPOI[]> {
-  const tagFilters = Object.entries(tags)
-    .map(([k, v]) => `["${k}"="${v}"]`)
-    .join("");
-
-  const query = `
-    [out:json][timeout:25];
-    (
-      node${tagFilters}(around:${radius},${location.latitude},${location.longitude});
-      way${tagFilters}(around:${radius},${location.latitude},${location.longitude});
-    );
-    out body center;
-  `;
-
-  const data = await executeOverpassQuery(query);
-  if (!data.elements) return [];
-
-  return data.elements
-    .filter((el: OverpassElement) => el.tags?.name)
-    .map((el: OverpassElement) => {
-      const lat = el.lat ?? el.center?.lat ?? 0;
-      const lon = el.lon ?? el.center?.lon ?? 0;
-
-      return {
-        id: `overpass-${el.id}`,
-        osmId: el.id,
-        osmType: el.type,
-        name: el.tags?.name ?? "Unknown",
-        category: mapAmenityToCategory(el.tags?.amenity ?? el.tags?.tourism ?? ""),
-        latitude: lat,
-        longitude: lon,
-        distance: haversineDistance(location.latitude, location.longitude, lat, lon),
-        ...extractPOIDetails(el),
-        source: "overpass" as const,
-      };
-    })
-    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
-}
-
-async function executeOverpassQuery(
+export async function executeOverpassQuery(
   query: string,
   retryCount: number = 0
 ): Promise<{ elements?: OverpassElement[] }> {
@@ -201,6 +78,15 @@ async function executeOverpassQuery(
   }
 }
 
+/**
+ * Extracts structured POI details from raw Overpass element tags.
+ *
+ * Args:
+ *     element: Raw Overpass element with tags.
+ *
+ * Returns:
+ *     Partial ExternalPOI with opening hours, phone, website, etc.
+ */
 function extractPOIDetails(element: OverpassElement): Partial<ExternalPOI> {
   const tags = element.tags ?? {};
 
@@ -214,16 +100,15 @@ function extractPOIDetails(element: OverpassElement): Partial<ExternalPOI> {
   };
 }
 
-function mapAmenityToCategory(amenity: string): string {
-  const foodAmenities = ["restaurant", "cafe", "fast_food", "bar", "pub", "biergarten"];
-  const cultureAmenities = ["theatre", "cinema", "library", "community_centre"];
-
-  if (foodAmenities.includes(amenity)) return "food";
-  if (cultureAmenities.includes(amenity)) return "culture";
-  if (amenity === "museum" || amenity === "gallery") return "art";
-  return "hidden";
-}
-
+/**
+ * Waits for a specified number of milliseconds.
+ *
+ * Args:
+ *     ms: Delay duration in milliseconds.
+ *
+ * Returns:
+ *     Promise that resolves after the delay.
+ */
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

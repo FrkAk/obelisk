@@ -1,14 +1,9 @@
 import { db } from "@/lib/db/client";
 import { sql } from "drizzle-orm";
-import { haversineDistance } from "@/lib/geo/distance";
-import { EMBED_MODEL } from "@/lib/ai/ollama";
+import { haversineDistance, geoBounds } from "@/lib/geo/distance";
+import { embedTexts } from "@/lib/ai/embeddings";
 
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
 const MIN_SIMILARITY = 0.35;
-
-interface EmbedResponse {
-  embeddings: number[][];
-}
 
 interface SemanticSearchResult {
   poiId: string;
@@ -19,42 +14,6 @@ interface SemanticSearchResult {
   category: string;
   similarity: number;
   distance: number;
-}
-
-/**
- * Generates an embedding vector for the given text using Ollama.
- *
- * Args:
- *     text: The text to embed.
- *
- * Returns:
- *     A 768-dimensional embedding vector.
- *
- * Raises:
- *     Error: When the Ollama API call fails.
- */
-export async function embedText(text: string): Promise<number[]> {
-  const response = await fetch(`${OLLAMA_URL}/api/embed`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: EMBED_MODEL,
-      input: text,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    throw new Error(`Ollama embed API error: ${response.status} ${response.statusText} - ${errorText}`);
-  }
-
-  const data: EmbedResponse = await response.json();
-
-  if (!data.embeddings || data.embeddings.length === 0) {
-    throw new Error("Ollama returned empty embeddings");
-  }
-
-  return data.embeddings[0];
 }
 
 /**
@@ -82,15 +41,9 @@ export async function semanticSearch(
   const embeddingText = keywords?.length
     ? `${queryText} ${keywords.join(" ")}`
     : queryText;
-  const queryEmbedding = await embedText(embeddingText);
+  const queryEmbedding = (await embedTexts([embeddingText]))[0];
 
-  const latDelta = radiusMeters / 111320;
-  const lonDelta = radiusMeters / (111320 * Math.cos(latitude * (Math.PI / 180)));
-
-  const minLat = latitude - latDelta;
-  const maxLat = latitude + latDelta;
-  const minLon = longitude - lonDelta;
-  const maxLon = longitude + lonDelta;
+  const { minLat, maxLat, minLon, maxLon } = geoBounds(latitude, longitude, radiusMeters);
 
   const vectorStr = `[${queryEmbedding.join(",")}]`;
 

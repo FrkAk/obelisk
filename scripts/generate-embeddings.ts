@@ -10,7 +10,6 @@ import { embedTexts } from "../src/lib/ai/embeddings";
 import {
   loadTags,
   loadCuisines,
-  loadContactInfo,
   loadAccessibilityInfo,
 } from "../src/lib/db/queries/pois";
 import type { Poi, PoiProfile } from "../src/types";
@@ -37,7 +36,6 @@ const POI_SELECT_FIELDS = {
   wikipediaUrl: pois.wikipediaUrl,
   imageUrl: pois.imageUrl,
   embedding: pois.embedding,
-  searchVector: pois.searchVector,
   createdAt: pois.createdAt,
   updatedAt: pois.updatedAt,
   categorySlug: categories.slug,
@@ -75,6 +73,11 @@ async function fetchTargetPois(stale: boolean) {
     );
 }
 
+/**
+ * Generates vector embeddings for POIs missing them (or stale ones).
+ * Processes POIs in batches, building embedding text from profile + related
+ * data, then calling Ollama to produce 768-dim vectors stored in pgvector.
+ */
 async function generateEmbeddings() {
   const modeLabel = STALE_MODE ? "stale + missing" : "missing only";
   log.info(`Starting embedding generation (mode: ${modeLabel})...`);
@@ -121,18 +124,16 @@ async function generateEmbeddings() {
           wikipediaUrl: row.wikipediaUrl,
           imageUrl: row.imageUrl,
           embedding: row.embedding,
-          searchVector: row.searchVector,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
         };
 
         const profile = (row.profile as PoiProfile) ?? null;
 
-        const [poiTagList, poiCuisineList, contact, accessibility] =
+        const [poiTagList, poiCuisineList, accessibility] =
           await Promise.all([
             loadTags(poi.id),
             loadCuisines(poi.id),
-            loadContactInfo(poi.id),
             loadAccessibilityInfo(poi.id),
           ]);
 
@@ -141,7 +142,6 @@ async function generateEmbeddings() {
           profile,
           poiTagList,
           poiCuisineList,
-          contact,
           accessibility,
         );
 
@@ -172,7 +172,6 @@ async function generateEmbeddings() {
           await db.execute(
             sql`UPDATE pois
                 SET embedding = ${vectorStr}::vector,
-                    search_vector = to_tsvector('simple', ${ctx.text}),
                     updated_at = now()
                 WHERE id = ${ctx.poi.id}`,
           );

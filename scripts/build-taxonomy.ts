@@ -1,6 +1,3 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
-
 /**
  * Builds tag_enrichment_map.json from OSM taginfo data and Google Product Taxonomy.
  *
@@ -9,7 +6,15 @@ import { join } from "path";
  * Outputs data/tag_enrichment_map.json with entries keyed by "key=value"
  * (e.g. "shop=clothes", "amenity=restaurant") containing keywords, products,
  * subtags, and matching Google taxonomy paths.
+ *
+ * @module build-taxonomy
  */
+
+import { readFileSync, writeFileSync, existsSync } from "fs";
+import { join } from "path";
+import { createLogger } from "../src/lib/logger";
+
+const log = createLogger("build-taxonomy");
 
 const DATA_DIR = join(import.meta.dirname, "..", "data");
 const TAGINFO_DIR = join(DATA_DIR, "taginfo");
@@ -32,8 +37,7 @@ interface TagEnrichmentEntry {
 /**
  * Loads and parses the Google Product Taxonomy file into a list of category paths.
  *
- * Returns:
- *     Array of taxonomy path strings (e.g. "Apparel & Accessories > Clothing").
+ * @returns Array of taxonomy path strings (e.g. "Apparel & Accessories > Clothing").
  */
 function loadGoogleTaxonomy(): string[] {
   const raw = readFileSync(TAXONOMY_FILE, "utf-8");
@@ -46,11 +50,8 @@ function loadGoogleTaxonomy(): string[] {
 /**
  * Loads a taginfo JSON file and returns the data entries.
  *
- * Args:
- *     filename: Name of the JSON file in the taginfo directory.
- *
- * Returns:
- *     Array of tag info entries, or empty array if file not found.
+ * @param filename - Name of the JSON file in the taginfo directory.
+ * @returns Array of tag info entries, or empty array if file not found.
  */
 function loadTagInfo(filename: string): TagInfoEntry[] {
   const filepath = join(TAGINFO_DIR, filename);
@@ -62,12 +63,9 @@ function loadTagInfo(filename: string): TagInfoEntry[] {
 /**
  * Finds Google taxonomy paths that match a set of search terms.
  *
- * Args:
- *     taxonomyLines: All taxonomy paths.
- *     searchTerms: Terms to match against (case-insensitive).
- *
- * Returns:
- *     Matching taxonomy path prefixes (up to 2 levels deep).
+ * @param taxonomyLines - All taxonomy paths.
+ * @param searchTerms - Terms to match against (case-insensitive).
+ * @returns Matching taxonomy path prefixes (up to 2 levels deep).
  */
 function findTaxonomyMatches(taxonomyLines: string[], searchTerms: string[]): string[] {
   const matches = new Set<string>();
@@ -92,12 +90,9 @@ function findTaxonomyMatches(taxonomyLines: string[], searchTerms: string[]): st
 /**
  * Extracts unique subtag values from a taginfo file.
  *
- * Args:
- *     filename: Taginfo JSON filename for the subtag key.
- *     minCount: Minimum global usage count to include.
- *
- * Returns:
- *     Sorted array of subtag value strings.
+ * @param filename - Taginfo JSON filename for the subtag key.
+ * @param minCount - Minimum global usage count to include.
+ * @returns Sorted array of subtag value strings.
  */
 function getSubtags(filename: string, minCount: number = 100): string[] {
   const entries = loadTagInfo(filename);
@@ -1000,11 +995,10 @@ function buildTagEnrichmentMap(): Record<string, TagEnrichmentEntry> {
   /**
    * Processes a set of tag mappings for an OSM key and merges them into the result.
    *
-   * Args:
-   *     osmKey: OSM key name (e.g. "shop", "amenity").
-   *     mappings: Manual mappings for known tag values.
-   *     tagInfoFile: Taginfo JSON filename for this key.
-   *     subtags: Optional map of tag value to subtag filename.
+   * @param osmKey - OSM key name (e.g. "shop", "amenity").
+   * @param mappings - Manual mappings for known tag values.
+   * @param tagInfoFile - Taginfo JSON filename for this key.
+   * @param subtags - Optional map of tag value to subtag filename.
    */
   function addEntries(
     osmKey: string,
@@ -1067,13 +1061,13 @@ function buildTagEnrichmentMap(): Record<string, TagEnrichmentEntry> {
   return result;
 }
 
-console.log("Building tag enrichment map...");
+log.info("Building tag enrichment map...");
 
 const tagMap = buildTagEnrichmentMap();
 const entryCount = Object.keys(tagMap).length;
 
 writeFileSync(OUTPUT_FILE, JSON.stringify(tagMap, null, 2));
-console.log(`Wrote ${entryCount} entries to ${OUTPUT_FILE}`);
+log.success(`Wrote ${entryCount} entries to ${OUTPUT_FILE}`);
 
 const byKey: Record<string, number> = {};
 for (const k of Object.keys(tagMap)) {
@@ -1081,5 +1075,5 @@ for (const k of Object.keys(tagMap)) {
   byKey[osmKey] = (byKey[osmKey] ?? 0) + 1;
 }
 for (const [k, v] of Object.entries(byKey)) {
-  console.log(`  ${k}: ${v} entries`);
+  log.info(`${k}: ${v} entries`);
 }

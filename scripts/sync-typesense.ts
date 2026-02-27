@@ -22,8 +22,7 @@ const BATCH_SIZE = 100;
 /**
  * Loads all POI tags as a map from poiId to tag name array.
  *
- * Returns:
- *     Map of poiId to string array of tag names.
+ * @returns Map of poiId to string array of tag names.
  */
 async function loadTagMap(): Promise<Map<string, string[]>> {
   const rows = await db
@@ -49,8 +48,7 @@ async function loadTagMap(): Promise<Map<string, string[]>> {
 /**
  * Loads all POI cuisines as a map from poiId to cuisine name array.
  *
- * Returns:
- *     Map of poiId to string array of cuisine names.
+ * @returns Map of poiId to string array of cuisine names.
  */
 async function loadCuisineMap(): Promise<Map<string, string[]>> {
   const rows = await db
@@ -76,8 +74,7 @@ async function loadCuisineMap(): Promise<Map<string, string[]>> {
 /**
  * Loads accessibility data for all POIs as a map from poiId to accessibility fields.
  *
- * Returns:
- *     Map of poiId to object with wheelchair, dogFriendly, elevator, parkingAvailable.
+ * @returns Map of poiId to accessibility fields object.
  */
 async function loadAccessibilityMap(): Promise<
   Map<string, { wheelchair: boolean | null; dogFriendly: boolean | null; elevator: boolean | null; parkingAvailable: boolean | null }>

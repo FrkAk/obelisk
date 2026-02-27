@@ -1,6 +1,15 @@
+/**
+ * Downloads all external datasets required for the enrichment pipeline.
+ *
+ * @module download-datasets
+ */
+
 import { existsSync, mkdirSync, writeFileSync, statSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
+import { createLogger } from "../src/lib/logger";
+
+const log = createLogger("download-datasets");
 
 const DATA_DIR = join(import.meta.dirname, "..", "data");
 const FORCE = process.argv.includes("--force");
@@ -32,16 +41,13 @@ const WIKIDATA_SPARQL = `SELECT ?item ?itemLabel ?industryLabel ?productLabel WH
 /**
  * Checks if a file already exists and should be skipped.
  *
- * Args:
- *     path: Absolute file path to check.
- *
- * Returns:
- *     True if the file exists and --force was not passed.
+ * @param path - Absolute file path to check.
+ * @returns True if the file exists and --force was not passed.
  */
 function shouldSkip(path: string): boolean {
   if (FORCE) return false;
   if (existsSync(path)) {
-    console.log(`  SKIP ${path} (exists, use --force to re-download)`);
+    log.info(`SKIP ${path} (exists, use --force to re-download)`);
     return true;
   }
   return false;
@@ -50,8 +56,7 @@ function shouldSkip(path: string): boolean {
 /**
  * Sleeps for the given number of milliseconds.
  *
- * Args:
- *     ms: Duration in milliseconds.
+ * @param ms - Duration in milliseconds.
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -60,13 +65,10 @@ function sleep(ms: number): Promise<void> {
 /**
  * Downloads a URL and saves the response body to a file.
  *
- * Args:
- *     url: URL to fetch.
- *     dest: Absolute path to write the response body.
- *     headers: Optional extra headers to include.
- *
- * Returns:
- *     The number of bytes written.
+ * @param url - URL to fetch.
+ * @param dest - Absolute path to write the response body.
+ * @param headers - Optional extra headers to include.
+ * @returns The number of bytes written.
  */
 async function download(
   url: string,
@@ -85,11 +87,8 @@ async function download(
 /**
  * Formats a byte count as a human-readable string (e.g. "1.2 MB").
  *
- * Args:
- *     bytes: Number of bytes.
- *
- * Returns:
- *     Formatted string with unit suffix.
+ * @param bytes - Number of bytes.
+ * @returns Formatted string with unit suffix.
  */
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -101,7 +100,7 @@ function formatBytes(bytes: number): string {
  * Downloads Google Product Taxonomy to data/google_product_taxonomy.txt.
  */
 async function downloadGoogleTaxonomy(): Promise<void> {
-  console.log("\n[1/4] Google Product Taxonomy");
+  log.info("[1/4] Google Product Taxonomy");
   const dest = join(DATA_DIR, "google_product_taxonomy.txt");
   if (shouldSkip(dest)) return;
 
@@ -109,7 +108,7 @@ async function downloadGoogleTaxonomy(): Promise<void> {
     "https://www.google.com/basepages/producttype/taxonomy.en-US.txt",
     dest,
   );
-  console.log(`  OK ${formatBytes(bytes)}`);
+  log.success(`OK ${formatBytes(bytes)}`);
 }
 
 /**
@@ -117,7 +116,7 @@ async function downloadGoogleTaxonomy(): Promise<void> {
  * from the npm package tarball.
  */
 async function downloadNSI(): Promise<void> {
-  console.log("\n[2/4] Name Suggestion Index (NSI)");
+  log.info("[2/4] Name Suggestion Index (NSI)");
   const nsiDir = join(DATA_DIR, "nsi");
   mkdirSync(nsiDir, { recursive: true });
 
@@ -126,7 +125,7 @@ async function downloadNSI(): Promise<void> {
 
   if (shouldSkip(nsiDest) && shouldSkip(dissolvedDest)) return;
 
-  console.log("  Fetching npm registry for latest version...");
+  log.info("Fetching npm registry for latest version...");
   const registryRes = await fetch(
     "https://registry.npmjs.org/name-suggestion-index/latest",
   );
@@ -137,15 +136,15 @@ async function downloadNSI(): Promise<void> {
     version: string;
     dist: { tarball: string };
   };
-  console.log(`  Latest version: ${version}`);
-  console.log(`  Downloading tarball...`);
+  log.info(`Latest version: ${version}`);
+  log.info("Downloading tarball...");
 
   const tarRes = await fetch(dist.tarball, { redirect: "follow" });
   if (!tarRes.ok) {
     throw new Error(`Tarball download returned HTTP ${tarRes.status}`);
   }
   const tarBuf = Buffer.from(await tarRes.arrayBuffer());
-  console.log(`  Tarball: ${formatBytes(tarBuf.length)}`);
+  log.info(`Tarball: ${formatBytes(tarBuf.length)}`);
 
   const tmpTar = join(DATA_DIR, "_nsi_tmp.tgz");
   writeFileSync(tmpTar, tarBuf);
@@ -172,14 +171,12 @@ async function downloadNSI(): Promise<void> {
   const { renameSync, rmSync } = await import("fs");
   if (!shouldSkip(nsiDest)) {
     renameSync(extractedNsi, nsiDest);
-    console.log(
-      `  OK nsi.json ${formatBytes(statSync(nsiDest).size)}`,
-    );
+    log.success(`OK nsi.json ${formatBytes(statSync(nsiDest).size)}`);
   }
   if (!shouldSkip(dissolvedDest)) {
     renameSync(extractedDissolved, dissolvedDest);
-    console.log(
-      `  OK dissolved.json ${formatBytes(statSync(dissolvedDest).size)}`,
+    log.success(
+      `OK dissolved.json ${formatBytes(statSync(dissolvedDest).size)}`,
     );
   }
 
@@ -192,7 +189,7 @@ async function downloadNSI(): Promise<void> {
  * Adds a 1.5s delay between requests to be polite.
  */
 async function downloadTaginfo(): Promise<void> {
-  console.log("\n[3/4] OSM Taginfo");
+  log.info("[3/4] OSM Taginfo");
   const dir = join(DATA_DIR, "taginfo");
   mkdirSync(dir, { recursive: true });
 
@@ -204,7 +201,7 @@ async function downloadTaginfo(): Promise<void> {
 
     const url = `https://taginfo.openstreetmap.org/api/4/key/values?key=${key}&sortname=count_all&sortorder=desc&page=1&rp=200&format=json`;
     const bytes = await download(url, dest);
-    console.log(`  OK ${key}.json ${formatBytes(bytes)}`);
+    log.success(`OK ${key}.json ${formatBytes(bytes)}`);
 
     if (key !== allKeys[allKeys.length - 1]) {
       await sleep(1500);
@@ -216,7 +213,7 @@ async function downloadTaginfo(): Promise<void> {
  * Runs a SPARQL query against Wikidata to fetch brand/industry/product data.
  */
 async function downloadWikidata(): Promise<void> {
-  console.log("\n[4/4] Wikidata Brand Data");
+  log.info("[4/4] Wikidata Brand Data");
   const dest = join(DATA_DIR, "wikidata_brands.json");
   if (shouldSkip(dest)) return;
 
@@ -225,15 +222,15 @@ async function downloadWikidata(): Promise<void> {
     "User-Agent":
       "ObeliskBot/1.0 (https://github.com/obelisk; contact@obelisk.dev)",
   });
-  console.log(`  OK ${formatBytes(bytes)}`);
+  log.success(`OK ${formatBytes(bytes)}`);
 }
 
 /**
  * Downloads all external datasets required for the enrichment pipeline.
  */
 async function main(): Promise<void> {
-  console.log("Downloading external datasets...");
-  if (FORCE) console.log("  --force: re-downloading all files");
+  log.info("Downloading external datasets...");
+  if (FORCE) log.info("--force: re-downloading all files");
 
   mkdirSync(DATA_DIR, { recursive: true });
 
@@ -242,10 +239,10 @@ async function main(): Promise<void> {
   await downloadTaginfo();
   await downloadWikidata();
 
-  console.log("\nAll datasets downloaded.");
+  log.success("All datasets downloaded.");
 }
 
 main().catch((err) => {
-  console.error("Download failed:", err);
+  log.error("Download failed:", err);
   process.exit(1);
 });

@@ -1,4 +1,10 @@
-import { db } from "../src/lib/db/client";
+/**
+ * Seeds POIs from a local OSM PBF extract into the database.
+ *
+ * @module seed-pois
+ */
+
+import { db } from "../../src/lib/db/client";
 import {
   categories,
   pois,
@@ -9,21 +15,23 @@ import {
   poiCuisines,
   poiTags,
   tags,
-} from "../src/lib/db/schema";
+} from "../../src/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
-import type { CategorySlug } from "../src/types";
-import type { PoiProfile } from "../src/types/api";
-import { readPoisFromPbf } from "./lib/pbf-reader";
-import { processWithConcurrency } from "./lib/concurrency";
+import type { CategorySlug } from "../../src/types";
+import type { PoiProfile } from "../../src/types/api";
+import type { OverpassElement } from "../../src/types/api";
+import { readPoisFromPbf } from "./pbf-reader";
+import { processWithConcurrency } from "./concurrency";
+import { createLogger } from "../../src/lib/logger";
+import type { LocationConfig } from "./locations";
+
+const log = createLogger("seed-pois");
 
 /**
  * Builds a full Wikipedia URL from an OSM wikipedia tag value.
  *
- * Args:
- *     osmTag: OSM wikipedia tag (format: "lang:Title", e.g. "de:Maximilianeum").
- *
- * Returns:
- *     Full Wikipedia URL with correct language subdomain, or undefined if the tag is malformed.
+ * @param osmTag - OSM wikipedia tag (format: "lang:Title", e.g. "de:Maximilianeum").
+ * @returns Full Wikipedia URL with correct language subdomain, or undefined if malformed.
  */
 function buildWikipediaUrl(osmTag: string): string | undefined {
   const match = osmTag.match(/^([a-z]{2,3}):(.+)$/);
@@ -31,9 +39,6 @@ function buildWikipediaUrl(osmTag: string): string | undefined {
   const [, lang, title] = match;
   return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
 }
-
-const MUNICH_CENTER = { lat: 48.137154, lon: 11.576124 };
-const SEED_RADIUS = parseInt(process.env.SEED_RADIUS || "100", 10);
 
 const CATEGORY_DATA: Array<{
   name: string;
@@ -58,25 +63,11 @@ const CATEGORY_DATA: Array<{
   { name: "Services", slug: "services", icon: "briefcase", color: "#A1887F" },
 ];
 
-interface OverpassElement {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
-
-const PBF_PATH = process.env.PBF_FILE_PATH || "data/Muenchen.osm.pbf";
-
 /**
  * Determines the category slug for a POI based on its OSM tags.
  *
- * Args:
- *     osmTags: Raw OSM tags from the element.
- *
- * Returns:
- *     CategorySlug matching the most appropriate category.
+ * @param osmTags - Raw OSM tags from the element.
+ * @returns CategorySlug matching the most appropriate category.
  */
 function determineCategorySlug(osmTags: Record<string, string>): CategorySlug {
   if (osmTags.historic) return "history";
@@ -128,26 +119,23 @@ function determineCategorySlug(osmTags: Record<string, string>): CategorySlug {
 /**
  * Splits a semicolon-delimited OSM tag value into trimmed parts.
  *
- * Args:
- *     value: Semicolon-separated string or undefined.
- *
- * Returns:
- *     Array of non-empty trimmed strings, or null if empty/undefined.
+ * @param value - Semicolon-separated string or undefined.
+ * @returns Array of non-empty trimmed strings, or null if empty/undefined.
  */
 function splitSemicolon(value: string | undefined): string[] | null {
   if (!value) return null;
-  const parts = value.split(";").map((s) => s.trim()).filter(Boolean);
+  const parts = value
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean);
   return parts.length > 0 ? parts : null;
 }
 
 /**
  * Extracts contact information from OSM tags.
  *
- * Args:
- *     osmTags: Raw OSM tags from the element.
- *
- * Returns:
- *     Object with phone, email, website, social media, and opening hours fields.
+ * @param osmTags - Raw OSM tags from the element.
+ * @returns Object with phone, email, website, social media, and opening hours fields.
  */
 function parseContactInfo(osmTags: Record<string, string>) {
   return {
@@ -164,11 +152,8 @@ function parseContactInfo(osmTags: Record<string, string>) {
 /**
  * Checks if any contact fields are populated.
  *
- * Args:
- *     data: Parsed contact info object.
- *
- * Returns:
- *     True if at least one field is non-null.
+ * @param data - Parsed contact info object.
+ * @returns True if at least one field is non-null.
  */
 function hasContactData(data: ReturnType<typeof parseContactInfo>): boolean {
   return Object.values(data).some((v) => v !== null);
@@ -187,11 +172,8 @@ interface AccessibilityData {
 /**
  * Extracts accessibility information from OSM tags.
  *
- * Args:
- *     osmTags: Raw OSM tags from the element.
- *
- * Returns:
- *     AccessibilityData with wheelchair, elevator, dog-friendly, and parking fields.
+ * @param osmTags - Raw OSM tags from the element.
+ * @returns AccessibilityData with wheelchair, elevator, dog-friendly, and parking fields.
  */
 function parseAccessibility(osmTags: Record<string, string>): AccessibilityData {
   const wheelchairRaw = osmTags.wheelchair;
@@ -221,11 +203,8 @@ function parseAccessibility(osmTags: Record<string, string>): AccessibilityData 
 /**
  * Checks if any accessibility fields are populated.
  *
- * Args:
- *     data: Parsed accessibility data object.
- *
- * Returns:
- *     True if at least one field is non-null.
+ * @param data - Parsed accessibility data object.
+ * @returns True if at least one field is non-null.
  */
 function hasAccessibilityData(data: AccessibilityData): boolean {
   return (
@@ -240,14 +219,10 @@ function hasAccessibilityData(data: AccessibilityData): boolean {
 
 /**
  * Builds a PoiProfile from OSM tags for the given category.
- * Extracts subtype, OSM-specific subtag values, and category-specific attributes.
  *
- * Args:
- *     osmTags: Raw OSM tags from the PBF element.
- *     categorySlug: Determined category for this POI.
- *
- * Returns:
- *     A PoiProfile with seed-time data (keywords/products/summary filled by enrich-taxonomy).
+ * @param osmTags - Raw OSM tags from the PBF element.
+ * @param categorySlug - Determined category for this POI.
+ * @returns A PoiProfile with seed-time data (keywords/products/summary filled by enrich-taxonomy).
  */
 function buildProfile(osmTags: Record<string, string>, categorySlug: CategorySlug): PoiProfile {
   const osmExtracted: Record<string, string> = {};
@@ -340,11 +315,8 @@ function buildProfile(osmTags: Record<string, string>, categorySlug: CategorySlu
 /**
  * Extracts a year number from a date string.
  *
- * Args:
- *     dateStr: Date string, potentially with leading negative sign.
- *
- * Returns:
- *     Parsed year as integer, or null if unparseable.
+ * @param dateStr - Date string, potentially with leading negative sign.
+ * @returns Parsed year as integer, or null if unparseable.
  */
 function parseYear(dateStr: string): number | null {
   const match = dateStr.match(/^(-?\d{1,4})/);
@@ -355,11 +327,8 @@ function parseYear(dateStr: string): number | null {
 /**
  * Maps an OSM heritage tag value to a standardized level string.
  *
- * Args:
- *     heritage: Raw heritage tag value.
- *
- * Returns:
- *     Heritage level: "unesco", "national", "regional", or "local".
+ * @param heritage - Raw heritage tag value.
+ * @returns Heritage level: "unesco", "national", "regional", or "local".
  */
 function parseHeritageLevel(heritage: string): string | null {
   if (heritage.includes("1") || heritage.toLowerCase().includes("world")) return "unesco";
@@ -372,11 +341,8 @@ function parseHeritageLevel(heritage: string): string | null {
 /**
  * Maps a SAC hiking scale value to a simplified difficulty string.
  *
- * Args:
- *     sacScale: SAC scale value (e.g. "hiking", "T1", "mountain_hiking").
- *
- * Returns:
- *     Difficulty level: "easy", "moderate", or "difficult".
+ * @param sacScale - SAC scale value (e.g. "hiking", "T1", "mountain_hiking").
+ * @returns Difficulty level: "easy", "moderate", or "difficult".
  */
 function mapTrailDifficulty(sacScale: string): string | null {
   if (sacScale === "hiking" || sacScale === "T1") return "easy";
@@ -387,11 +353,8 @@ function mapTrailDifficulty(sacScale: string): string | null {
 /**
  * Parses an OSM cuisine tag into normalized slug values.
  *
- * Args:
- *     cuisineValue: Semicolon-separated cuisine string from OSM.
- *
- * Returns:
- *     Array of lowercase, underscore-separated cuisine slugs.
+ * @param cuisineValue - Semicolon-separated cuisine string from OSM.
+ * @returns Array of lowercase, underscore-separated cuisine slugs.
  */
 function parseCuisineTag(cuisineValue: string): string[] {
   return cuisineValue
@@ -403,12 +366,9 @@ function parseCuisineTag(cuisineValue: string): string[] {
 /**
  * Extracts tag slugs from OSM tags for linking to the tags table.
  *
- * Args:
- *     osmTags: Raw OSM tags from the element.
- *     categorySlug: Determined category for this POI.
- *
- * Returns:
- *     Array of tag slug strings matching known tags.
+ * @param osmTags - Raw OSM tags from the element.
+ * @param categorySlug - Determined category for this POI.
+ * @returns Array of tag slug strings matching known tags.
  */
 function extractTagSlugs(osmTags: Record<string, string>, categorySlug: CategorySlug): string[] {
   const slugs: string[] = [];
@@ -465,8 +425,7 @@ interface ProcessResult {
 /**
  * Creates an empty ProcessResult with all counters at zero.
  *
- * Returns:
- *     ProcessResult with zeroed counters.
+ * @returns ProcessResult with zeroed counters.
  */
 function emptyResult(): ProcessResult {
   return { pois: 0, contacts: 0, accessibility: 0, cuisines: 0, tags: 0 };
@@ -475,11 +434,8 @@ function emptyResult(): ProcessResult {
 /**
  * Sums an array of ProcessResult objects into a single total.
  *
- * Args:
- *     results: Array of ProcessResult objects.
- *
- * Returns:
- *     Aggregated ProcessResult with summed counters.
+ * @param results - Array of ProcessResult objects.
+ * @returns Aggregated ProcessResult with summed counters.
  */
 function sumResults(results: ProcessResult[]): ProcessResult {
   const totals = emptyResult();
@@ -494,29 +450,91 @@ function sumResults(results: ProcessResult[]): ProcessResult {
 }
 
 /**
- * Seeds the database with POIs from a local OSM PBF extract.
- * Processes elements in batches with concurrent database writes.
+ * Inserts cuisine links for a POI based on its OSM cuisine tag.
+ *
+ * @param poiId - Database ID of the POI.
+ * @param osmTags - Raw OSM tags from the element.
+ * @param cuisineSlugMap - Map of cuisine slug to database ID.
+ * @returns Number of cuisine links inserted.
  */
-async function main() {
-  console.log(`Seeding Obelisk POIs (radius: ${SEED_RADIUS}m)`);
-  console.log("");
+async function insertCuisinesForPoi(
+  poiId: string,
+  osmTags: Record<string, string>,
+  cuisineSlugMap: Map<string, string>,
+): Promise<number> {
+  if (!osmTags.cuisine || cuisineSlugMap.size === 0) return 0;
 
-  console.log("Seeding categories...");
+  const cuisineSlugs = parseCuisineTag(osmTags.cuisine);
+  const cuisineValues = cuisineSlugs
+    .map((slug, i) => {
+      const cuisineId = cuisineSlugMap.get(slug);
+      return cuisineId ? { poiId, cuisineId, isPrimary: i === 0 } : null;
+    })
+    .filter((v): v is NonNullable<typeof v> => v !== null);
+
+  if (cuisineValues.length === 0) return 0;
+  await db.insert(poiCuisines).values(cuisineValues).onConflictDoNothing();
+  return cuisineValues.length;
+}
+
+/**
+ * Inserts tag links for a POI based on its OSM tags and category.
+ *
+ * @param poiId - Database ID of the POI.
+ * @param osmTags - Raw OSM tags from the element.
+ * @param categorySlug - Determined category for this POI.
+ * @param tagSlugMap - Map of tag slug to database ID.
+ * @returns Number of tag links inserted.
+ */
+async function insertTagsForPoi(
+  poiId: string,
+  osmTags: Record<string, string>,
+  categorySlug: CategorySlug,
+  tagSlugMap: Map<string, string>,
+): Promise<number> {
+  if (tagSlugMap.size === 0) return 0;
+
+  const tagSlugs = extractTagSlugs(osmTags, categorySlug);
+  const tagValues = tagSlugs
+    .map((slug) => {
+      const tagId = tagSlugMap.get(slug);
+      return tagId ? { poiId, tagId } : null;
+    })
+    .filter((v): v is NonNullable<typeof v> => v !== null);
+
+  if (tagValues.length === 0) return 0;
+  await db.insert(poiTags).values(tagValues).onConflictDoNothing();
+  return tagValues.length;
+}
+
+/**
+ * Seeds POIs from a local OSM PBF extract for the given location.
+ * Processes elements in batches with concurrent database writes.
+ *
+ * @param location - Location config providing city center, PBF path, and seed radius.
+ */
+export async function seedPois(location: LocationConfig): Promise<void> {
+  const seedRadius = location.seedRadius;
+  log.info(`Seeding POIs for ${location.city.name} (radius: ${seedRadius}m)`);
+
+  log.info("Seeding categories...");
   await db.insert(categories).values(CATEGORY_DATA).onConflictDoNothing();
   const allCategories = await db.select().from(categories);
   const categoryMap = new Map<string, string>();
   for (const cat of allCategories) {
     categoryMap.set(cat.slug, cat.id);
   }
-  console.log(`Categories ready: ${categoryMap.size}`);
+  log.info(`Categories ready: ${categoryMap.size}`);
 
-  const munichRegion = await db
+  const cityRegion = await db
     .select()
     .from(regions)
-    .where(eq(regions.slug, "munich"));
-  const munichRegionId = munichRegion.at(0)?.id ?? null;
-  if (!munichRegionId) {
-    console.warn("Warning: Munich region not found. Run seed-regions.ts first. Proceeding without region_id.");
+    .where(eq(regions.slug, location.city.slug));
+  const cityRegionId = cityRegion.at(0)?.id ?? null;
+  if (!cityRegionId) {
+    log.warn(
+      `${location.city.name} region not found. Run seed --step regions first. Proceeding without region_id.`,
+    );
   }
 
   const allCuisines = await db.select().from(cuisines);
@@ -525,7 +543,7 @@ async function main() {
     cuisineSlugMap.set(c.slug, c.id);
   }
   if (cuisineSlugMap.size === 0) {
-    console.warn("Warning: No cuisines found. Run seed-cuisines.ts first. Cuisine linking will be skipped.");
+    log.warn("No cuisines found. Run seed --step cuisines first. Cuisine linking will be skipped.");
   }
 
   const allTags = await db.select().from(tags);
@@ -534,21 +552,22 @@ async function main() {
     tagSlugMap.set(t.slug, t.id);
   }
   if (tagSlugMap.size === 0) {
-    console.warn("Warning: No tags found. Run seed-tags.ts first. Tag linking will be skipped.");
+    log.warn("No tags found. Run seed --step tags first. Tag linking will be skipped.");
   }
 
-  console.log("");
-  console.log("Reading Munich POIs from PBF extract...");
-  let elements = await readPoisFromPbf(PBF_PATH, MUNICH_CENTER, SEED_RADIUS);
-  console.log(`Total unique elements: ${elements.length}`);
+  const pbfPath = process.env.PBF_FILE_PATH || `data/${location.pbfFilename}`;
+  const center = { lat: location.city.lat, lon: location.city.lon };
+
+  log.info(`Reading POIs from PBF extract (${pbfPath})...`);
+  const elements = await readPoisFromPbf(pbfPath, center, seedRadius);
+  log.info(`Total unique elements: ${elements.length}`);
 
   if (elements.length === 0) {
-    console.log("No POIs from PBF extract, using fallback data...");
-    elements = getFallbackElements();
+    log.warn("No POIs found in PBF extract. Check SEED_RADIUS and PBF file.");
+    return;
   }
 
-  console.log("");
-  console.log("Processing POIs...");
+  log.info("Processing POIs...");
 
   const totals = emptyResult();
   const BATCH_SIZE = 50;
@@ -557,11 +576,8 @@ async function main() {
   /**
    * Processes a single OSM element: upserts the POI and inserts related data.
    *
-   * Args:
-   *     el: OverpassElement from the PBF reader.
-   *
-   * Returns:
-   *     ProcessResult with counts of inserted rows.
+   * @param el - OverpassElement from the PBF reader.
+   * @returns ProcessResult with counts of inserted rows.
    */
   async function processElement(el: OverpassElement): Promise<ProcessResult> {
     const result = emptyResult();
@@ -577,12 +593,10 @@ async function main() {
     const categoryId = categoryMap.get(categorySlug);
 
     const address = osmTags["addr:street"]
-      ? `${osmTags["addr:street"]} ${osmTags["addr:housenumber"] ?? ""}, Munich`.trim()
+      ? `${osmTags["addr:street"]} ${osmTags["addr:housenumber"] ?? ""}, ${location.city.name}`.trim()
       : null;
 
-    const wikipediaUrl = osmTags.wikipedia
-      ? buildWikipediaUrl(osmTags.wikipedia) ?? null
-      : null;
+    const wikipediaUrl = osmTags.wikipedia ? buildWikipediaUrl(osmTags.wikipedia) ?? null : null;
 
     const profile = buildProfile(osmTags, categorySlug);
 
@@ -592,11 +606,11 @@ async function main() {
         osmId: el.id,
         name: osmTags.name,
         categoryId: categoryId ?? null,
-        regionId: munichRegionId,
+        regionId: cityRegionId,
         latitude: lat,
         longitude: lon,
         address,
-        locale: "de-DE",
+        locale: location.locale,
         osmType: el.type === "way" ? "way" : el.type === "relation" ? "relation" : "node",
         osmTags,
         wikipediaUrl,
@@ -629,29 +643,37 @@ async function main() {
     const contact = parseContactInfo(osmTags);
     const access = parseAccessibility(osmTags);
 
-    await Promise.all([
-      hasContactData(contact)
-        ? db
-            .insert(contactInfo)
-            .values({ poiId, ...contact })
-            .onConflictDoUpdate({ target: contactInfo.poiId, set: contact })
-            .then(() => { result.contacts++; })
-        : null,
+    await Promise.all(
+      [
+        hasContactData(contact)
+          ? db
+              .insert(contactInfo)
+              .values({ poiId, ...contact })
+              .onConflictDoUpdate({ target: contactInfo.poiId, set: contact })
+              .then(() => {
+                result.contacts++;
+              })
+          : null,
 
-      hasAccessibilityData(access)
-        ? db
-            .insert(accessibilityInfo)
-            .values({ poiId, ...access })
-            .onConflictDoUpdate({ target: accessibilityInfo.poiId, set: access })
-            .then(() => { result.accessibility++; })
-        : null,
+        hasAccessibilityData(access)
+          ? db
+              .insert(accessibilityInfo)
+              .values({ poiId, ...access })
+              .onConflictDoUpdate({ target: accessibilityInfo.poiId, set: access })
+              .then(() => {
+                result.accessibility++;
+              })
+          : null,
 
-      insertCuisinesForPoi(poiId, osmTags, cuisineSlugMap)
-        .then((n) => { result.cuisines += n; }),
+        insertCuisinesForPoi(poiId, osmTags, cuisineSlugMap).then((n) => {
+          result.cuisines += n;
+        }),
 
-      insertTagsForPoi(poiId, osmTags, categorySlug, tagSlugMap)
-        .then((n) => { result.tags += n; }),
-    ].filter(Boolean));
+        insertTagsForPoi(poiId, osmTags, categorySlug, tagSlugMap).then((n) => {
+          result.tags += n;
+        }),
+      ].filter(Boolean),
+    );
 
     return result;
   }
@@ -668,120 +690,12 @@ async function main() {
     totals.cuisines += batchTotals.cuisines;
     totals.tags += batchTotals.tags;
 
-    console.log(`  Processed batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(elements.length / BATCH_SIZE)} (${Math.min(i + BATCH_SIZE, elements.length)}/${elements.length} elements)`);
+    log.info(
+      `Processed batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(elements.length / BATCH_SIZE)} (${Math.min(i + BATCH_SIZE, elements.length)}/${elements.length} elements)`,
+    );
   }
 
-  console.log("");
-  console.log("Seeding complete!");
-  console.log(`  POIs: ${totals.pois}`);
-  console.log(`  Contact info: ${totals.contacts}`);
-  console.log(`  Accessibility info: ${totals.accessibility}`);
-  console.log(`  Cuisine links: ${totals.cuisines}`);
-  console.log(`  Tag links: ${totals.tags}`);
-  process.exit(0);
+  log.success(
+    `Seeding complete! POIs: ${totals.pois}, contacts: ${totals.contacts}, accessibility: ${totals.accessibility}, cuisines: ${totals.cuisines}, tags: ${totals.tags}`,
+  );
 }
-
-/**
- * Inserts cuisine links for a POI based on its OSM cuisine tag.
- *
- * Args:
- *     poiId: Database ID of the POI.
- *     osmTags: Raw OSM tags from the element.
- *     cuisineSlugMap: Map of cuisine slug to database ID.
- *
- * Returns:
- *     Number of cuisine links inserted.
- */
-async function insertCuisinesForPoi(
-  poiId: string,
-  osmTags: Record<string, string>,
-  cuisineSlugMap: Map<string, string>,
-): Promise<number> {
-  if (!osmTags.cuisine || cuisineSlugMap.size === 0) return 0;
-
-  const cuisineSlugs = parseCuisineTag(osmTags.cuisine);
-  const cuisineValues = cuisineSlugs
-    .map((slug, i) => {
-      const cuisineId = cuisineSlugMap.get(slug);
-      return cuisineId ? { poiId, cuisineId, isPrimary: i === 0 } : null;
-    })
-    .filter((v): v is NonNullable<typeof v> => v !== null);
-
-  if (cuisineValues.length === 0) return 0;
-  await db.insert(poiCuisines).values(cuisineValues).onConflictDoNothing();
-  return cuisineValues.length;
-}
-
-/**
- * Inserts tag links for a POI based on its OSM tags and category.
- *
- * Args:
- *     poiId: Database ID of the POI.
- *     osmTags: Raw OSM tags from the element.
- *     categorySlug: Determined category for this POI.
- *     tagSlugMap: Map of tag slug to database ID.
- *
- * Returns:
- *     Number of tag links inserted.
- */
-async function insertTagsForPoi(
-  poiId: string,
-  osmTags: Record<string, string>,
-  categorySlug: CategorySlug,
-  tagSlugMap: Map<string, string>,
-): Promise<number> {
-  if (tagSlugMap.size === 0) return 0;
-
-  const tagSlugs = extractTagSlugs(osmTags, categorySlug);
-  const tagValues = tagSlugs
-    .map((slug) => {
-      const tagId = tagSlugMap.get(slug);
-      return tagId ? { poiId, tagId } : null;
-    })
-    .filter((v): v is NonNullable<typeof v> => v !== null);
-
-  if (tagValues.length === 0) return 0;
-  await db.insert(poiTags).values(tagValues).onConflictDoNothing();
-  return tagValues.length;
-}
-
-/**
- * Returns hardcoded Munich landmark POIs as fallback data.
- *
- * Returns:
- *     Array of OverpassElement objects for well-known Munich landmarks.
- */
-function getFallbackElements(): OverpassElement[] {
-  return [
-    { type: "node", id: 1, lat: 48.1374, lon: 11.5755, tags: { name: "Marienplatz", historic: "square", "name:en": "Mary's Square", "name:de": "Marienplatz" } },
-    { type: "node", id: 2, lat: 48.1386, lon: 11.5730, tags: { name: "Frauenkirche", amenity: "place_of_worship", building: "church", architecture: "Gothic", "name:en": "Cathedral of Our Dear Lady", "name:de": "Frauenkirche" } },
-    { type: "node", id: 3, lat: 48.1351, lon: 11.5820, tags: { name: "Viktualienmarkt", amenity: "marketplace", "name:de": "Viktualienmarkt" } },
-    { type: "node", id: 4, lat: 48.1416, lon: 11.5770, tags: { name: "Residenz München", historic: "palace", tourism: "museum", "name:en": "Munich Residence", "name:de": "Residenz München" } },
-    { type: "node", id: 5, lat: 48.1500, lon: 11.5819, tags: { name: "Englischer Garten", leisure: "park", "name:en": "English Garden", "name:de": "Englischer Garten" } },
-    { type: "node", id: 6, lat: 48.1394, lon: 11.5792, tags: { name: "Hofbräuhaus", amenity: "biergarten", cuisine: "bavarian;german", "name:de": "Hofbräuhaus" } },
-    { type: "node", id: 7, lat: 48.1397, lon: 11.5785, tags: { name: "Bayerische Staatsoper", amenity: "theatre", "name:en": "Bavarian State Opera", "name:de": "Bayerische Staatsoper" } },
-    { type: "node", id: 8, lat: 48.1362, lon: 11.5767, tags: { name: "Altes Rathaus", historic: "monument", "name:en": "Old Town Hall", "name:de": "Altes Rathaus" } },
-    { type: "node", id: 9, lat: 48.1363, lon: 11.5761, tags: { name: "Neues Rathaus", historic: "building", tourism: "attraction", "name:en": "New Town Hall", "name:de": "Neues Rathaus" } },
-    { type: "node", id: 10, lat: 48.1451, lon: 11.5579, tags: { name: "Pinakothek der Moderne", tourism: "museum", "name:de": "Pinakothek der Moderne" } },
-    { type: "node", id: 11, lat: 48.1482, lon: 11.5700, tags: { name: "Chinesischer Turm", amenity: "biergarten", cuisine: "bavarian", "name:en": "Chinese Tower", "name:de": "Chinesischer Turm" } },
-    { type: "node", id: 12, lat: 48.1324, lon: 11.5830, tags: { name: "Deutsches Museum", tourism: "museum", "name:en": "German Museum", "name:de": "Deutsches Museum" } },
-    { type: "node", id: 13, lat: 48.1433, lon: 11.5678, tags: { name: "Theatinerkirche", amenity: "place_of_worship", architecture: "Baroque", "name:de": "Theatinerkirche" } },
-    { type: "node", id: 14, lat: 48.1395, lon: 11.5670, tags: { name: "Feldherrnhalle", historic: "monument", "name:de": "Feldherrnhalle" } },
-    { type: "node", id: 15, lat: 48.1456, lon: 11.5582, tags: { name: "Alte Pinakothek", tourism: "museum", "name:en": "Old Pinakothek", "name:de": "Alte Pinakothek" } },
-    { type: "node", id: 16, lat: 48.1519, lon: 11.5915, tags: { name: "Eisbachwelle", tourism: "attraction", "name:en": "Eisbach Wave", "name:de": "Eisbachwelle" } },
-    { type: "node", id: 17, lat: 48.1230, lon: 11.5500, tags: { name: "Schloss Nymphenburg", historic: "castle", tourism: "museum", "name:en": "Nymphenburg Palace", "name:de": "Schloss Nymphenburg" } },
-    { type: "node", id: 18, lat: 48.1411, lon: 11.5599, tags: { name: "Königsplatz", historic: "square", "name:de": "Königsplatz" } },
-    { type: "node", id: 19, lat: 48.1528, lon: 11.5817, tags: { name: "Monopteros", historic: "monument", tourism: "viewpoint", "name:de": "Monopteros" } },
-    { type: "node", id: 20, lat: 48.1343, lon: 11.5648, tags: { name: "Sendlinger Tor", historic: "city_gate", "name:en": "Sendling Gate", "name:de": "Sendlinger Tor" } },
-    { type: "node", id: 21, lat: 48.1378, lon: 11.5716, tags: { name: "Asamkirche", amenity: "place_of_worship", architecture: "Baroque", "name:de": "Asamkirche" } },
-    { type: "node", id: 22, lat: 48.1405, lon: 11.5648, tags: { name: "Michaelskirche", amenity: "place_of_worship", architecture: "Renaissance", "name:en": "St. Michael's Church", "name:de": "Michaelskirche" } },
-    { type: "node", id: 23, lat: 48.1352, lon: 11.5749, tags: { name: "Peterskirche", amenity: "place_of_worship", tourism: "viewpoint", "name:en": "St. Peter's Church", "name:de": "Peterskirche" } },
-    { type: "node", id: 24, lat: 48.1377, lon: 11.5892, tags: { name: "Maximilianeum", historic: "building", "name:de": "Maximilianeum" } },
-    { type: "node", id: 25, lat: 48.1420, lon: 11.5770, tags: { name: "Odeonsplatz", historic: "square", "name:de": "Odeonsplatz" } },
-  ];
-}
-
-main().catch((error) => {
-  console.error("Seeding failed:", error);
-  process.exit(1);
-});

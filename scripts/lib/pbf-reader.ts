@@ -1,4 +1,15 @@
+/**
+ * Reads POIs from local OSM PBF extract files, applying tag filters
+ * and geographic radius constraints.
+ *
+ * @module pbf-reader
+ */
+
 import { isWithinRadius } from "../../src/lib/geo/distance";
+import type { OverpassElement } from "../../src/types/api";
+import { createLogger } from "../../src/lib/logger";
+
+const log = createLogger("pbf-reader");
 
 // Bun defines globalThis.self which causes osm-read to use the browser code
 // path (XMLHttpRequest) instead of Node.js (fs + zlib). Temporarily removing
@@ -11,15 +22,6 @@ const osmRead = require("osm-read") as { parse: (opts: import("osm-read").ParseO
 globalThis.self = savedSelf;
 
 const osmParse = osmRead.parse;
-
-interface OverpassElement {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
 
 interface TagFilter {
   key: string;
@@ -98,11 +100,8 @@ const TAG_FILTERS: TagFilter[] = [
 /**
  * Checks whether an OSM element's tags match at least one tag filter.
  *
- * Args:
- *     tags: The element's OSM tag dictionary.
- *
- * Returns:
- *     True if the element matches at least one filter.
+ * @param tags - The element's OSM tag dictionary.
+ * @returns True if the element matches at least one filter.
  */
 function matchesFilters(tags: Record<string, string>): boolean {
   for (const filter of TAG_FILTERS) {
@@ -119,13 +118,10 @@ function matchesFilters(tags: Record<string, string>): boolean {
  * Reads POIs from a local OSM PBF extract file, filtered by tag criteria
  * and geographic radius.
  *
- * Args:
- *     filePath: Path to the .osm.pbf file.
- *     center: Center point { lat, lon } for radius filtering.
- *     radiusKm: Radius in kilometers from center to include POIs.
- *
- * Returns:
- *     Array of OverpassElement objects matching the tag filters within radius.
+ * @param filePath - Path to the .osm.pbf file.
+ * @param center - Center point { lat, lon } for radius filtering.
+ * @param radiusMeters - Radius in meters from center to include POIs.
+ * @returns Array of OverpassElement objects matching the tag filters within radius.
  */
 export async function readPoisFromPbf(
   filePath: string,
@@ -189,8 +185,8 @@ export async function readPoisFromPbf(
       },
 
       endDocument() {
-        console.log(`  PBF: ${matchedNodes.length} nodes + ${matchedWays.length} ways = ${matchedNodes.length + matchedWays.length} POIs`);
-        console.log(`  PBF: ${nodeCoords.size} total nodes indexed for way centroids`);
+        log.info(`PBF: ${matchedNodes.length} nodes + ${matchedWays.length} ways = ${matchedNodes.length + matchedWays.length} POIs`);
+        log.info(`PBF: ${nodeCoords.size} total nodes indexed for way centroids`);
         nodeCoords.clear();
         resolve([...matchedNodes, ...matchedWays]);
       },

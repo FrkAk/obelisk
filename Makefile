@@ -20,6 +20,7 @@ export OLLAMA_SEARCH_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_EMBED_MODEL ?= embeddinggemma:300m
 export TYPESENSE_API_KEY ?= obelisk_typesense_dev
 export SEED_RADIUS ?= 2000
+export SEED_LOCATION ?= munich
 
 help:
 	@printf "\n"
@@ -35,13 +36,13 @@ help:
 	@printf "  $(CYAN)rebuild$(RESET)    Clean rebuild (deps + next cache)\n"
 	@printf "  $(CYAN)destroy$(RESET)    Stop and remove all data\n"
 	@printf "\n"
-	@printf "$(GREEN)Seeding:$(RESET)\n"
-	@printf "  $(CYAN)seed-regions$(RESET)        Seed regions (Germany -> Munich)\n"
+	@printf "$(GREEN)Seeding (SEED_LOCATION=$(SEED_LOCATION)):$(RESET)\n"
+	@printf "  $(CYAN)seed-all$(RESET)            Run all seed steps in order\n"
+	@printf "  $(CYAN)seed-regions$(RESET)        Seed regions (country -> city)\n"
 	@printf "  $(CYAN)seed-cuisines$(RESET)       Seed cuisine taxonomy\n"
 	@printf "  $(CYAN)seed-tags$(RESET)           Seed tags across all groups\n"
-	@printf "  $(CYAN)download-pbf$(RESET)        Download Munich OSM PBF extract\n"
+	@printf "  $(CYAN)download-pbf$(RESET)        Download OSM PBF extract for location\n"
 	@printf "  $(CYAN)seed-pois$(RESET)           Seed POIs from local OSM extract\n"
-	@printf "  $(CYAN)seed-all$(RESET)            Run all seed scripts in order\n"
 	@printf "\n"
 	@printf "$(GREEN)Enrichment:$(RESET)\n"
 	@printf "  $(CYAN)download-datasets$(RESET)   Download external datasets (taxonomy, NSI, taginfo, wikidata)\n"
@@ -60,7 +61,7 @@ help:
 	@printf "\n"
 
 setup:
-	@printf "$(GREEN)Setting up Obelisk...$(RESET)\n"
+	@printf "$(GREEN)Setting up Obelisk ($(SEED_LOCATION))...$(RESET)\n"
 	@printf "\n"
 	@printf "$(CYAN)[1/14]$(RESET) Building and starting services...\n"
 	$(COMPOSE) up -d --build
@@ -85,28 +86,19 @@ setup:
 	@printf "$(CYAN)[6/14]$(RESET) Building brand enrichment map...\n"
 	$(COMPOSE) exec app bun scripts/build-brands.ts
 	@printf "\n"
-	@printf "$(CYAN)[7/14]$(RESET) Seeding regions...\n"
-	$(COMPOSE) exec app bun scripts/seed-regions.ts
-	@printf "\n"
-	@printf "$(CYAN)[8/14]$(RESET) Seeding cuisines...\n"
-	$(COMPOSE) exec app bun scripts/seed-cuisines.ts
-	@printf "\n"
-	@printf "$(CYAN)[9/14]$(RESET) Seeding tags...\n"
-	$(COMPOSE) exec app bun scripts/seed-tags.ts
-	@printf "\n"
-	@printf "$(CYAN)[10/14]$(RESET) Downloading Munich OSM extract...\n"
+	@printf "$(CYAN)[7/14]$(RESET) Downloading OSM PBF extract...\n"
 	$(MAKE) download-pbf
 	@printf "\n"
-	@printf "$(CYAN)[11/14]$(RESET) Seeding POIs...\n"
-	$(COMPOSE) exec app bun scripts/seed-pois.ts
+	@printf "$(CYAN)[8/14]$(RESET) Seeding (regions, cuisines, tags, POIs)...\n"
+	$(COMPOSE) exec app bun scripts/seed.ts
 	@printf "\n"
-	@printf "$(CYAN)[12/14]$(RESET) Enriching POIs with taxonomy data...\n"
+	@printf "$(CYAN)[9/14]$(RESET) Enriching POIs with taxonomy data...\n"
 	$(COMPOSE) exec app bun scripts/enrich-taxonomy.ts
 	@printf "\n"
-	@printf "$(CYAN)[13/14]$(RESET) Generating stories...\n"
+	@printf "$(CYAN)[10/14]$(RESET) Generating stories...\n"
 	$(COMPOSE) exec app bun scripts/generate-stories.ts || true
 	@printf "\n"
-	@printf "$(CYAN)[14/14]$(RESET) Syncing search index + generating embeddings...\n"
+	@printf "$(CYAN)[11/14]$(RESET) Syncing search index + generating embeddings...\n"
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
 	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
 	@printf "\n"
@@ -154,13 +146,15 @@ destroy:
 	@printf "Done. Run 'make setup' to start fresh.\n"
 
 download-pbf:
-	@if [ -f data/Muenchen.osm.pbf ]; then \
-		printf "$(GREEN)PBF extract already exists, skipping download$(RESET)\n"; \
+	@PBF_URL=$$(bun -e "const{getLocation}=require('./scripts/lib/locations');console.log(getLocation().pbfUrl)"); \
+	PBF_FILE=$$(bun -e "const{getLocation}=require('./scripts/lib/locations');console.log(getLocation().pbfFilename)"); \
+	if [ -f "data/$$PBF_FILE" ]; then \
+		printf "$(GREEN)PBF extract already exists (data/$$PBF_FILE), skipping download$(RESET)\n"; \
 	else \
 		mkdir -p data; \
-		printf "$(CYAN)Downloading Munich OSM PBF extract...$(RESET)\n"; \
-		curl -L -o data/Muenchen.osm.pbf https://download.bbbike.org/osm/bbbike/Muenchen/Muenchen.osm.pbf; \
-		printf "$(GREEN)Download complete: data/Muenchen.osm.pbf$(RESET)\n"; \
+		printf "$(CYAN)Downloading $$PBF_FILE...$(RESET)\n"; \
+		curl -L -o "data/$$PBF_FILE" "$$PBF_URL"; \
+		printf "$(GREEN)Download complete: data/$$PBF_FILE$(RESET)\n"; \
 	fi
 
 download-datasets:
@@ -173,18 +167,19 @@ build-brands:
 	$(COMPOSE) exec app bun scripts/build-brands.ts
 
 seed-regions:
-	$(COMPOSE) exec app bun scripts/seed-regions.ts
+	$(COMPOSE) exec app bun scripts/seed.ts --step regions
 
 seed-cuisines:
-	$(COMPOSE) exec app bun scripts/seed-cuisines.ts
+	$(COMPOSE) exec app bun scripts/seed.ts --step cuisines
 
 seed-tags:
-	$(COMPOSE) exec app bun scripts/seed-tags.ts
+	$(COMPOSE) exec app bun scripts/seed.ts --step tags
 
 seed-pois:
-	$(COMPOSE) exec app bun scripts/seed-pois.ts
+	$(COMPOSE) exec app bun scripts/seed.ts --step pois
 
-seed-all: seed-regions seed-cuisines seed-tags seed-pois
+seed-all:
+	$(COMPOSE) exec app bun scripts/seed.ts
 
 enrich-taxonomy:
 	$(COMPOSE) exec app bun scripts/enrich-taxonomy.ts
@@ -210,10 +205,10 @@ db-restore:
 finish-setup:
 	@printf "$(GREEN)Finishing setup (stories + search + embeddings)...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[13/14]$(RESET) Generating stories...\n"
+	@printf "$(CYAN)[10/14]$(RESET) Generating stories...\n"
 	$(COMPOSE) exec app bun scripts/generate-stories.ts || true
 	@printf "\n"
-	@printf "$(CYAN)[14/14]$(RESET) Syncing search index + generating embeddings...\n"
+	@printf "$(CYAN)[11/14]$(RESET) Syncing search index + generating embeddings...\n"
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
 	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
 	@printf "\n"

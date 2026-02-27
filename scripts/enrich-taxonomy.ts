@@ -31,11 +31,8 @@ interface BrandEntry {
 /**
  * Loads and parses a JSON file from the data directory.
  *
- * Args:
- *     path: Relative path to the JSON file.
- *
- * Returns:
- *     Parsed JSON object.
+ * @param path - Relative path to the JSON file.
+ * @returns Parsed JSON object.
  */
 function loadJson<T>(path: string): T {
   const raw = readFileSync(path, "utf-8");
@@ -46,13 +43,10 @@ const TAG_KEY_PRIORITY = ["shop", "amenity", "tourism", "historic", "leisure", "
 
 /**
  * Determines the primary OSM tag key=value for enrichment lookup.
- * Mirrors the logic in determineCategorySlug from seed-pois.ts.
+ * Mirrors the logic in determineCategorySlug from seed-pois.
  *
- * Args:
- *     osmTags: Raw OSM tags from the POI.
- *
- * Returns:
- *     Primary tag string like "shop=clothes" or "amenity=restaurant", or null.
+ * @param osmTags - Raw OSM tags from the POI.
+ * @returns Primary tag string like "shop=clothes" or "amenity=restaurant", or null.
  */
 function determinePrimaryTag(osmTags: Record<string, string>): string | null {
   for (const key of TAG_KEY_PRIORITY) {
@@ -68,15 +62,12 @@ function determinePrimaryTag(osmTags: Record<string, string>): string | null {
 /**
  * Builds the LLM prompt for generating a place description.
  *
- * Args:
- *     name: POI name.
- *     categorySlug: Category slug.
- *     profile: Current profile data (with merged keywords/products).
- *     address: POI address or null.
- *     brandInfo: Brand name and price tier if available.
- *
- * Returns:
- *     Prompt string for the LLM.
+ * @param name - POI name.
+ * @param categorySlug - Category slug.
+ * @param profile - Current profile data (with merged keywords/products).
+ * @param address - POI address or null.
+ * @param brandInfo - Brand name and price tier if available.
+ * @returns Prompt string for the LLM.
  */
 function buildSummaryPrompt(
   name: string,

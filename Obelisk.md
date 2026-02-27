@@ -3,15 +3,19 @@
 Created by: Furkan Akbulutlar
 Created time: January 17, 2026 9:11 AM
 Last edited by: Furkan Akbulutlar
-Last updated time: January 17, 2026 9:58 AM
+Last updated time: February 26, 2026
 
 ## 1. What is Obelisk?
 
-Obelisk is a **contextual discovery platform** that transforms navigation into a deeply human experience. Unlike traditional maps that optimize for efficiency, Obelisk optimizes for **meaningful exploration**.
+Obelisk is a **next-generation intelligent map** that deeply understands every place in the world. Unlike traditional maps that show you data and wait for you to search, Obelisk already knows what you need — and shows you before you ask.
+
+Today's maps are transactional tools. Obelisk is building toward a **full daily-driver map replacement** — starting with what no other map has: genuine semantic understanding of places. Every café, monument, park, and hidden courtyard has a rich profile of what it is, what makes it special, and who it's right for. This intelligence powers everything: contextual discovery, ambient storytelling, and eventually navigation, transit, and daily use.
 
 **Core Philosophy:** Be the knowledgeable local friend everyone wishes they had in every city.
 
 **One-liner:** *"Your local guide, anywhere in the world."*
+
+**Long-term vision:** The map that understands places so well, you never pre-research anything again.
 
 ---
 
@@ -25,6 +29,16 @@ Obelisk is a **contextual discovery platform** that transforms navigation into a
 - **Algorithmic sameness**: Everyone gets the same popular results
 - **Overwhelming**: Too many options, no curation
 
+### The Pre-Research Tax
+
+Every outing requires homework. People spend hours researching before they go anywhere:
+
+- Planning a holiday? Read 50 blog posts, compare 20 hotels, bookmark 30 restaurants
+- Picking a dinner spot? Scroll through reviews, filter by rating, check photos, still unsure
+- Need coffee? Open Google Maps, type "coffee," get 40 results sorted by ad spend
+
+This research loop is exhausting, repetitive, and often wrong — because ratings and reviews don't capture what makes a place *right for you, right now*.
+
 ### The Human Reality
 
 - People still ask friends and locals for recommendations
@@ -35,31 +49,39 @@ Obelisk is a **contextual discovery platform** that transforms navigation into a
 
 ### The Gap
 
-Despite having the world's information in our pockets, we still feel like strangers in new places.
+Despite having the world's information in our pockets, we still feel like strangers in new places. Maps show us everything but understand nothing.
 
 ---
 
 ## 3. Our Unique Value Proposition
 
+### The Intelligence Gap
+
+Google Maps knows *where* places are. Obelisk knows *what* they are.
+
+Every POI in Obelisk has a deep semantic profile — not just a name and address, but keywords, products, cultural context, brand data, and AI-generated summaries. This is the foundation everything else is built on: when the map truly understands every place, it can surface the right one without being asked.
+
 ### Google Maps vs Obelisk
 
 | Aspect | Google Maps | Obelisk |
 | --- | --- | --- |
-| **Primary Goal** | Efficient navigation | Meaningful discovery |
-| **Mode** | Reactive (you search) | Proactive (it finds you) |
-| **Content** | Business data, reviews | Business data, reviews plus Stories, context, local knowledge |
-| **Tone** | Corporate, neutral | Friendly local friend |
-| **Personalization** | Based on search history | Based on interests & context |
-| **Discovery** | Sponsored results first | Authentic hidden gems |
-| **Experience** | Look at screen | Listen and explore |
+| **Primary Goal** | Efficient navigation | Intelligent understanding + discovery |
+| **Knowledge** | Business listings, user reviews | Deep semantic profiles, taxonomy, embeddings |
+| **Mode** | Reactive (you search) | Proactive (it already knows) |
+| **Content** | Business data, reviews | Stories, context, local knowledge, semantic understanding |
+| **Personalization** | Based on search history | Based on interests, context, time, and place understanding |
+| **Discovery** | Sponsored results first | Best match based on genuine understanding |
+| **Experience** | Look at screen, read reviews | Glance at map, trust the intelligence |
+| **Long-term** | Navigation utility | Full daily-driver map with intelligence |
 
 ### Our Differentiators
 
-1. **Ambient Discovery** - Stories find you, you don't search for them
-2. **Contextual Storytelling** - LLM-powered narratives that adapt to time, weather, your interests
-3. **Audio-First** - Hands-free exploration, eyes on the world
-4. **Human Curation** - Local knowledge from real people, not algorithms
-5. **Emotional Connection** - Places have stories, not just ratings
+1. **Semantic Understanding** - Every place has a deep profile: what it is, what makes it special, who it's for
+2. **Zero-Friction Discovery** - The map shows you the right places before you search
+3. **Ambient Storytelling** - Stories find you as you walk, powered by proximity intelligence
+4. **Contextual Awareness** - Time, weather, your interests, your pace — everything factors in
+5. **Audio-First** - Hands-free exploration, eyes on the world
+6. **Emotional Connection** - Places have stories, not just ratings
 
 ---
 
@@ -155,61 +177,105 @@ Despite having the world's information in our pockets, we still feel like strang
 
 ### 5.2 Map Interface
 
-**Primary View: The Living Map**
+**Primary View: The Intelligent Map**
 
 ```
-┌─────────────────────────────────────┐
-│  [🔍 Search]              [👤 Profile]│
-│                                     │
-│         ○ ← Remark pin              │
-│              ○                      │
-│    🔵 (you)     ○                   │
-│                                     │
-│              ○                      │
-│                                     │
-│  ┌─────────────────────────────┐    │
-│  │ 🎭 "The Actor's Last Bow"   │    │
-│  │ 150m away · 45 sec story    │    │
-│  └─────────────────────────────┘    │
-│                                     │
-│  [🎧 Audio Mode]    [📍 Explore]    │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│ STATUS BAR                                       │
+├─────────────────────────────────────────────────┤
+│                                                   │
+│  ┌───────────────────────────┐       ┌────┐      │
+│  │ 🔍 Search or ask Obelisk… │       │ ⚙️ │      │
+│  └───────────────────────────┘       └────┘      │
+│                                                   │
+│              ○ History                            │
+│     ○ Food        ○ Hidden                       │
+│                                                   │
+│           ⑫ ← cluster (12 POIs)                  │
+│                    🔵                             │
+│                   (you)      ○ Art                │
+│        ○ Nature                                   │
+│                         ○ Architecture            │
+│              ○ Culture                            │
+│                                                   │
+│  ┌─ Bottom Sheet (glassmorphism) ──────────────┐ │
+│  │  ┌────────────────────────────────────────┐  │ │
+│  │  │       ─── drag handle (36×5px) ───     │  │ │
+│  │  │                                        │  │ │
+│  │  │  ┌────┐                                │  │ │
+│  │  │  │ 🎭 │ "The Actor's Last Bow"         │  │ │
+│  │  │  └────┘  150m · 45 sec · History       │  │ │
+│  │  │                                        │  │ │
+│  │  │  A forgotten theater once stood here…  │  │ │
+│  │  │  [Tap to discover →]                   │  │ │
+│  │  └────────────────────────────────────────┘  │ │
+│  └──────────────────────────────────────────────┘ │
+│                                                   │
+│  ┌──────┐  ┌──────┐                    ┌──────┐  │
+│  │  +   │  │  −   │                    │  ◎   │  │
+│  │ zoom  │  │ zoom │                    │locate│  │
+│  └──────┘  └──────┘                    └──────┘  │
+│                                                   │
+└─────────────────────────────────────────────────┘
+
+Legend:
+○    = Remark pin (color indicates category)
+⑫   = Supercluster (expands on zoom/tap)
+🔵   = User location (pulsing blue dot + accuracy ring)
+⚙️   = Settings (opens in bottom sheet)
+◎    = Locate button (center on user)
 ```
 
 **Design Principles:**
 
-- **Minimal chrome** - Map is the hero
-- **Subtle markers** - Don't clutter the view
-- **Contextual UI** - Controls appear when needed
-- **Dark mode default** - Easy on eyes, battery efficient
+- **Minimal chrome** — Map is the hero, UI recedes
+- **Intelligent markers** — Color-coded by category, clustered at distance, detailed up close
+- **Bottom sheet pattern** — All content in Apple Maps-style draggable sheet (story, POI, search, settings)
+- **Glassmorphism** — Translucent surfaces with blur, never opaque overlays
+- **Auto dark mode** — Switches with system preference
 
 ### 5.3 Story Experience
 
-**Popup Notification (ambient mode):**
+**Geofence Notification (50m proximity):**
 
 ```
-┌─────────────────────────────────┐
-│ ✨ "Hidden Brewery Tunnel"      │
-│    Tap to discover              │
-└─────────────────────────────────┘
+┌─────────────────────────────────────────┐
+│ ✨ "Hidden Brewery Tunnel"               │
+│    50m away · Tap to discover            │
+└─────────────────────────────────────────┘
+← Slides up from bottom, auto-dismisses
+← 2-min cooldown between notifications
+← Max 5 per 30-min session
 ```
 
-**Story Card (expanded):**
+**Story Card (in bottom sheet):**
 
 ```
-┌─────────────────────────────────┐
-│ [Image of location]             │
-│                                 │
-│ The Hidden Brewery Tunnel       │
-│                                 │
-│ In 1847, beneath this ordinary  │
-│ street, monks dug a secret...   │
-│                                 │
-│ [▶ Listen 45s]  [📍 Navigate]   │
-│                                 │
-│ 💡 Local tip: Best visited at   │
-│    sunset when the light...     │
-└─────────────────────────────────┘
+┌─────────────────────────────────────────┐
+│       ─── drag handle ───               │
+│                                         │
+│  ┌────┐  The Hidden Brewery Tunnel      │
+│  │ 🏛️ │  ━━━━━━━━━━━━━━━━━━━━━━━━━     │
+│  └────┘  History · 45 sec · 50m away    │
+│                                         │
+│  In 1847, beneath this ordinary         │
+│  cobblestone street, Augustinian        │
+│  monks dug a secret network of          │
+│  tunnels to store their famous…         │
+│                                         │
+│  ┌─────────────────────────────────┐    │
+│  │ 💡 Local tip                    │    │
+│  │ "Look for the small brass       │    │
+│  │  plaque on the wall—most        │    │
+│  │  tourists miss it completely."  │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  [📍 Navigate]  [🔄 Regenerate]         │
+│  [▶ Listen]     [↗️ Share]               │
+└─────────────────────────────────────────┘
+← Navigate opens Google Maps directions
+← Regenerate re-rolls story (20s cooldown)
+← Listen placeholder (TTS planned)
 ```
 
 ### 5.4 Interaction Modes
@@ -256,32 +322,41 @@ Despite having the world's information in our pockets, we still feel like strang
 
 ---
 
-## 6. How We Beat Google Maps
+## 6. How We Replace Google Maps
 
-### 6.1 Where We Don't Compete
+### 6.1 Strategy: Intelligence First, Utility Later
 
-We **don't** try to replace Google Maps for:
+We don't try to out-feature Google Maps on day one. Instead, we build what they can't: **genuine understanding of every place.** Then we layer utility features on top of that intelligence.
 
-- Turn-by-turn driving navigation
-- Traffic optimization
-- Commercial search ("pizza near me")
+```
+Phase 1: Intelligence     → Deep semantic understanding, contextual discovery, stories
+Phase 2: Daily companion  → Search, recommendations, personalization
+Phase 3: Full utility     → Navigation, transit, driving, real-time data
+Phase 4: Daily driver     → Complete Google Maps replacement
+```
 
-### 6.2 Where We Win
+Google Maps has 20 years of utility features. We have something they don't: a knowledge layer that makes every interaction smarter. They optimize for getting you somewhere fast. We optimize for getting you to the *right* place.
+
+### 6.2 Where We Win Today
 
 | Need | Google Maps | Obelisk |
 | --- | --- | --- |
-| "What's interesting here?" | Shows popular places | Tells you stories |
+| "What's interesting here?" | Shows popular places | Already knows, shows the best ones |
+| "I want coffee" | 40 results sorted by ads | The right café for you, right now |
 | "I'm bored, surprise me" | Not possible | Core feature |
-| "I want to feel like a local" | Generic recommendations | Local knowledge |
+| "I want to feel like a local" | Generic recommendations | Deep local knowledge per place |
+| "Plan my evening" | You do the research | Intelligence does it for you |
 | "Guide me without screens" | Requires constant looking | Audio-first |
-| "Make this walk memorable" | Just navigation | Stories & soundscapes |
 
-### 6.3 Complementary, Not Replacement
+### 6.3 Where Google Maps Still Wins (For Now)
 
-Obelisk works **alongside** Google Maps:
+Features we'll build over time but don't have yet:
 
-- Use Google to get there
-- Use Obelisk to experience it
+- Turn-by-turn driving navigation
+- Transit directions and schedules
+- Traffic optimization
+- Street View
+- Business hours / live busyness data
 
 ---
 
@@ -396,90 +471,138 @@ Obelisk works **alongside** Google Maps:
 
 ## 9. Technical Vision
 
-### 9.1 LLM-Powered Content Generation
+### 9.1 Semantic Knowledge Layer (Built)
 
-- Stories generated from OSM data, Wikipedia, historical sources, business webpage
+The foundation of Obelisk's intelligence. Every POI has a deep semantic profile:
+
+- **Taxonomy enrichment** — OSM tags mapped to keywords, products, and categories via static taxonomy maps (Google Product Taxonomy + OSM taginfo + NSI brands)
+- **Brand intelligence** — Wikidata integration provides brand-specific products, industry classification
+- **LLM synthesis** — Ollama generates 2-3 sentence descriptions grounded in merged taxonomy data
+- **Vector embeddings** — 768-dim embeddings via embeddinggemma for semantic similarity search
+- **Structured profiles** — JSONB per POI: subtype, keywords, products, summary, attributes
+
+This means Obelisk doesn't just know "there's a shop here" — it knows it's a women's clothing boutique specializing in sustainable fashion with handmade accessories.
+
+### 9.2 Hybrid Search Engine (Built)
+
+Two-engine search with Reciprocal Rank Fusion:
+
+- **Typesense** — Keyword search with typo tolerance, geo-filtering, faceted filtering
+- **pgvector** — Semantic similarity via cosine distance on 768-dim embeddings
+- **Query parser** — 230+ fast-path patterns + LLM fallback for intent parsing
+- **Fusion scoring** — RRF ranking, geo-penalization by distance, story-boost for enriched POIs
+
+### 9.3 LLM-Powered Content Generation (Built)
+
+- Stories generated from semantic profiles, OSM data, Wikipedia, historical sources
+- 15 category-specific personas with distinct storytelling voices
 - Tone and length adapted to context
-- Personalized based on user interests
-- Real-time generation for fresh content
+- Multi-language generation (11 locale profiles with local expressions)
+- On-demand generation + regeneration with version tracking
 
-### 9.2 Context Engine
+### 9.4 Context Engine (Partial)
 
-**Inputs:**
+**Built:**
+- Location (GPS) + map viewport awareness
+- Geofence proximity detection (500m preload, 100m queue, 50m trigger)
+- Story fatigue prevention (2-min cooldown, max 5 per 30-min session)
 
-- Location (GPS)
-- Time of day
-- Weather
-- User preferences
-- Walking pace
-- Previous interactions
-
-**Outputs:**
-
-- Which Remarks to surface
+**Planned:**
+- Time of day, weather, user preferences
+- Walking pace and direction analysis
+- Previous interaction learning
 - Optimal story timing
-- Route suggestions
-- Ambient audio selection
 
-### 9.3 Audio Pipeline
+### 9.5 Audio Pipeline (Planned)
 
-- Text-to-speech with natural voices
-- Pre-generated for popular Remarks
-- On-demand generation for personalized content
-- Offline caching for spotty connectivity
+- Text-to-speech with natural voices (Piper TTS)
+- Gyroscope-aware directional narration
+- Pre-generated for nearby POIs, on-demand for personalized content
+- Background playback and offline caching
 
-### 9.4 Data Sources
+### 9.6 Data Sources
 
-- OpenStreetMap (POIs, geometry)
-- Wikipedia/Wikidata and official webpages (historical facts)
-- User-generated content (local knowledge)
-- Reddit, business webpage
-- Public historical archives
-- Weather APIs
+- **OpenStreetMap** — POIs from local PBF extract, geometry, tags
+- **Google Product Taxonomy** — Category/product classification (~6K categories)
+- **Name Suggestion Index** — Brand recognition and OSM path mapping
+- **Wikidata** — Brand data, industry classification, cultural context
+- **OSM Taginfo** — Tag value distributions for enrichment
+- **Wikipedia** — Historical facts and cultural context
+- **Weather APIs** — Planned for context engine
 
 ---
 
-## 10. MVP Scope
+## 10. MVP Scope & Current Status
 
-### Phase 1: Core Discovery (MVP)
+### Phase 1: Core Discovery (COMPLETE — January 2026)
 
 **Goal:** Prove the ambient storytelling concept
 
 **Features:**
 
-- [ ]  Interactive modern map with current location
-- [ ]  Remark pins on map (AI-generated)
-- [ ]  Story cards with text + audio
-- [ ]  Basic personalization (interests)
-- [ ]  Modern UI with glassmorphism and outstanding UX
-- [ ]  Audio playback
+- [x]  Interactive Mapbox GL JS map with current location + dark mode
+- [x]  408 POIs seeded from Munich OSM extract, 100+ stories generated
+- [x]  Remark pins with category colors + Supercluster clustering
+- [x]  Story cards with glassmorphism UI in Apple Maps-style bottom sheet
+- [x]  Geofence triggers (50m proximity, 2-min cooldown, max 5/30-min)
+- [x]  On-demand story generation + regeneration via Ollama
+- [x]  Multi-language story generation (11 locales)
+- [ ]  Audio playback (deferred — Piper TTS integration planned)
 
 **Success Metric:** Users discover 3+ stories per session
 
-### Phase 2: Community
+### Phase 2: Intelligence & Search (IN PROGRESS)
 
-**Features:**
+**Goal:** Build the semantic knowledge layer and reliable search
 
-- [ ]  User accounts
+**Completed:**
+
+- [x]  Taxonomy enrichment pipeline (OSM tags → keywords, products, summaries)
+- [x]  Brand enrichment via Wikidata + Name Suggestion Index
+- [x]  768-dim vector embeddings via embeddinggemma
+- [x]  Typesense keyword search with typo tolerance and geo-filtering
+- [x]  Hybrid 2-engine search (Typesense + pgvector) with RRF ranking
+- [x]  230+ fast-path query parser + LLM fallback
+- [x]  Autocomplete via Typesense prefix search
+
+**In Progress:**
+
+- [ ]  Search UI/UX overhaul (responsive glassmorphic results)
+- [ ]  Viewport-aware search (search where user is looking, not just GPS)
+- [ ]  Settings card (in-sheet, no page navigation)
+
+**Planned:**
+
+- [ ]  PWA support (service worker, offline, install prompt)
+- [ ]  UI internationalization (i18n)
+- [ ]  Audio playback + TTS pipeline
+- [ ]  Explore Mode (guided walking tours)
+
+### Phase 3: Daily Companion
+
+**Goal:** Features that make Obelisk useful beyond exploration
+
+- [ ]  User accounts + preferences sync
+- [ ]  Bookmarking / saved places
 - [ ]  User-created Remarks
-- [ ]  Bookmarking/favorites
 - [ ]  Curated tours
+- [ ]  Personalized recommendations based on learned interests
 
-### Phase 3: Connection
+### Phase 4: Emotional Connection
 
-**Features:**
-
-- [ ]  Capsules
-- [ ]  Moments (shared listening)
+- [ ]  Capsules (time-locked location messages)
+- [ ]  Moments (synchronized shared experiences)
 - [ ]  Social sharing
 
-### Phase 4: Accessibility
+### Phase 5: Full Daily Driver
 
-**Features:**
+**Goal:** Replace Google Maps for daily use
 
-- [ ]  Accessible routing
-- [ ]  Crowd warnings
-- [ ]  Sensory adaptations
+- [ ]  Turn-by-turn navigation
+- [ ]  Transit directions
+- [ ]  Driving + traffic
+- [ ]  Accessible routing + crowd warnings
+- [ ]  Multi-city expansion
 
 ---
 
@@ -561,30 +684,32 @@ Obelisk works **alongside** Google Maps:
 
 | App | Focus | Our Advantage |
 | --- | --- | --- |
-| Google Maps | Navigation | We focus on experience |
-| TripAdvisor | Reviews | We tell stories |
-| Airbnb Experiences | Guided tours | We're always-on, ambient |
-| Detour/VoiceMap | Audio tours | We're AI-powered, infinite |
-| Yelp | Business discovery | We're context-aware |
+| Google Maps | Navigation + business listings | We understand places semantically, not just list them |
+| Apple Maps | Premium navigation UX | We have deeper place intelligence + storytelling |
+| TripAdvisor | Reviews | We synthesize knowledge, not aggregate opinions |
+| Airbnb Experiences | Guided tours | We're always-on, ambient, AI-powered |
+| Detour/VoiceMap | Audio tours | We're infinite — every place gets a story, not just curated ones |
+| Yelp | Business discovery | We know what places *are*, not just what people *say* about them |
 
 ---
 
 ## 14. Why Now?
 
-1. **LLM Maturity** - GPT-5 level models enable quality storytelling
-2. **TTS Quality** - Natural voices are finally good enough
-3. **Mobile Audio** - Airpods/earbuds ubiquity
-4. **Travel Recovery** - Post-COVID travel boom
-5. **Algorithm Fatigue** - People want authentic, not sponsored
+1. **LLM Maturity** - Small local models (4B params) can generate quality stories and semantic understanding at zero API cost
+2. **Embedding Models** - Lightweight embedding models enable semantic search on commodity hardware
+3. **Open Data Richness** - OSM + Wikidata + taxonomy datasets provide enough structured data to build deep place profiles without proprietary sources
+4. **TTS Quality** - Natural voices are finally good enough for conversational narration
+5. **Mobile Audio** - Airpods/earbuds ubiquity makes audio-first interfaces viable
+6. **Algorithm Fatigue** - People want authentic recommendations, not sponsored results
+7. **Map Complacency** - Google Maps hasn't innovated on discovery in a decade — the space is ripe for disruption
 
 ---
 
 ## 15. The Obelisk Promise
 
 > "Every street has a story. Every corner holds a secret. Every journey can become a discovery."
-> 
 
-We're not building a better map. We're building a better way to experience the world.
+We're not building a better map. We're building a map that actually understands the world — and shows you exactly what you need, before you even ask.
 
 ---
 
@@ -596,55 +721,47 @@ Unlike traditional map apps that wait for user queries, Obelisk features a **pro
 
 ### 16.1 Proximity Intelligence (Remarks Engine)
 
-**How it works:**
+**How it works (built):**
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    USER WALKING                          │
 │                         ↓                                │
 │    ┌─────────────────────────────────────────────┐      │
-│    │         GEOFENCE DETECTION                   │      │
-│    │  • 500m radius: Pre-load stories             │      │
-│    │  • 100m radius: Queue notification           │      │
-│    │  •  50m radius: Trigger Remark popup         │      │
+│    │         GEOFENCE DETECTION (useGeofence)    │      │
+│    │  • 500m radius: Pre-load story data         │      │
+│    │  • 100m radius: Queue notification          │      │
+│    │  •  50m radius: Trigger StoryNotification   │      │
 │    └─────────────────────────────────────────────┘      │
 │                         ↓                                │
 │    ┌─────────────────────────────────────────────┐      │
-│    │         CONTEXT EVALUATION                   │      │
-│    │  • User's walking direction                  │      │
-│    │  • Time since last Remark                    │      │
-│    │  • User's interest profile                   │      │
-│    │  • Story relevance score                     │      │
+│    │         COOLDOWN RULES (built)              │      │
+│    │  • 2 min minimum between notifications      │      │
+│    │  • Max 5 notifications per 30-min session   │      │
+│    │  • Dismiss → 5 min local cooldown           │      │
 │    └─────────────────────────────────────────────┘      │
 │                         ↓                                │
 │    ┌─────────────────────────────────────────────┐      │
-│    │         INTELLIGENT SURFACING                │      │
-│    │  • Only show if relevance > threshold        │      │
-│    │  • Respect "story fatigue" cooldown          │      │
-│    │  • Prioritize by user preferences            │      │
+│    │         NOTIFICATION (built)                │      │
+│    │  • Toast slides up with teaser + distance   │      │
+│    │  • Tap → opens StoryCard in bottom sheet    │      │
+│    │  • Auto-dismiss after 8 seconds             │      │
 │    └─────────────────────────────────────────────┘      │
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Key Intelligence Features:**
+**Built:**
 
-1. **Predictive Loading**
-- Analyzes walking trajectory
-- Pre-generates stories for likely path
-- Caches audio before user arrives
-1. **Story Fatigue Prevention**
-- Learns optimal notification frequency per user
-- Avoids overwhelming with too many popups
-- Increases density when user is engaged
-1. **Contextual Relevance**
-- Morning: Cafés, breakfast spots
-- Evening: Restaurants, bars, sunset viewpoints
-- Weekend: Leisure activities, parks
-- Rainy: Indoor attractions, covered passages
-1. **Interest Matching**
-- Tracks which story categories user engages with
-- Builds preference profile over time
-- Surfaces more of what they love
+1. **Three-tier geofencing** — 500m preload, 100m queue, 50m trigger via Haversine distance
+2. **Story fatigue prevention** — Fixed cooldown rules (2-min, max 5/30-min, dismiss penalty)
+3. **Pre-loading** — Nearby remarks fetched in 5km radius, cached via React Query
+
+**Planned (not yet built):**
+
+1. **Predictive loading** — Analyze walking trajectory, pre-generate stories for likely path
+2. **Contextual relevance** — Time-of-day awareness (morning: cafés, evening: restaurants)
+3. **Interest matching** — Track category engagement, build preference profile over time
+4. **Adaptive density** — Increase/decrease notification frequency based on user engagement
 
 ### 16.2 Intelligent Search (Conversational Discovery)
 
@@ -681,22 +798,35 @@ Unlike traditional map apps that wait for user queries, Obelisk features a **pro
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Search UI:**
+**Search UI (Current Implementation):**
 
 ```
-┌─────────────────────────────────────┐
-│ ┌─────────────────────────────────┐ │
-│ │ 🔍 Ask Obelisk anything...      │ │
-│ └─────────────────────────────────┘ │
-│                                     │
-│  Quick filters:                     │
-│  [☕ Café] [🏛️ History] [🌳 Nature] │
-│  [🍝 Food] [🎭 Culture] [💎 Hidden] │
-│                                     │
-│  Recent:                            │
-│  • "quiet reading spots"            │
-│  • "best sunset view"               │
-└─────────────────────────────────────┘
+┌───────────────────────────────────────┐
+│ ┌───────────────────────────────────┐ │
+│ │ 🔍 Search or ask Obelisk…         │ │
+│ └───────────────────────────────────┘ │
+│                                       │
+│  Autocomplete (Typesense, <50ms):    │
+│  ┌───────────────────────────────┐    │
+│  │ Café Frischhut       340m     │    │
+│  │ Café Glockenspiel    520m     │    │
+│  │ Café Luitpold        800m     │    │
+│  └───────────────────────────────┘    │
+│                                       │
+│  Full search results (hybrid):       │
+│  ┌───────────────────────────────┐    │
+│  │ 🍝 Café Frischhut    340m     │    │
+│  │    Schmalznudeln · has story  │    │
+│  ├───────────────────────────────┤    │
+│  │ 🍝 Café Luitpold     800m     │    │
+│  │    Historic café · no story   │    │
+│  └───────────────────────────────┘    │
+│                                       │
+│  Planned additions:                   │
+│  • Quick category filter pills       │
+│  • Viewport-aware results            │
+│  • Glassmorphic result cards         │
+└───────────────────────────────────────┘
 ```
 
 **Voice Search:**
@@ -712,239 +842,276 @@ Unlike traditional map apps that wait for user queries, Obelisk features a **pro
 
 ### 17.1 App Launch Flow
 
+**Current (no onboarding — straight to map):**
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        FIRST LAUNCH                               │
+│                        APP LAUNCH                                  │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                   │
-│  Screen 1: Welcome (2 sec)                                        │
-│  ┌─────────────────────────────────────┐                         │
-│  │                                     │                         │
-│  │         🗿 OBELISK                  │                         │
-│  │                                     │                         │
-│  │    Your local guide, anywhere      │                         │
-│  │                                     │                         │
-│  └─────────────────────────────────────┘                         │
-│                         ↓                                         │
-│  Screen 2: Location Permission                                    │
-│  ┌─────────────────────────────────────┐                         │
-│  │                                     │                         │
-│  │    📍 Enable Location               │                         │
-│  │                                     │                         │
-│  │    Obelisk needs your location     │                         │
-│  │    to discover stories around you   │                         │
-│  │                                     │                         │
-│  │    [Enable Location]                │                         │
-│  │    [Browse without location]        │                         │
-│  └─────────────────────────────────────┘                         │
-│                         ↓                                         │
-│  Screen 3: Quick Interests (optional, skippable)                  │
-│  ┌─────────────────────────────────────┐                         │
-│  │                                     │                         │
-│  │    What sparks your curiosity?      │                         │
-│  │                                     │                         │
-│  │    [🏛️ History]  [🍝 Food]         │                         │
-│  │    [🎨 Art]      [🌳 Nature]        │                         │
-│  │    [🏗️ Architecture] [💎 Hidden]   │                         │
-│  │                                     │                         │
-│  │    [Skip for now →]                 │                         │
-│  └─────────────────────────────────────┘                         │
-│                         ↓                                         │
-│  Screen 4: Map (main app)                                         │
-│  → Immediately shows 2-3 nearby Remarks                           │
-│  → First story within 2 min walking distance highlighted          │
+│  1. App opens → Map centered on Munich (default)                  │
+│                                                                   │
+│  2. Browser location prompt (if first visit)                      │
+│     ┌─────────────────────────────────────┐                      │
+│     │ localhost:3000 wants to know your    │                      │
+│     │ location.   [Allow]  [Block]        │                      │
+│     └─────────────────────────────────────┘                      │
+│                                                                   │
+│  3a. Location granted → Map centers on user, blue dot appears    │
+│      → Nearby remark pins load (5km radius)                      │
+│      → Geofencing activates                                       │
+│                                                                   │
+│  3b. Location denied → Map stays on Munich center                │
+│      → Pins still visible, search still works                    │
+│      → No geofence notifications                                 │
+│                                                                   │
+│  4. User can immediately:                                         │
+│     • Tap any pin → Story card or POI card                       │
+│     • Search → Hybrid results                                    │
+│     • Walk around → Geofence triggers stories                    │
 │                                                                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### 17.2 Main Map Interface (Detailed)
+**Planned onboarding (future):**
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ STATUS BAR                                                   │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌──────────────────────┐              ┌────┐               │
-│  │🔍 Ask Obelisk...     │              │ 👤 │               │
-│  └──────────────────────┘              └────┘               │
-│                                                              │
-│                    ○ "The Watchmaker's Secret"              │
-│                         ○                                    │
-│           ○                      ○                          │
-│                    🔵                                        │
-│                   (you)     ○                               │
-│         ○                                                    │
-│                         ○                                    │
-│              ○                     ○                         │
-│                                                              │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  ┌────┐                                              │    │
-│  │  │ 🎭 │  "The Actor's Last Bow"                     │    │
-│  │  └────┘  150m · 45 sec · History                    │    │
-│  │                                                      │    │
-│  │  A forgotten theater once stood here where...       │    │
-│  │  [Tap to discover →]                                │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │ 🎧 Audio    │  │ 📍 Explore  │  │ 🗺️ Tours    │         │
-│  │    Mode     │  │             │  │             │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-
-Legend:
-○ = Remark pin (color indicates category)
-🔵 = User location
+┌──────────────────────────────────────────────────────────────────┐
+│  Screen 1: Welcome splash (2 sec)                                 │
+│  Screen 2: Location permission (custom UI, not browser prompt)   │
+│  Screen 3: Quick interests (optional, skippable)                  │
+│            [🏛️ History] [🍝 Food] [🎨 Art] [🌳 Nature]          │
+│            [🏗️ Architecture] [💎 Hidden Gems]                    │
+│  Screen 4: Map with immediate value                               │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-### 17.3 Story Discovery Flow
+### 17.2 Main Map Interface (Current Implementation)
+
+```
+┌───────────────────────────────────────────────────────────┐
+│ STATUS BAR                                                 │
+├───────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────────────────┐               ┌────┐        │
+│  │ 🔍 Search or ask Obelisk… │               │ ⚙️ │        │
+│  └──────────────────────────┘               └────┘        │
+│                                                             │
+│                  ○ coral (history)                          │
+│       ○ pink                ○ yellow                       │
+│          (food)     ⑧         (hidden)                     │
+│                   cluster                                   │
+│                      🔵                                     │
+│                     (you)         ○ blue                   │
+│       ○ purple                     (arch.)                 │
+│         (art)          ○ indigo                             │
+│                          (culture)                          │
+│                                                             │
+│  ┌──────┐                                       ┌──────┐  │
+│  │  +   │                                       │  ◎   │  │
+│  │      │                                       │locate│  │
+│  │  −   │                                       └──────┘  │
+│  └──────┘                                                  │
+│                                                             │
+│  ┌─ Bottom Sheet ──────────────────────────────────────┐   │
+│  │         ─── drag handle (36×5px pill) ───           │   │
+│  │                                                      │   │
+│  │  Sheet modes (one at a time):                       │   │
+│  │  • "story"  → StoryCard (pin tap or geofence)      │   │
+│  │  • "poi"    → POICard (external POI, no story yet) │   │
+│  │  • "search" → SearchResults (after search query)   │   │
+│  │  • "settings" → SettingsCard (planned)             │   │
+│  │  • null     → Sheet hidden                          │   │
+│  │                                                      │   │
+│  │  Snap points: 35% (peek) · 55% (half) · 85% (full)│   │
+│  │  Spring physics on drag release                     │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                             │
+└───────────────────────────────────────────────────────────┘
+
+Pin interactions:
+  Tap pin (has story)  → Bottom sheet opens with StoryCard
+  Tap pin (no story)   → Async lookup → POICard with "Generate Story" button
+  Tap cluster          → Map zooms in to expand cluster
+  Geofence trigger     → StoryNotification toast slides up
+```
+
+### 17.3 Story Discovery Flow (Current Implementation)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                     STORY DISCOVERY FLOW                          │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                   │
-│  State 1: Ambient Notification (user approaches POI)              │
+│  Path A: Pin Tap (user taps a remark pin on map)                 │
+│                                                                   │
+│  Tap pin with story → sheetMode = "story"                        │
 │  ┌─────────────────────────────────────┐                         │
+│  │         ─── drag handle ───         │                         │
 │  │                                     │                         │
-│  │     [Map continues visible]         │                         │
-│  │                                     │                         │
-│  │  ┌───────────────────────────────┐  │                         │
-│  │  │ ✨ "Hidden Brewery Tunnel"    │  │  ← Slides up            │
-│  │  │    Tap to discover            │  │    from bottom          │
-│  │  └───────────────────────────────┘  │                         │
-│  └─────────────────────────────────────┘                         │
-│                         ↓ tap                                     │
-│  State 2: Story Card (expanded)                                   │
-│  ┌─────────────────────────────────────┐                         │
-│  │  ┌───────────────────────────────┐  │                         │
-│  │  │     [Location Image]          │  │                         │
-│  │  │                               │  │                         │
-│  │  └───────────────────────────────┘  │                         │
-│  │                                     │                         │
-│  │  The Hidden Brewery Tunnel          │                         │
-│  │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━       │                         │
-│  │  🏛️ History · 45 sec · 50m away    │                         │
+│  │  ┌────┐ The Hidden Brewery Tunnel   │                         │
+│  │  │ 🏛️ │ History · 45 sec · 50m     │                         │
+│  │  └────┘                             │                         │
 │  │                                     │                         │
 │  │  In 1847, beneath this ordinary     │                         │
 │  │  cobblestone street, Augustinian    │                         │
-│  │  monks dug a secret network of      │                         │
-│  │  tunnels to store their famous...   │                         │
-│  │                                     │                         │
-│  │  [▶ Listen]  [📍 Take me there]    │                         │
-│  │                                     │                         │
-│  │  ───────────────────────────────    │                         │
-│  │  💡 Local tip                       │                         │
-│  │  "Look for the small brass plaque   │                         │
-│  │   on the wall—most tourists miss    │                         │
-│  │   it completely."                   │                         │
-│  │                                     │                         │
-│  │  [⭐ Save]  [↗️ Share]              │                         │
-│  └─────────────────────────────────────┘                         │
-│                         ↓ listen                                  │
-│  State 3: Audio Playing                                           │
-│  ┌─────────────────────────────────────┐                         │
-│  │                                     │                         │
-│  │     [Map visible, can walk]         │                         │
+│  │  monks dug a secret network…        │                         │
 │  │                                     │                         │
 │  │  ┌───────────────────────────────┐  │                         │
-│  │  │ 🎧 The Hidden Brewery Tunnel  │  │                         │
-│  │  │    ▶ ━━━━━━━━━○──── 0:23/0:45│  │                         │
-│  │  │    [⏸️]  [⏭️ Skip]            │  │                         │
+│  │  │ 💡 Local tip                  │  │                         │
+│  │  │ "Look for the small brass     │  │                         │
+│  │  │  plaque on the wall…"         │  │                         │
 │  │  └───────────────────────────────┘  │                         │
+│  │                                     │                         │
+│  │  [📍 Navigate]    [🔄 Regenerate]   │                         │
 │  └─────────────────────────────────────┘                         │
+│                                                                   │
+│  Path B: Pin Tap (POI without story)                             │
+│                                                                   │
+│  Tap pin → async lookup → sheetMode = "poi"                     │
+│  ┌─────────────────────────────────────┐                         │
+│  │         ─── drag handle ───         │                         │
+│  │                                     │                         │
+│  │  ┌────┐ Café Frischhut             │                         │
+│  │  │ 🍝 │ Food · 120m away           │                         │
+│  │  └────┘                             │                         │
+│  │                                     │                         │
+│  │  Traditional Bavarian bakery known  │                         │
+│  │  for Schmalznudeln since 1973…      │                         │
+│  │  (from semantic profile summary)    │                         │
+│  │                                     │                         │
+│  │  [📍 Navigate]  [✨ Generate Story] │                         │
+│  └─────────────────────────────────────┘                         │
+│  Generate Story → calls Ollama → inserts remark → switches       │
+│  to StoryCard with freshly generated story                       │
+│                                                                   │
+│  Path C: Geofence (proximity trigger at 50m)                     │
+│                                                                   │
+│  User walks within 50m of POI with story:                        │
+│  ┌───────────────────────────────────────┐                       │
+│  │ ✨ "Hidden Brewery Tunnel"             │  ← Toast slides up   │
+│  │    50m away · Tap to discover          │  ← Auto-dismiss 8s   │
+│  └───────────────────────────────────────┘                       │
+│  Tap → opens StoryCard (same as Path A)                          │
+│                                                                   │
+│  Cooldown rules:                                                  │
+│  • 2 min between notifications                                   │
+│  • Max 5 per 30-min session                                      │
+│  • Dismiss → 5 min local cooldown                                │
 │                                                                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### 17.4 Explore Mode
+### 17.4 Search Flow (Current Implementation)
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        SEARCH FLOW                                │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  1. User taps search bar → keyboard opens                        │
+│                                                                   │
+│  2. Typing → Typesense autocomplete (<50ms)                      │
+│     ┌───────────────────────────────────────┐                    │
+│     │ 🔍 "bakery near mari…"                │                    │
+│     ├───────────────────────────────────────┤                    │
+│     │ Rischart Backhaus         120m        │                    │
+│     │ Café Frischhut            340m        │                    │
+│     │ Hofpfisterei              510m        │                    │
+│     └───────────────────────────────────────┘                    │
+│                                                                   │
+│  3. Submit → Hybrid search (Typesense + pgvector)                │
+│     Query parser: 230+ fast-path patterns + LLM fallback        │
+│     Results fused via Reciprocal Rank Fusion                     │
+│     sheetMode = "search"                                         │
+│                                                                   │
+│  4. Results in bottom sheet:                                      │
+│     ┌───────────────────────────────────────┐                    │
+│     │         ─── drag handle ───           │                    │
+│     │                                       │                    │
+│     │  Results for "bakery near marienplatz" │                    │
+│     │                                       │                    │
+│     │  🍝 Rischart Backhaus      120m       │                    │
+│     │     Traditional bakery · has story    │                    │
+│     │                                       │                    │
+│     │  🍝 Café Frischhut         340m       │                    │
+│     │     Famous Schmalznudeln              │                    │
+│     │                                       │                    │
+│     │  🍝 Hofpfisterei           510m       │                    │
+│     │     Organic bread bakery              │                    │
+│     └───────────────────────────────────────┘                    │
+│                                                                   │
+│  5. Tap result → sheetMode switches to "story" or "poi"         │
+│     Back button → returns to search results                      │
+│                                                                   │
+│  Pan map after search → "Search this area" button appears        │
+│                                                                   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 17.5 Explore Mode (PLANNED — Not Yet Built)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      EXPLORE MODE                            │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
+│  User taps "Explore" → Obelisk scans surroundings           │
+│  → LLM generates optimized walking route (4-8 stops)        │
+│  → Audio-first guided experience                             │
+│                                                              │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │🔍 Search places, stories, or ask anything...        │    │
+│  │  🚶 Explore Munich          45 min · 1.8km          │    │
+│  │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━         │    │
+│  │                                                      │    │
+│  │  ●──────●──────🔵──────○──────○──────○              │    │
+│  │  1      2     (you)    4      5      6              │    │
+│  │                                                      │    │
+│  │  Next: "The Hidden Courtyard" (200m)                │    │
+│  │                                                      │    │
+│  │  Categories: 🏛️ 🍝 💎 🏗️ 🎭 🌳                     │    │
+│  │                                                      │    │
+│  │  [Let's Go]  [Shuffle]  [Cancel]                    │    │
 │  └─────────────────────────────────────────────────────┘    │
 │                                                              │
-│  Categories:                                                 │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐               │
-│  │🏛️      │ │🍝      │ │🎨      │ │🌳      │               │
-│  │History │ │Food    │ │Art     │ │Nature  │               │
-│  └────────┘ └────────┘ └────────┘ └────────┘               │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐               │
-│  │🏗️      │ │💎      │ │📸      │ │🎭      │               │
-│  │Archi.  │ │Hidden  │ │Views   │ │Culture │               │
-│  └────────┘ └────────┘ └────────┘ └────────┘               │
-│                                                              │
-│  Nearby Stories (12):                                        │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │ 🏛️  The Fountain's Secret           150m · 30s     │    │
-│  ├─────────────────────────────────────────────────────┤    │
-│  │ 💎  Hidden Courtyard Garden          200m · 45s     │    │
-│  ├─────────────────────────────────────────────────────┤    │
-│  │ 🍝  Where Locals Eat Lunch           300m · 20s     │    │
-│  ├─────────────────────────────────────────────────────┤    │
-│  │ 🏗️  The Crooked Building             450m · 60s     │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                                                              │
-│  Featured Tour:                                              │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  🚶 "Munich's Hidden Passages"                      │    │
-│  │     8 stories · 2.3km · ~90 min                     │    │
-│  │     [Start Tour →]                                  │    │
-│  └─────────────────────────────────────────────────────┘    │
+│  See Plan.md P5 for full specification                      │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 17.5 Audio Mode (Hands-Free)
+### 17.6 Audio Mode (PLANNED — Not Yet Built)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      AUDIO MODE                              │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  [Screen can be locked - audio continues]                    │
-│                                                              │
+│  Floating mini player (glass-floating):                      │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │                                                      │    │
-│  │              🎧 AUDIO MODE ACTIVE                   │    │
-│  │                                                      │    │
-│  │         Stories will play as you walk               │    │
-│  │                                                      │    │
-│  │              ┌─────────────────┐                    │    │
-│  │              │    🔊 ON        │                    │    │
-│  │              └─────────────────┘                    │    │
-│  │                                                      │    │
-│  │  ─────────────────────────────────────────────      │    │
-│  │                                                      │    │
-│  │  Currently near: 3 stories                          │    │
-│  │  Next story in: ~200m                               │    │
-│  │                                                      │    │
-│  │  ─────────────────────────────────────────────      │    │
-│  │                                                      │    │
-│  │  Settings:                                          │    │
-│  │  Story frequency    [○○○●○] Medium                  │    │
-│  │  Voice speed        [○○●○○] Normal                  │    │
-│  │  Categories         [All ▼]                         │    │
-│  │                                                      │    │
-│  │              [Exit Audio Mode]                      │    │
-│  │                                                      │    │
+│  │ 🎧 "The Hidden Brewery Tunnel"                      │    │
+│  │    ▶ ━━━━━━━━━○──── 0:23/0:45                      │    │
+│  │    [⏸️ Pause]  [⏭️ Skip]  [🔊 Vol]                  │    │
 │  └─────────────────────────────────────────────────────┘    │
 │                                                              │
-│  Lock screen notification when story available:              │
+│  Features:                                                   │
+│  • Screen-off playback (background audio)                   │
+│  • Gyroscope-aware directional narration                    │
+│  • Pre-generated audio for nearby POIs (500m preload)       │
+│  • Piper TTS with warm, conversational voice                │
+│  • Seamless queue between stories (no silence gaps)         │
+│                                                              │
+│  Lock screen notification:                                   │
 │  ┌─────────────────────────────────────────────────────┐    │
 │  │ 🗿 OBELISK                                          │    │
-│  │ "The Clockmaker's Workshop" - Tap to listen         │    │
+│  │ "The Clockmaker's Workshop" — Tap to listen         │    │
 │  └─────────────────────────────────────────────────────┘    │
+│                                                              │
+│  See Plan.md P6 for full specification                      │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 17.6 Tour Mode
+### 17.7 Tour Mode (PLANNED — Not Yet Built)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -955,35 +1122,22 @@ Legend:
 │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━                  │
 │  Stop 3 of 8 · 1.2km remaining · ~45 min                    │
 │                                                              │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │                                                      │    │
-│  │              [MAP WITH ROUTE]                       │    │
-│  │                                                      │    │
-│  │          ●────●────🔵────○────○                     │    │
-│  │          1    2    3    4    5                      │    │
-│  │               (you)                                  │    │
-│  │                                                      │    │
-│  └─────────────────────────────────────────────────────┘    │
+│  Map with route:                                             │
+│  ●────●────🔵────○────○────○                                │
+│  1    2   (you)  4    5    6                                │
 │                                                              │
 │  Current Stop:                                               │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │                                                      │    │
 │  │  3. The Secret Passage                              │    │
-│  │     ─────────────────────────                       │    │
 │  │     Behind this ordinary door lies a corridor       │    │
-│  │     that once connected rival merchant houses...    │    │
-│  │                                                      │    │
+│  │     that once connected rival merchant houses…      │    │
 │  │     [▶ Listen 60s]                                  │    │
-│  │                                                      │    │
 │  └─────────────────────────────────────────────────────┘    │
 │                                                              │
 │  Next: "The Counting House" (350m)                          │
+│  [⏮️ Previous]  [⏭️ Next Stop]  [End Tour]                  │
 │                                                              │
-│  ┌───────────────┐  ┌───────────────┐                       │
-│  │ ⏮️ Previous   │  │ ⏭️ Next Stop  │                       │
-│  └───────────────┘  └───────────────┘                       │
-│                                                              │
-│  [End Tour]                                                  │
+│  See Plan.md P5 for full specification                      │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -992,147 +1146,100 @@ Legend:
 
 ## 18. Feature Prioritization & Roadmap
 
-### 18.1 MVP (Phase 1) - "Prove the Magic"
+### 18.1 Phase 1 - "Prove the Magic" (COMPLETE — January 2026)
 
 **Goal:** Validate that ambient storytelling creates engagement
 
-**Timeline:** 8-12 weeks
-
 **Scope:** Single city (Munich)
 
-| Priority | Feature | Description | Success Metric |
-| --- | --- | --- | --- |
-| P0 | Interactive Map | MapLibre-based map with user location | Map loads < 2s |
-| P0 | Remark Pins | Display POI markers on map | 50+ Remarks in Munich |
-| P0 | Story Cards | Text-based story display | Avg read time > 30s |
-| P0 | Geofence Triggers | Popup when near POI | Trigger accuracy > 90% |
-| P1 | Basic Search | Keyword search for places | Search used > 1x/session |
-| P1 | Category Filters | Filter by History, Food, etc. | 40% use filters |
-| P2 | Audio Playback | TTS for stories | 60%+ users try audio |
-| P2 | Explore Mode | Browse map for stories | Discover 3+ stories/session |
-
-**MVP Tech Stack:**
-
-- Next.js 15 + React
-- MapLibre GL JS
-- PostgreSQL + PostGIS
-- Self-hosted LLM (Ollama)
-- Self-hosted TTS (Piper)
-
-### 18.2 Phase 2 - "Build Community"
-
-**Goal:** User-generated content & retention
-
-**Timeline:** 6-8 weeks after MVP
-
-| Priority | Feature | Description |
+| Feature | Status | Result |
 | --- | --- | --- |
-| P0 | User Accounts | Auth, profiles, preferences |
-| P0 | Save/Bookmark | Save favorite Remarks |
-| P1 | User-Created Remarks | Submit local knowledge |
-| P1 | Curated Tours | Thematic walking routes |
-| P2 | Preference Learning | Track interests over time |
-| P2 | Personalized Feed | Stories ranked by preference |
+| Interactive Map (Mapbox GL JS) | DONE | Map loads < 2s, auto dark mode |
+| Remark Pins + Supercluster | DONE | 408 POIs, 100+ stories, category colors |
+| Story Cards (glassmorphism) | DONE | Bottom sheet with rich content |
+| Geofence Triggers | DONE | 50m/100m/500m tiers, cooldown logic |
+| Story Generation + Regeneration | DONE | On-demand via Ollama, version tracking |
+| Multi-language Stories | DONE | 11 locale profiles |
 
-### 18.3 Phase 3 - "Intelligent Assistant"
+**Tech Stack:**
 
-**Goal:** Conversational discovery & advanced AI
+- Next.js 16 + React 19
+- Mapbox GL JS v3.18 + react-map-gl v8.1
+- PostgreSQL 15 + pgvector + pg_trgm
+- Ollama (gemma3:4b-it-qat)
+- Drizzle ORM, Tailwind CSS v4, Framer Motion v12
 
-**Timeline:** 8-10 weeks after Phase 2
+### 18.2 Phase 2 - "Build Intelligence" (IN PROGRESS)
 
-| Priority | Feature | Description |
-| --- | --- | --- |
-| P0 | Conversational Search | Natural language queries |
-| P0 | Context-Aware Suggestions | Time, weather, mood-based |
-| P1 | Voice Search | Hands-free queries |
-| P1 | Route-Based Discovery | Stories along planned path |
-| P2 | Predictive Loading | Pre-generate likely stories |
-| P2 | Ambient Soundscapes | Context-aware music |
+**Goal:** Deep semantic understanding of every place + reliable search
 
-### 18.4 Phase 4 - "Deep Connection"
+| Feature | Status |
+| --- | --- |
+| Taxonomy enrichment pipeline | DONE |
+| Brand enrichment (Wikidata + NSI) | DONE |
+| Vector embeddings (768-dim) | DONE |
+| Typesense keyword search | DONE |
+| Hybrid search (Typesense + pgvector + RRF) | DONE |
+| 230+ fast-path query parser | DONE |
+| Search UI/UX overhaul | IN PROGRESS |
+| Viewport-aware search | IN PROGRESS |
+| Settings card | NOT STARTED |
+| PWA support | NOT STARTED |
+| UI internationalization | NOT STARTED |
+| Audio playback + TTS | NOT STARTED |
+| Explore Mode (guided tours) | NOT STARTED |
 
-**Goal:** Emotional features & social
+**Added to stack:** Typesense v30.1, embeddinggemma:300m, Zod v4
 
-**Timeline:** 10-12 weeks after Phase 3
+### 18.3 Phase 3 - "Daily Companion"
 
-| Priority | Feature | Description |
-| --- | --- | --- |
-| P0 | Capsules | Time-locked location messages |
-| P1 | Moments | Synchronized shared experiences |
-| P1 | Social Sharing | Share Remarks & routes |
-| P2 | Friend Activity | See what friends discovered |
+**Goal:** Features that make Obelisk useful every day, not just for exploration
 
-### 18.5 Phase 5 - "For Everyone"
+| Feature | Description |
+| --- | --- |
+| User accounts | Auth, profiles, preference sync |
+| Bookmarks + saved places | Personal place collections |
+| User-created Remarks | Local knowledge contributions |
+| Curated tours | Thematic walking routes |
+| Personalized recommendations | Learned interests + context-aware suggestions |
+| Conversational search | Natural language queries with full intent understanding |
+| Context engine | Time, weather, mood, pace — full contextual awareness |
 
-**Goal:** Accessibility & inclusivity
+### 18.4 Phase 4 - "Emotional Connection"
 
-**Timeline:** 8-10 weeks after Phase 4
+**Goal:** Features that create lasting bonds between people and places
 
-| Priority | Feature | Description |
-| --- | --- | --- |
-| P0 | Accessible Routes | Wheelchair-friendly paths |
-| P0 | Screen Reader Support | Full VoiceOver/TalkBack |
-| P1 | Crowd Warnings | Avoid busy areas |
-| P1 | Sensory Adaptations | Quiet routes, low-stim mode |
-| P2 | Multi-Language | Support 10+ languages |
+| Feature | Description |
+| --- | --- |
+| Capsules | Time-locked location messages |
+| Moments | Synchronized shared listening |
+| Social sharing | Share discoveries and routes |
+| Ambient soundscapes | Context-aware audio experiences |
 
----
+### 18.5 Phase 5 - "Full Daily Driver"
 
-### 18.6 Feature Dependency Map
+**Goal:** Replace Google Maps for daily use
+
+| Feature | Description |
+| --- | --- |
+| Turn-by-turn navigation | Walking, driving, cycling |
+| Transit directions | Public transport integration |
+| Traffic + real-time data | Live conditions |
+| Multi-city expansion | Beyond Munich |
+| Accessible routing | Wheelchair-friendly, quiet paths, crowd warnings |
+| Screen reader support | Full VoiceOver/TalkBack |
+
+### 18.6 Strategic Path
 
 ```
-┌─────────────────┐
-│   Interactive   │
-│      Map        │
-└────────┬────────┘
-         │
-┌─────────────────┼─────────────────┐
-│                 │                 │
-▼                 ▼                 ▼
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│   Remark    │   │  Geofence   │   │   Basic     │
-│    Pins     │   │  Triggers   │   │   Search    │
-└──────┬──────┘   └──────┬──────┘   └──────┬──────┘
-       │                 │                 │
-       ▼                 ▼                 ▼
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│   Story     │   │   Audio     │   │ Conversational│
-│   Cards     │   │  Playback   │   │   Search    │
-└──────┬──────┘   └──────┬──────┘   └──────┬──────┘
-       │                 │                 │
-       └────────────┬────┴─────────────────┘
-                    │
-                    ▼
-          ┌─────────────────┐
-          │  User Accounts  │
-          └────────┬────────┘
-                   │
-         ┌─────────────┼─────────────┐
-         │             │             │
-         ▼             ▼             ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│  Bookmarks  │ │User Remarks │ │ Preferences │
-└─────────────┘ └─────────────┘ └─────────────┘
-         │
-         ┌─────────────┼─────────────┐
-         │             │             │
-         ▼             ▼             ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│   Tours     │ │  Capsules   │ │   Moments   │
-└─────────────┘ └─────────────┘ └─────────────┘
-```
-
----
-
-### 18.7 MVP Build Order
-
-```
-Week 1-2:   Map + Location
-Week 3-4:   Database + POI data import
-Week 5-6:   Remark pins + Story cards
-Week 7-8:   Geofence triggers + Proximity detection
-Week 9-10:  Audio playback + TTS integration
-Week 11-12: Search + Filters + Polish
+Intelligence First                    Utility Later
+─────────────────────────────────────────────────────────────
+Phase 1 ✓   Phase 2 →    Phase 3       Phase 4      Phase 5
+Stories      Semantic     Daily use     Emotional    Full map
+Geofence     Search       Accounts      Capsules     Navigation
+Map UI       Embeddings   Bookmarks     Moments      Transit
+             Taxonomy     Tours         Social       Multi-city
+             Audio        Context AI    Soundscapes  Accessibility
 ```
 
 ---
@@ -1523,21 +1630,25 @@ We offer core discovery features free to maximize adoption, with premium feature
 
 ### What is Obelisk?
 
-A geospatial-aware discovery platform that transforms exploration into meaningful human experiences through ambient storytelling, intelligent search, and emotional connection to places.
+A next-generation intelligent map that deeply understands every place in the world. Starting with contextual discovery and ambient storytelling, building toward a full daily-driver map replacement powered by semantic understanding.
 
 ### Core Differentiators
 
-1. **Proactive Discovery** - Stories find you, you don't search
-2. **Geospatial AI Agent** - Context-aware, predictive, personalized
-3. **Audio-First** - Eyes on the world, not the screen
-4. **Emotional Features** - Capsules and Moments create lasting connections
+1. **Semantic Understanding** - Deep knowledge profiles for every place, not just names and ratings
+2. **Zero-Friction Discovery** - The map shows you the right places before you search
+3. **Ambient Storytelling** - Stories find you as you walk, powered by proximity intelligence
+4. **Audio-First** - Eyes on the world, not the screen
+5. **Intelligence-First Strategy** - Build understanding first, utility features follow
 
-### MVP Focus
+### Current Status (February 2026)
 
-- Single city (Munich)
-- Core ambient discovery (Remarks)
-- Map + Stories + Audio + Basic Search
-- Prove the magic of contextual storytelling
+- **Phase 1 complete:** Interactive map, 408 POIs, 100+ stories, geofencing, glassmorphism UI
+- **Phase 2 in progress:** Taxonomy enrichment, hybrid search, vector embeddings — all built. Search UX polish ongoing.
+- **Single city:** Munich (expanding later)
+
+### Strategic Path
+
+Intelligence first → daily companion → full daily-driver map. Nail what no other map has (deep place understanding), then layer utility on top.
 
 ### Business Model
 

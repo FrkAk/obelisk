@@ -129,7 +129,7 @@ function getPersona(categorySlug: string): CategoryPersona {
  * Returns:
  *     Confidence level: "high" (score >= 5), "medium" (>= 2), or "low".
  */
-function assessConfidence(ctx: StoryPoiContext): "high" | "medium" | "low" {
+export function assessConfidence(ctx: StoryPoiContext): "high" | "medium" | "low" {
   let score = 0;
   const profile = ctx.profile;
 
@@ -364,7 +364,7 @@ function getRandomFallbackTeaser(categorySlug: string): string {
  * Returns:
  *     Plain text with markdown formatting removed.
  */
-function stripMarkdown(text: string): string {
+export function stripMarkdown(text: string): string {
   return text
     .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
     .replace(/_{1,3}([^_]+)_{1,3}/g, "$1")
@@ -382,7 +382,7 @@ function stripMarkdown(text: string): string {
  * Returns:
  *     Truncated text ending at a sentence boundary.
  */
-function truncateAtSentence(text: string, maxWords: number): string {
+export function truncateAtSentence(text: string, maxWords: number): string {
   const words = text.split(/\s+/);
   if (words.length <= maxWords) return text;
 
@@ -423,7 +423,7 @@ const BANNED_CONTENT_PHRASES = [
  * Returns:
  *     Sanitized content with banned phrases removed and whitespace normalized.
  */
-function sanitizeContent(content: string): string {
+export function sanitizeContent(content: string): string {
   let result = content;
   for (const phrase of BANNED_CONTENT_PHRASES) {
     result = result.replaceAll(phrase, "");
@@ -441,7 +441,7 @@ function sanitizeContent(content: string): string {
  * Returns:
  *     Sanitized teaser, replaced with a random category fallback if banned.
  */
-function sanitizeTeaser(teaser: string, categorySlug: string): string {
+export function sanitizeTeaser(teaser: string, categorySlug: string): string {
   const lower = teaser.toLowerCase().trim();
   const isBanned = BANNED_TEASERS.some((b) => lower.startsWith(b));
   if (isBanned) {
@@ -450,7 +450,7 @@ function sanitizeTeaser(teaser: string, categorySlug: string): string {
   return teaser;
 }
 
-function parseStoryResponse(response: string, categorySlug: string): {
+export function parseStoryResponse(response: string, categorySlug: string): {
   title: string;
   teaser: string;
   content: string;

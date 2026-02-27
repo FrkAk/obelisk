@@ -1,6 +1,6 @@
 import type { SearchResult } from "@/types/api";
 
-interface SemanticResult {
+export interface SemanticResult {
   poiId: string;
   osmId?: number;
   name: string;
@@ -11,7 +11,7 @@ interface SemanticResult {
   distance?: number;
 }
 
-interface RankingInput {
+export interface RankingInput {
   typesenseResults: SearchResult[];
   semanticResults: SemanticResult[];
   userLocation: { latitude: number; longitude: number };

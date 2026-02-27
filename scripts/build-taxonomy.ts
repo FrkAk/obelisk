@@ -984,6 +984,145 @@ const HISTORIC_MAPPINGS: Record<string, TagMapping> = {
   },
 };
 
+const HEALTHCARE_MAPPINGS: Record<string, TagMapping> = {
+  doctor: {
+    keywords: ["doctor", "physician", "general practitioner", "medical practice"],
+    products: ["consultation", "checkup", "referral", "prescription"],
+    taxonomySearchTerms: ["health"],
+  },
+  pharmacy: {
+    keywords: ["pharmacy", "apotheke", "drugstore", "medication"],
+    products: ["prescription drugs", "over-the-counter medication", "vitamins", "first aid"],
+    taxonomySearchTerms: ["health"],
+  },
+  dentist: {
+    keywords: ["dentist", "dental care", "oral health"],
+    products: ["dental checkup", "cleaning", "filling", "orthodontics"],
+    taxonomySearchTerms: ["health"],
+  },
+  psychotherapist: {
+    keywords: ["psychotherapist", "therapist", "mental health", "counseling"],
+    products: ["therapy sessions", "cognitive behavioral therapy", "mental health support"],
+    taxonomySearchTerms: ["health"],
+  },
+  clinic: {
+    keywords: ["clinic", "medical clinic", "outpatient care", "health center"],
+    products: ["consultations", "diagnostics", "minor procedures", "lab tests"],
+    taxonomySearchTerms: ["health"],
+  },
+  physiotherapist: {
+    keywords: ["physiotherapist", "physical therapy", "rehabilitation"],
+    products: ["physical therapy", "massage", "rehabilitation exercises", "injury recovery"],
+    taxonomySearchTerms: ["health"],
+  },
+  alternative: {
+    keywords: ["alternative medicine", "holistic health", "naturopathy"],
+    products: ["acupuncture", "homeopathy", "herbal medicine", "naturopathic treatment"],
+    taxonomySearchTerms: ["health"],
+  },
+  hospital: {
+    keywords: ["hospital", "medical center", "emergency room", "inpatient care"],
+    products: ["emergency care", "surgery", "inpatient treatment", "diagnostics"],
+    taxonomySearchTerms: ["health"],
+  },
+  podiatrist: {
+    keywords: ["podiatrist", "foot care", "chiropody"],
+    products: ["foot examination", "orthotics", "nail care"],
+    taxonomySearchTerms: ["health"],
+  },
+  centre: {
+    keywords: ["health center", "medical center", "healthcare facility"],
+    products: ["consultations", "diagnostics", "specialist referrals"],
+    taxonomySearchTerms: ["health"],
+  },
+  laboratory: {
+    keywords: ["medical laboratory", "diagnostic lab", "blood tests"],
+    products: ["blood tests", "urine analysis", "pathology", "diagnostic imaging"],
+    taxonomySearchTerms: ["health"],
+  },
+  speech_therapist: {
+    keywords: ["speech therapist", "speech pathology", "language therapy"],
+    products: ["speech therapy", "language development", "voice therapy"],
+    taxonomySearchTerms: ["health"],
+  },
+  midwife: {
+    keywords: ["midwife", "prenatal care", "birthing support"],
+    products: ["prenatal checkups", "birth preparation", "postnatal care"],
+    taxonomySearchTerms: ["health"],
+  },
+  counselling: {
+    keywords: ["counseling", "psychological counseling", "support services"],
+    products: ["counseling sessions", "crisis support", "family therapy"],
+    taxonomySearchTerms: ["health"],
+  },
+  blood_donation: {
+    keywords: ["blood donation", "blood bank", "donor center"],
+    products: ["blood donation", "plasma donation", "platelet donation"],
+    taxonomySearchTerms: ["health"],
+  },
+  psychiatry: {
+    keywords: ["psychiatrist", "psychiatry", "mental health specialist"],
+    products: ["psychiatric evaluation", "medication management", "therapy"],
+    taxonomySearchTerms: ["health"],
+  },
+  optometrist: {
+    keywords: ["optometrist", "eye care", "vision test"],
+    products: ["eye exam", "vision correction", "contact lens fitting"],
+    taxonomySearchTerms: ["health", "vision care"],
+  },
+  occupational_therapist: {
+    keywords: ["occupational therapist", "rehabilitation", "daily living skills"],
+    products: ["occupational therapy", "workplace adaptation", "motor skills training"],
+    taxonomySearchTerms: ["health"],
+  },
+  audiologist: {
+    keywords: ["audiologist", "hearing specialist", "audiology"],
+    products: ["hearing test", "hearing aid fitting", "tinnitus treatment"],
+    taxonomySearchTerms: ["health"],
+  },
+  mammography: {
+    keywords: ["mammography", "breast screening", "cancer screening"],
+    products: ["mammogram", "breast examination", "screening"],
+    taxonomySearchTerms: ["health"],
+  },
+  hospice: {
+    keywords: ["hospice", "palliative care", "end-of-life care"],
+    products: ["palliative care", "comfort care", "family support"],
+    taxonomySearchTerms: ["health"],
+  },
+  sample_collection: {
+    keywords: ["sample collection", "specimen collection", "lab sample point"],
+    products: ["blood draw", "urine collection", "specimen transport"],
+    taxonomySearchTerms: ["health"],
+  },
+};
+
+const NATURAL_MAPPINGS: Record<string, TagMapping> = {
+  water: {
+    keywords: ["lake", "pond", "river", "water body", "natural water"],
+    products: ["swimming", "fishing", "boating", "scenic views"],
+    taxonomySearchTerms: [],
+  },
+  tree: {
+    keywords: ["notable tree", "heritage tree", "landmark tree"],
+    products: [],
+    taxonomySearchTerms: [],
+  },
+};
+
+const RAILWAY_MAPPINGS: Record<string, TagMapping> = {
+  tram_stop: {
+    keywords: ["tram stop", "streetcar stop", "light rail", "public transport"],
+    products: ["tram service", "transit connections"],
+    taxonomySearchTerms: [],
+  },
+  station: {
+    keywords: ["train station", "railway station", "rail hub", "public transport"],
+    products: ["train service", "transit connections", "ticket purchase"],
+    taxonomySearchTerms: [],
+  },
+};
+
 /**
  * Builds the tag enrichment map by combining OSM taginfo data,
  * manual mappings, and Google Product Taxonomy cross-references.
@@ -1057,6 +1196,26 @@ function buildTagEnrichmentMap(): Record<string, TagEnrichmentEntry> {
   addEntries("leisure", LEISURE_MAPPINGS, "leisure.json");
   addEntries("tourism", TOURISM_MAPPINGS, "tourism.json");
   addEntries("historic", HISTORIC_MAPPINGS, "historic.json");
+
+  for (const [osmKey, mappings] of [
+    ["healthcare", HEALTHCARE_MAPPINGS],
+    ["natural", NATURAL_MAPPINGS],
+    ["railway", RAILWAY_MAPPINGS],
+  ] as [string, Record<string, TagMapping>][]) {
+    for (const [value, mapping] of Object.entries(mappings)) {
+      const key = `${osmKey}=${value}`;
+      const googleTax =
+        mapping.taxonomySearchTerms.length > 0
+          ? findTaxonomyMatches(taxonomy, mapping.taxonomySearchTerms)
+          : [];
+      result[key] = {
+        keywords: mapping.keywords,
+        products: mapping.products,
+        subtags: [],
+        googleTaxonomy: googleTax,
+      };
+    }
+  }
 
   return result;
 }

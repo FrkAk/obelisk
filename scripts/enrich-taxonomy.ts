@@ -39,7 +39,7 @@ function loadJson<T>(path: string): T {
   return JSON.parse(raw) as T;
 }
 
-const TAG_KEY_PRIORITY = ["shop", "amenity", "tourism", "historic", "leisure", "natural", "building"];
+const TAG_KEY_PRIORITY = ["shop", "amenity", "tourism", "historic", "leisure", "natural"];
 
 /**
  * Determines the primary OSM tag key=value for enrichment lookup.
@@ -51,7 +51,8 @@ const TAG_KEY_PRIORITY = ["shop", "amenity", "tourism", "historic", "leisure", "
 function determinePrimaryTag(osmTags: Record<string, string>): string | null {
   for (const key of TAG_KEY_PRIORITY) {
     if (osmTags[key]) {
-      return `${key}=${osmTags[key]}`;
+      const value = osmTags[key].split(";")[0].trim();
+      return `${key}=${value}`;
     }
   }
   if (osmTags.railway) return `railway=${osmTags.railway}`;

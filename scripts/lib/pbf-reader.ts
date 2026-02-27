@@ -94,7 +94,6 @@ const TAG_FILTERS: TagFilter[] = [
   { key: "railway", value: "station" },
   { key: "railway", value: "tram_stop" },
   { key: "natural" },
-  { key: "building" },
 ];
 
 /**

@@ -131,7 +131,6 @@ export async function POST(request: NextRequest) {
             wikipediaUrl: poi.wikipediaUrl,
             imageUrl: null,
             embedding: null,
-            searchVector: null,
             createdAt: null,
             updatedAt: null,
           },

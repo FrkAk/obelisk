@@ -12,7 +12,6 @@ export type RemarkWithPoi = {
   content: string;
   localTip: string | null;
   durationSeconds: number;
-  audioUrl: string | null;
   createdAt: Date;
   locale: string | null;
   version: number;
@@ -57,7 +56,6 @@ export function remarkPoiSelect() {
     remarkContent: remarks.content,
     remarkLocalTip: remarks.localTip,
     remarkDurationSeconds: remarks.durationSeconds,
-    remarkAudioUrl: remarks.audioUrl,
     remarkCreatedAt: remarks.createdAt,
     remarkLocale: remarks.locale,
     remarkVersion: remarks.version,
@@ -92,7 +90,6 @@ export interface RemarkPoiRow {
   remarkContent: string;
   remarkLocalTip: string | null;
   remarkDurationSeconds: number | null;
-  remarkAudioUrl: string | null;
   remarkCreatedAt: Date | null;
   remarkLocale: string | null;
   remarkVersion: number;
@@ -136,7 +133,6 @@ export function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
     content: row.remarkContent,
     localTip: row.remarkLocalTip,
     durationSeconds: row.remarkDurationSeconds ?? 45,
-    audioUrl: row.remarkAudioUrl,
     createdAt: row.remarkCreatedAt ?? new Date(),
     locale: row.remarkLocale,
     version: row.remarkVersion,
@@ -198,7 +194,6 @@ export async function insertRemark(params: {
       durationSeconds: params.story.durationSeconds,
       modelId: params.story.modelId,
       confidence: params.story.confidence,
-      contextSources: params.story.contextSources,
     })
     .returning();
   return inserted;
@@ -351,7 +346,6 @@ export async function versionBumpRemark(
       durationSeconds: story.durationSeconds,
       modelId: story.modelId,
       confidence: story.confidence,
-      contextSources: story.contextSources,
     })
     .returning();
 

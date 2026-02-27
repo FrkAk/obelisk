@@ -8,7 +8,6 @@ import {
   poiCuisines,
   cuisines,
   accessibilityInfo,
-  contactInfo,
 } from "../src/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { initCollection, upsertDocuments } from "../src/lib/search/typesense";
@@ -97,26 +96,9 @@ async function loadAccessibilityMap(): Promise<
 }
 
 /**
- * Loads contact data for all POIs as a map from poiId to opening hours display.
- *
- * Returns:
- *     Map of poiId to object with openingHoursDisplay.
- */
-async function loadContactMap(): Promise<Map<string, { openingHoursDisplay: string | null }>> {
-  const rows = await db
-    .select({
-      poiId: contactInfo.poiId,
-      openingHoursDisplay: contactInfo.openingHoursDisplay,
-    })
-    .from(contactInfo);
-
-  return new Map(rows.map((r) => [r.poiId, r]));
-}
-
-/**
  * Syncs all POIs from PostgreSQL to Typesense search index.
  * Recreates the collection, loads related data (tags, cuisines,
- * accessibility, contact), builds documents, and upserts in batches.
+ * accessibility), builds documents, and upserts in batches.
  */
 async function syncTypesense() {
   log.info("Starting sync...");
@@ -153,25 +135,23 @@ async function syncTypesense() {
 
   log.info(`${remarkPoiIds.size} POIs have stories`);
 
-  log.info("Loading tags, cuisines, accessibility, contact...");
+  log.info("Loading tags, cuisines, accessibility...");
 
-  const [tagMap, cuisineMap, accessibilityMap, contactMap] = await Promise.all([
+  const [tagMap, cuisineMap, accessibilityMap] = await Promise.all([
     loadTagMap(),
     loadCuisineMap(),
     loadAccessibilityMap(),
-    loadContactMap(),
   ]);
 
   log.info(
     `${tagMap.size} POIs have tags, ${cuisineMap.size} have cuisines, ` +
-    `${accessibilityMap.size} have accessibility, ${contactMap.size} have contact`
+    `${accessibilityMap.size} have accessibility`
   );
 
   const documents = allPois.map((poi) => {
     const category = poi.categorySlug ?? "hidden";
     const profile = (poi.profile as PoiProfile) ?? null;
     const accessibility = accessibilityMap.get(poi.id);
-    const contact = contactMap.get(poi.id);
 
     return buildTypesenseDocument({
       id: poi.id,
@@ -191,7 +171,7 @@ async function syncTypesense() {
       elevator: accessibility?.elevator ?? null,
       parkingAvailable: accessibility?.parkingAvailable ?? null,
       freeEntry: null,
-      openingHours: contact?.openingHoursDisplay ?? null,
+      openingHours: null,
     });
   });
 

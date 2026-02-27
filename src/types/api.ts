@@ -37,7 +37,6 @@ export interface Poi {
   wikipediaUrl: string | null;
   imageUrl: string | null;
   embedding: number[] | null;
-  searchVector: string | null;
   createdAt: Date | null;
   updatedAt: Date | null;
 }
@@ -51,7 +50,6 @@ export interface ContactInfo {
   instagram: string | null;
   facebook: string | null;
   openingHoursRaw: string | null;
-  openingHoursDisplay: string | null;
 }
 
 export interface Tag {
@@ -71,50 +69,6 @@ export interface Cuisine {
   icon: string | null;
 }
 
-export interface Dish {
-  id: string;
-  slug: string;
-  name: string;
-  nameLocal: string | null;
-  nameLocalLang: string | null;
-  description: string | null;
-  cuisineId: string | null;
-  menuSection: string | null;
-  isVegetarian: boolean | null;
-  isVegan: boolean | null;
-  isGlutenFree: boolean | null;
-  containsNuts: boolean | null;
-  containsDairy: boolean | null;
-  containsPork: boolean | null;
-  containsAlcohol: boolean | null;
-  isHalal: boolean | null;
-  isKosher: boolean | null;
-  spicyLevel: number | null;
-  imageUrl: string | null;
-  createdAt: Date | null;
-}
-
-export interface PoiDish {
-  id: string;
-  poiId: string;
-  dishId: string;
-  localName: string | null;
-  localDescription: string | null;
-  price: string | null;
-  currency: string | null;
-  menuSection: string | null;
-  isSignature: boolean | null;
-  isPopular: boolean | null;
-  isSeasonal: boolean | null;
-  isAvailable: boolean | null;
-  seasonNote: string | null;
-  source: string;
-  sourceUrl: string | null;
-  confidence: number | null;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-}
-
 export interface Remark {
   id: string;
   poiId: string;
@@ -126,113 +80,8 @@ export interface Remark {
   content: string;
   localTip: string | null;
   durationSeconds: number | null;
-  audioUrl: string | null;
   modelId: string | null;
   confidence: string | null;
-  contextSources: Record<string, unknown> | null;
-  searchVector: string | null;
-  createdAt: Date | null;
-}
-
-export interface User {
-  id: string;
-  email: string;
-  emailVerified: boolean | null;
-  displayName: string;
-  avatarUrl: string | null;
-  locale: string | null;
-  timezone: string | null;
-  role: string | null;
-  lastActiveAt: Date | null;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-  deletedAt: Date | null;
-}
-
-export interface UserPreference {
-  userId: string;
-  favoriteCategories: string[] | null;
-  cuisinePreferences: string[] | null;
-  priceRange: string | null;
-  dietaryNeeds: string[] | null;
-  explorationStyle: string | null;
-  maxWalkDistance: number | null;
-  notificationEnabled: boolean | null;
-  storyLanguage: string | null;
-  updatedAt: Date | null;
-}
-
-export interface UserSavedPoi {
-  id: string;
-  userId: string;
-  poiId: string;
-  note: string | null;
-  createdAt: Date | null;
-}
-
-export interface UserVisit {
-  id: string;
-  userId: string;
-  poiId: string;
-  visitedAt: Date | null;
-  durationSec: number | null;
-  source: string | null;
-}
-
-export interface BusinessAccount {
-  id: string;
-  userId: string;
-  businessName: string;
-  poiId: string | null;
-  contactEmail: string;
-  contactPhone: string | null;
-  billingAddress: string | null;
-  taxId: string | null;
-  status: string | null;
-  verifiedAt: Date | null;
-  createdAt: Date | null;
-}
-
-export interface AdCampaign {
-  id: string;
-  businessId: string;
-  poiId: string;
-  name: string;
-  campaignType: string;
-  status: string | null;
-  pricingModel: string;
-  bidAmount: number;
-  dailyBudget: number | null;
-  totalBudget: number;
-  spentAmount: number | null;
-  targetRadiusM: number | null;
-  targetCategories: string[] | null;
-  startsAt: Date;
-  endsAt: Date;
-  createdAt: Date | null;
-}
-
-export interface UserEngagement {
-  id: string;
-  userId: string;
-  poiId: string | null;
-  remarkId: string | null;
-  eventType: string;
-  dwellTimeSec: number | null;
-  scrollDepth: number | null;
-  createdAt: Date | null;
-}
-
-export interface Recommendation {
-  id: string;
-  userId: string;
-  poiId: string;
-  score: number;
-  reason: string | null;
-  campaignId: string | null;
-  expiresAt: Date;
-  served: boolean | null;
-  servedAt: Date | null;
   createdAt: Date | null;
 }
 

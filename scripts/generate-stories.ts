@@ -48,7 +48,6 @@ async function main() {
       wikipediaUrl: pois.wikipediaUrl,
       imageUrl: pois.imageUrl,
       embedding: pois.embedding,
-      searchVector: pois.searchVector,
       createdAt: pois.createdAt,
       updatedAt: pois.updatedAt,
       categorySlug: categories.slug,
@@ -96,7 +95,6 @@ async function main() {
         wikipediaUrl: row.wikipediaUrl,
         imageUrl: row.imageUrl,
         embedding: row.embedding,
-        searchVector: row.searchVector,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       };

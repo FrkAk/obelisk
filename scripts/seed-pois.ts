@@ -8,7 +8,6 @@ import {
   cuisines,
   poiCuisines,
   poiTags,
-  poiTranslations,
   tags,
 } from "../src/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -461,7 +460,6 @@ interface ProcessResult {
   accessibility: number;
   cuisines: number;
   tags: number;
-  translations: number;
 }
 
 /**
@@ -471,7 +469,7 @@ interface ProcessResult {
  *     ProcessResult with zeroed counters.
  */
 function emptyResult(): ProcessResult {
-  return { pois: 0, contacts: 0, accessibility: 0, cuisines: 0, tags: 0, translations: 0 };
+  return { pois: 0, contacts: 0, accessibility: 0, cuisines: 0, tags: 0 };
 }
 
 /**
@@ -491,7 +489,6 @@ function sumResults(results: ProcessResult[]): ProcessResult {
     totals.accessibility += r.accessibility;
     totals.cuisines += r.cuisines;
     totals.tags += r.tags;
-    totals.translations += r.translations;
   }
   return totals;
 }
@@ -654,9 +651,6 @@ async function main() {
 
       insertTagsForPoi(poiId, osmTags, categorySlug, tagSlugMap)
         .then((n) => { result.tags += n; }),
-
-      insertTranslationsForPoi(poiId, osmTags)
-        .then((n) => { result.translations += n; }),
     ].filter(Boolean));
 
     return result;
@@ -673,7 +667,6 @@ async function main() {
     totals.accessibility += batchTotals.accessibility;
     totals.cuisines += batchTotals.cuisines;
     totals.tags += batchTotals.tags;
-    totals.translations += batchTotals.translations;
 
     console.log(`  Processed batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(elements.length / BATCH_SIZE)} (${Math.min(i + BATCH_SIZE, elements.length)}/${elements.length} elements)`);
   }
@@ -685,7 +678,6 @@ async function main() {
   console.log(`  Accessibility info: ${totals.accessibility}`);
   console.log(`  Cuisine links: ${totals.cuisines}`);
   console.log(`  Tag links: ${totals.tags}`);
-  console.log(`  Translations: ${totals.translations}`);
   process.exit(0);
 }
 
@@ -751,33 +743,6 @@ async function insertTagsForPoi(
   if (tagValues.length === 0) return 0;
   await db.insert(poiTags).values(tagValues).onConflictDoNothing();
   return tagValues.length;
-}
-
-/**
- * Inserts localized name translations for a POI from OSM name:lang tags.
- *
- * Args:
- *     poiId: Database ID of the POI.
- *     osmTags: Raw OSM tags from the element.
- *
- * Returns:
- *     Number of translations inserted.
- */
-async function insertTranslationsForPoi(
-  poiId: string,
-  osmTags: Record<string, string>,
-): Promise<number> {
-  const translationValues: Array<{ poiId: string; locale: string; name: string; source: string }> = [];
-
-  const nameDE = osmTags["name:de"];
-  const nameEN = osmTags["name:en"];
-
-  if (nameDE) translationValues.push({ poiId, locale: "de-DE", name: nameDE, source: "osm" });
-  if (nameEN) translationValues.push({ poiId, locale: "en-US", name: nameEN, source: "osm" });
-
-  if (translationValues.length === 0) return 0;
-  await db.insert(poiTranslations).values(translationValues).onConflictDoNothing();
-  return translationValues.length;
 }
 
 /**

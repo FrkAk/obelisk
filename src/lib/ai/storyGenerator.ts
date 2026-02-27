@@ -23,7 +23,6 @@ export interface GeneratedStory {
   durationSeconds: number;
   confidence: "high" | "medium" | "low";
   modelId: string;
-  contextSources: Record<string, unknown>;
 }
 
 interface CategoryPersona {
@@ -152,30 +151,6 @@ function assessConfidence(ctx: StoryPoiContext): "high" | "medium" | "low" {
   if (score >= 5) return "high";
   if (score >= 2) return "medium";
   return "low";
-}
-
-/**
- * Builds a metadata object summarizing the data sources used for story generation.
- *
- * Args:
- *     ctx: Full POI context with JSONB profile and metadata.
- *
- * Returns:
- *     Metadata record with profile stats, tag counts, and flags.
- */
-function buildContextSources(ctx: StoryPoiContext): Record<string, unknown> {
-  const profile = ctx.profile;
-  return {
-    categorySlug: ctx.categorySlug,
-    keywordCount: profile?.keywords?.length ?? 0,
-    productCount: profile?.products?.length ?? 0,
-    hasSummary: !!profile?.summary,
-    enrichmentSource: profile?.enrichmentSource ?? "none",
-    attributeCount: Object.keys(profile?.attributes ?? {}).length,
-    tagCount: ctx.tags.length,
-    hasContactInfo: ctx.contactInfo != null,
-    hasWikipedia: !!ctx.poi.wikipediaUrl,
-  };
 }
 
 function buildHonestyGuidelines(confidence: "high" | "medium" | "low"): string {
@@ -545,7 +520,6 @@ export async function generateStory(
     ...parsed,
     confidence,
     modelId: usedModel,
-    contextSources: buildContextSources(ctx),
   };
 }
 

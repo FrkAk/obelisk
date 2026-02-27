@@ -77,16 +77,6 @@ export async function getNearbyPois(
 }
 
 /**
- * Fetches all categories.
- *
- * Returns:
- *     Array of all categories.
- */
-export async function getAllCategories() {
-  return db.select().from(categories);
-}
-
-/**
  * Loads all tags associated with a POI.
  *
  * Args:

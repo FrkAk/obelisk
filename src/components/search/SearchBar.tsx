@@ -88,9 +88,8 @@ export function SearchBar({
     (name: string) => {
       setQuery(name);
       onSuggestionSelect?.(name);
-      onSearch(name);
     },
-    [onSuggestionSelect, onSearch]
+    [onSuggestionSelect]
   );
 
   const hasInput = query.trim().length > 0;

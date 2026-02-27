@@ -4,7 +4,6 @@ import { useState, useCallback, useRef } from "react";
 import type {
   SearchResult,
   SearchResponse,
-  ParsedIntent,
   ViewportContext,
   CategorySlug,
   SearchStage,
@@ -17,11 +16,9 @@ interface UseSearchOptions {
 
 interface UseSearchReturn {
   results: SearchResult[];
-  intent: ParsedIntent | null;
   isLoading: boolean;
   searchStage: SearchStage;
   error: string | null;
-  timing: SearchResponse["timing"] | null;
   search: (
     query: string,
     location: { latitude: number; longitude: number },
@@ -44,11 +41,9 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
   const { radius = 1000, limit = 20 } = options;
 
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [intent, setIntent] = useState<ParsedIntent | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchStage, setSearchStage] = useState<SearchStage>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [timing, setTiming] = useState<SearchResponse["timing"] | null>(null);
 
   const search = useCallback(
     async (
@@ -86,13 +81,10 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
         const data: SearchResponse = await response.json();
 
         setResults(data.results);
-        setIntent(data.intent);
-        setTiming(data.timing);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Search failed";
         setError(message);
         setResults([]);
-        setIntent(null);
       } finally {
         setIsLoading(false);
         setSearchStage("idle");
@@ -103,19 +95,15 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
 
   const clear = useCallback(() => {
     setResults([]);
-    setIntent(null);
     setError(null);
-    setTiming(null);
     setSearchStage("idle");
   }, []);
 
   return {
     results,
-    intent,
     isLoading,
     searchStage,
     error,
-    timing,
     search,
     clear,
   };
@@ -129,7 +117,6 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
  */
 export function useAutocomplete() {
   const [suggestions, setSuggestions] = useState<Array<{ name: string; category: string }>>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchSuggestions = useCallback(
@@ -141,7 +128,6 @@ export function useAutocomplete() {
       }
 
       timerRef.current = setTimeout(async () => {
-        setIsLoading(true);
         try {
           const params = new URLSearchParams({ q: prefix });
           if (location) {
@@ -153,8 +139,6 @@ export function useAutocomplete() {
           setSuggestions(data.suggestions || []);
         } catch {
           setSuggestions([]);
-        } finally {
-          setIsLoading(false);
         }
       }, 150);
     },
@@ -163,5 +147,5 @@ export function useAutocomplete() {
 
   const clear = useCallback(() => setSuggestions([]), []);
 
-  return { suggestions, isLoading, fetchSuggestions, clear };
+  return { suggestions, fetchSuggestions, clear };
 }

@@ -29,7 +29,10 @@ export async function GET(request: NextRequest) {
   });
 
   if (!parseResult.success) {
-    return NextResponse.json({ suggestions: [] });
+    return NextResponse.json(
+      { error: "Invalid query parameters", details: parseResult.error.flatten().fieldErrors },
+      { status: 400 }
+    );
   }
 
   const { q, lat, lon } = parseResult.data;

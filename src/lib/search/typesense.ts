@@ -226,7 +226,7 @@ export async function searchAutocomplete(
     q: prefix,
     query_by: "name",
     prefix: "true" as const,
-    per_page: 5,
+    per_page: 15,
     filter_by: filterParts.length > 0 ? filterParts.join(" && ") : undefined,
     sort_by: location
       ? `location(${location.latitude},${location.longitude}):asc`
@@ -238,13 +238,24 @@ export async function searchAutocomplete(
     .documents()
     .search(searchParameters);
 
-  return (response.hits ?? []).map((hit) => ({
-    id: hit.document!.poiId,
-    name: hit.document!.name,
-    category: hit.document!.category,
-    latitude: hit.document!.location[0],
-    longitude: hit.document!.location[1],
-  }));
+  const seen = new Set<string>();
+  const results: Array<{ id: string; name: string; category: string; latitude: number; longitude: number }> = [];
+
+  for (const hit of response.hits ?? []) {
+    const name = hit.document!.name;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    results.push({
+      id: hit.document!.poiId,
+      name,
+      category: hit.document!.category,
+      latitude: hit.document!.location[0],
+      longitude: hit.document!.location[1],
+    });
+    if (results.length >= 5) break;
+  }
+
+  return results;
 }
 
 /**

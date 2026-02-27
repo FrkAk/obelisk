@@ -8,9 +8,9 @@ import { SearchResults } from "@/components/search/SearchResults";
 import { POICard } from "@/components/poi/POICard";
 import { useGeofence } from "@/hooks/useGeofence";
 import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
-import { useSearch } from "@/hooks/useSearch";
+import { useSearch, useAutocomplete } from "@/hooks/useSearch";
 import { AnimatePresence, motion } from "framer-motion";
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import type { Remark, PoiWithCategory, SearchResult, ExternalPOI, ViewportBounds } from "@/types/api";
 import { haversineDistance } from "@/lib/geo/distance";
 import { springTransitions } from "@/lib/ui/animations";
@@ -91,6 +91,24 @@ export default function Home() {
     search,
     clear: clearSearch,
   } = useSearch({ radius: 2000 });
+
+  const {
+    suggestions,
+    fetchSuggestions,
+    clear: clearAutocomplete,
+  } = useAutocomplete();
+
+  const autocompleteLocation = useMemo(
+    () => viewportState.center ?? (location ? { latitude: location.latitude, longitude: location.longitude } : undefined),
+    [viewportState.center, location]
+  );
+
+  const handleInputChange = useCallback(
+    (value: string) => {
+      fetchSuggestions(value, autocompleteLocation ?? undefined);
+    },
+    [fetchSuggestions, autocompleteLocation]
+  );
 
   useEffect(() => {
     return () => {
@@ -248,6 +266,7 @@ export default function Home() {
         bounds: viewportState.bounds,
         zoom: viewportState.zoom,
       } : undefined;
+      clearAutocomplete();
       search(query, searchLocation, undefined, viewport);
       setLastSearchQuery(query);
       lastSearchQueryRef.current = query;
@@ -255,10 +274,19 @@ export default function Home() {
       setSheetMode("search");
       setSheetOpen(true);
     },
-    [viewportState, location, search]
+    [viewportState, location, search, clearAutocomplete]
+  );
+
+  const handleSuggestionSelect = useCallback(
+    (name: string) => {
+      clearAutocomplete();
+      handleSearch(name);
+    },
+    [clearAutocomplete, handleSearch]
   );
 
   const handleSearchClear = useCallback(() => {
+    clearAutocomplete();
     clearSearch();
     setLastSearchQuery(null);
     setHasMapMovedSinceSearch(false);
@@ -267,7 +295,7 @@ export default function Home() {
       setSheetOpen(false);
       setSheetMode(null);
     }
-  }, [clearSearch, sheetMode]);
+  }, [clearAutocomplete, clearSearch, sheetMode]);
 
   const handleSearchResultTap = useCallback((result: SearchResult) => {
     setPreviousSheetMode(sheetMode);
@@ -412,6 +440,9 @@ export default function Home() {
         <SearchBar
           onSearch={handleSearch}
           onClear={handleSearchClear}
+          onInputChange={handleInputChange}
+          suggestions={suggestions}
+          onSuggestionSelect={handleSuggestionSelect}
           isLoading={isSearching}
           searchStage={searchStage}
           placeholder={hasRealLocation || viewportState.center ? "Ask Obelisk anything..." : "Getting location..."}

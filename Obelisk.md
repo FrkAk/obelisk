@@ -134,7 +134,7 @@ Every POI in Obelisk has a deep semantic profile — not just a name and address
 - Focus on the world together, not your screens
 - Creates bonding through shared discovery
 
-### 4.4 Adaptive Guidance
+### 4.4 Passages
 
 **Truly personalized navigation**
 
@@ -151,7 +151,7 @@ Every POI in Obelisk has a deep semantic profile — not just a name and address
 - Adapts story density to your pace
 - Suggests based on time of day, weather, mood
 
-### 4.5 Ambient Soundscapes
+### 4.5 Echoes
 
 **Context-aware audio experiences**
 
@@ -159,6 +159,20 @@ Every POI in Obelisk has a deep semantic profile — not just a name and address
 - Jazz near historic jazz venues
 - Tranquil sounds in parks
 - Era-appropriate music for historical sites
+
+### 4.6 Frames
+
+**Place-first social layer**
+
+A full social experience where every post is pinned to a real place. Share photos, stories, and recommendations from your travels. Follow explorers whose taste you trust, like posts that inspire you, build your own profile of places you've been. The feed isn't a timeline — it's the world map.
+
+- Visit a place, post a Frame — photo, short text, your take on it
+- Pinned to the exact location on the map
+- Other users discover it when browsing the area, visiting, or following you
+- Like, comment, follow — social mechanics people expect, but spatially organized
+- Discovery is spatial — browse a neighborhood, see what people posted there
+- Profiles are travel maps — a map of everywhere you've been and shared
+- Connected to Obelisk's semantic understanding — Frames at a café appear alongside its AI-generated Remark
 
 ---
 
@@ -587,6 +601,7 @@ Two-engine search with Reciprocal Rank Fusion:
 - [ ]  User-created Remarks
 - [ ]  Curated tours
 - [ ]  Personalized recommendations based on learned interests
+- [ ]  Frames (place-first social layer)
 
 ### Phase 4: Emotional Connection
 
@@ -1204,6 +1219,7 @@ Pin interactions:
 | Personalized recommendations | Learned interests + context-aware suggestions |
 | Conversational search | Natural language queries with full intent understanding |
 | Context engine | Time, weather, mood, pace — full contextual awareness |
+| Frames | Place-first social layer — post, follow, like, spatially organized |
 
 ### 18.4 Phase 4 - "Emotional Connection"
 
@@ -1348,6 +1364,7 @@ Map UI       Embeddings   Bookmarks     Moments      Transit
 | **Hidden Gems** | Diamond/sparkle | Yellow `#FFD60A` |
 | **Views** | Camera/eye | Teal `#64D2FF` |
 | **Culture** | Masks | Indigo `#5E5CE6` |
+| **Frames** | Camera/pin | Indigo `#5E5CE6` |
 
 ### 19.5 UI Components
 
@@ -1639,6 +1656,7 @@ A next-generation intelligent map that deeply understands every place in the wor
 3. **Ambient Storytelling** - Stories find you as you walk, powered by proximity intelligence
 4. **Audio-First** - Eyes on the world, not the screen
 5. **Intelligence-First Strategy** - Build understanding first, utility features follow
+6. **Place-First Social** - Frames turns every post into a map pin, making discovery spatial
 
 ### Current Status (February 2026)
 

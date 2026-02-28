@@ -330,7 +330,7 @@ async function insertTagsForPoi(
  */
 export async function seedPois(location: LocationConfig): Promise<void> {
   const seedRadius = location.seedRadius;
-  log.info(`Seeding POIs for ${location.city.name} (radius: ${seedRadius}m)`);
+  log.info(`Seeding POIs for ${location.city.name} (radius: ${seedRadius < 0 ? "unlimited" : `${seedRadius}m`})`);
 
   log.info("Seeding categories...");
   await db.insert(categories).values(CATEGORY_DATA).onConflictDoNothing();

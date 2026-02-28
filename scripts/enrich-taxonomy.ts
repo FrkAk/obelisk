@@ -4,7 +4,7 @@ import { pois, categories } from "../src/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { generateText, checkOllamaHealth } from "../src/lib/ai/ollama";
 import { processWithConcurrency } from "./lib/concurrency";
-import { createLogger } from "../src/lib/logger";
+import { createLogger, formatEta } from "../src/lib/logger";
 import type { PoiProfile } from "../src/types/api";
 
 const log = createLogger("enrich-taxonomy");
@@ -166,13 +166,10 @@ async function main() {
   let enriched = 0;
   let skipped = 0;
   let failed = 0;
+  const startMs = Date.now();
 
   for (let i = 0; i < toEnrich.length; i += BATCH_SIZE) {
     const batch = toEnrich.slice(i, i + BATCH_SIZE);
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(toEnrich.length / BATCH_SIZE);
-
-    log.info(`Batch ${batchNum}/${totalBatches} (${batch.length} POIs)`);
 
     const results = await processWithConcurrency(batch, CONCURRENCY, async (poi: PoiRow) => {
       const osmTags = poi.osmTags ?? {};
@@ -263,7 +260,8 @@ async function main() {
       else skipped++;
     }
 
-    log.info(`  Batch done: ${results.filter((r) => r === "enriched").length} enriched, ${results.filter((r) => r === "failed").length} failed`);
+    const done = Math.min(i + BATCH_SIZE, toEnrich.length);
+    log.info(`${formatEta(startMs, done, toEnrich.length)} — ${results.filter((r) => r === "enriched").length} enriched, ${results.filter((r) => r === "failed").length} failed`);
   }
 
   log.info("");

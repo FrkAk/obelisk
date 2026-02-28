@@ -22,7 +22,7 @@ const LOCATIONS: Record<string, LocationConfig> = {
     timezone: "Europe/Berlin",
     pbfUrl: "https://download.bbbike.org/osm/bbbike/Muenchen/Muenchen.osm.pbf",
     pbfFilename: "Muenchen.osm.pbf",
-    seedRadius: 2000,
+    seedRadius: -1,
   },
   berlin: {
     city: { name: "Berlin", slug: "berlin", lat: 52.52, lon: 13.405 },
@@ -31,7 +31,7 @@ const LOCATIONS: Record<string, LocationConfig> = {
     timezone: "Europe/Berlin",
     pbfUrl: "https://download.bbbike.org/osm/bbbike/Berlin/Berlin.osm.pbf",
     pbfFilename: "Berlin.osm.pbf",
-    seedRadius: 2000,
+    seedRadius: -1,
   },
   vienna: {
     city: { name: "Vienna", slug: "vienna", lat: 48.2082, lon: 16.3738 },
@@ -40,7 +40,7 @@ const LOCATIONS: Record<string, LocationConfig> = {
     timezone: "Europe/Vienna",
     pbfUrl: "https://download.bbbike.org/osm/bbbike/Wien/Wien.osm.pbf",
     pbfFilename: "Wien.osm.pbf",
-    seedRadius: 2000,
+    seedRadius: -1,
   },
 };
 

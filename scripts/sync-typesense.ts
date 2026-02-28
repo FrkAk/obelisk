@@ -12,7 +12,7 @@ import {
 import { eq } from "drizzle-orm";
 import { initCollection, upsertDocuments } from "../src/lib/search/typesense";
 import { buildTypesenseDocument } from "../src/lib/search/profileSummary";
-import { createLogger } from "../src/lib/logger";
+import { createLogger, formatEta } from "../src/lib/logger";
 import type { PoiProfile } from "../src/types/api";
 
 const log = createLogger("sync-typesense");
@@ -173,11 +173,12 @@ async function syncTypesense() {
   });
 
   let synced = 0;
+  const startMs = Date.now();
   for (let i = 0; i < documents.length; i += BATCH_SIZE) {
     const batch = documents.slice(i, i + BATCH_SIZE);
     await upsertDocuments(batch);
     synced += batch.length;
-    log.info(`Synced ${synced}/${documents.length}`);
+    log.info(formatEta(startMs, synced, documents.length));
   }
 
   log.success(`Done! Synced ${synced} documents to Typesense`);

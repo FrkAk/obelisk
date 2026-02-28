@@ -19,7 +19,7 @@ export OLLAMA_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_SEARCH_MODEL ?= gemma3:4b-it-qat
 export OLLAMA_EMBED_MODEL ?= embeddinggemma:300m
 export TYPESENSE_API_KEY ?= obelisk_typesense_dev
-export SEED_RADIUS ?= 2000
+export SEED_RADIUS ?= -1
 export SEED_LOCATION ?= munich
 
 help:
@@ -63,48 +63,67 @@ help:
 	@printf "\n"
 
 setup:
-	@printf "$(GREEN)Setting up Obelisk ($(SEED_LOCATION))...$(RESET)\n"
-	@printf "\n"
-	@printf "$(CYAN)[1/14]$(RESET) Building and starting services...\n"
-	$(COMPOSE) up -d --build
-	@printf "Waiting for services...\n"
-	@sleep 8
-	@printf "\n"
-	@printf "$(CYAN)[2/14]$(RESET) Enabling extensions and running migrations...\n"
-	$(COMPOSE) exec -T postgres psql -U obelisk -d obelisk -f /dev/stdin < drizzle/0001_enable_extensions.sql
-	$(COMPOSE) exec app bun run drizzle-kit push
-	@printf "\n"
-	@printf "$(CYAN)[3/14]$(RESET) Ensuring Ollama models...\n"
-	ollama pull $(OLLAMA_MODEL)
-	ollama pull $(OLLAMA_SEARCH_MODEL)
-	ollama pull $(OLLAMA_EMBED_MODEL)
-	@printf "\n"
-	@printf "$(CYAN)[4/14]$(RESET) Downloading external datasets...\n"
-	$(COMPOSE) exec app bun scripts/download-datasets.ts
-	@printf "\n"
-	@printf "$(CYAN)[5/14]$(RESET) Building tag enrichment map...\n"
-	$(COMPOSE) exec app bun scripts/build-taxonomy.ts
-	@printf "\n"
-	@printf "$(CYAN)[6/14]$(RESET) Building brand enrichment map...\n"
-	$(COMPOSE) exec app bun scripts/build-brands.ts
-	@printf "\n"
-	@printf "$(CYAN)[7/14]$(RESET) Downloading OSM PBF extract...\n"
-	$(MAKE) download-pbf
-	@printf "\n"
-	@printf "$(CYAN)[8/14]$(RESET) Seeding (regions, cuisines, tags, POIs)...\n"
-	$(COMPOSE) exec app bun scripts/seed.ts
-	@printf "\n"
-	@printf "$(CYAN)[9/14]$(RESET) Enriching POIs with taxonomy data...\n"
-	$(COMPOSE) exec app bun scripts/enrich-taxonomy.ts
-	@printf "\n"
-	@printf "$(CYAN)[10/14]$(RESET) Generating stories...\n"
-	$(COMPOSE) exec app bun scripts/generate-stories.ts || true
-	@printf "\n"
-	@printf "$(CYAN)[11/14]$(RESET) Syncing search index + generating embeddings...\n"
-	$(COMPOSE) exec app bun scripts/sync-typesense.ts
-	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
-	@printf "\n"
-	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
+	@SETUP_START=$$(date +%s); \
+	printf "$(GREEN)Setting up Obelisk ($(SEED_LOCATION))...$(RESET)\n"; \
+	printf "\n"; \
+	printf "$(CYAN)[1/14]$(RESET) Building and starting services...\n"; \
+	$(COMPOSE) up -d --build; \
+	printf "Waiting for services...\n"; \
+	sleep 8; \
+	printf "\n"; \
+	printf "$(CYAN)[2/14]$(RESET) Enabling extensions and running migrations...\n"; \
+	$(COMPOSE) exec -T postgres psql -U obelisk -d obelisk -f /dev/stdin < drizzle/0001_enable_extensions.sql; \
+	$(COMPOSE) exec app bun run drizzle-kit push; \
+	printf "\n"; \
+	printf "$(CYAN)[3/14]$(RESET) Ensuring Ollama models...\n"; \
+	ollama pull $(OLLAMA_MODEL); \
+	ollama pull $(OLLAMA_SEARCH_MODEL); \
+	ollama pull $(OLLAMA_EMBED_MODEL); \
+	printf "\n"; \
+	printf "$(CYAN)[4/14]$(RESET) Downloading external datasets...\n"; \
+	$(COMPOSE) exec app bun scripts/download-datasets.ts; \
+	printf "\n"; \
+	printf "$(CYAN)[5/14]$(RESET) Building tag enrichment map...\n"; \
+	$(COMPOSE) exec app bun scripts/build-taxonomy.ts; \
+	printf "\n"; \
+	printf "$(CYAN)[6/14]$(RESET) Building brand enrichment map...\n"; \
+	$(COMPOSE) exec app bun scripts/build-brands.ts; \
+	printf "\n"; \
+	printf "$(CYAN)[7/14]$(RESET) Downloading OSM PBF extract...\n"; \
+	$(MAKE) download-pbf; \
+	printf "\n"; \
+	printf "$(CYAN)[8/14]$(RESET) Seeding (regions, cuisines, tags, POIs)...\n"; \
+	STEP_START=$$(date +%s); \
+	$(COMPOSE) exec app bun scripts/seed.ts; \
+	STEP_END=$$(date +%s); \
+	ELAPSED=$$((STEP_END - STEP_START)); \
+	printf "$(GREEN)Step 8 done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "\n"; \
+	printf "$(CYAN)[9/14]$(RESET) Enriching POIs with taxonomy data...\n"; \
+	STEP_START=$$(date +%s); \
+	$(COMPOSE) exec app bun scripts/enrich-taxonomy.ts; \
+	STEP_END=$$(date +%s); \
+	ELAPSED=$$((STEP_END - STEP_START)); \
+	printf "$(GREEN)Step 9 done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "\n"; \
+	printf "$(CYAN)[10/14]$(RESET) Generating stories...\n"; \
+	STEP_START=$$(date +%s); \
+	$(COMPOSE) exec app bun scripts/generate-stories.ts || true; \
+	STEP_END=$$(date +%s); \
+	ELAPSED=$$((STEP_END - STEP_START)); \
+	printf "$(GREEN)Step 10 done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "\n"; \
+	printf "$(CYAN)[11/14]$(RESET) Syncing search index + generating embeddings...\n"; \
+	STEP_START=$$(date +%s); \
+	$(COMPOSE) exec app bun scripts/sync-typesense.ts; \
+	$(COMPOSE) exec app bun scripts/generate-embeddings.ts; \
+	STEP_END=$$(date +%s); \
+	ELAPSED=$$((STEP_END - STEP_START)); \
+	printf "$(GREEN)Step 11 done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "\n"; \
+	SETUP_END=$$(date +%s); \
+	TOTAL=$$((SETUP_END - SETUP_START)); \
+	printf "$(GREEN)Setup complete in %dm%ds!$(RESET) Run 'make run' to start\n" $$((TOTAL / 60)) $$((TOTAL % 60))
 
 setup-quick:
 	@if [ ! -f db/dump.sql ]; then printf "$(RED)No db/dump.sql found. Run 'make setup' for full setup or 'make db-dump' first.$(RESET)\n"; exit 1; fi

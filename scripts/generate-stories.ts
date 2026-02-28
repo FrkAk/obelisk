@@ -15,7 +15,7 @@ import type { StoryPoiContext } from "../src/lib/ai/storyGenerator";
 import { processWithConcurrency } from "./lib/concurrency";
 import { loadTags, loadContactInfo } from "../src/lib/db/queries/pois";
 import { insertRemark } from "../src/lib/db/queries/remarks";
-import { createLogger } from "../src/lib/logger";
+import { createLogger, formatEta } from "../src/lib/logger";
 import { POI_SELECT_FIELDS, toPoi } from "./lib/poi-row";
 
 const log = createLogger("stories");
@@ -66,6 +66,7 @@ async function main(): Promise<void> {
   let savedCount = 0;
   let failedCount = 0;
   let skippedCount = 0;
+  const startMs = Date.now();
 
   type PoiRow = (typeof poisWithoutRemarks)[number];
   await processWithConcurrency<PoiRow, void>(
@@ -102,8 +103,9 @@ async function main(): Promise<void> {
         await insertRemark({ poiId: poi.id, locale: poi.locale, story });
 
         savedCount++;
+        const done = savedCount + failedCount + skippedCount;
         log.info(
-          `[${savedCount + failedCount + skippedCount}/${poisWithoutRemarks.length}] Saved: ${poi.name} (confidence: ${story.confidence})`,
+          `${formatEta(startMs, done, poisWithoutRemarks.length)} — Saved: ${poi.name} (confidence: ${story.confidence})`,
         );
       } catch (error) {
         failedCount++;

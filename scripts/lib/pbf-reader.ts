@@ -140,7 +140,7 @@ export async function readPoisFromPbf(
 
         if (!node.tags || !node.tags.name) return;
         if (!matchesFilters(node.tags)) return;
-        if (!isWithinRadius(center.lat, center.lon, node.lat, node.lon, radiusMeters)) return;
+        if (radiusMeters > 0 && !isWithinRadius(center.lat, center.lon, node.lat, node.lon, radiusMeters)) return;
 
         matchedNodes.push({
           type: "node",
@@ -173,7 +173,7 @@ export async function readPoisFromPbf(
         const centerLat = totalLat / count;
         const centerLon = totalLon / count;
 
-        if (!isWithinRadius(center.lat, center.lon, centerLat, centerLon, radiusMeters)) return;
+        if (radiusMeters > 0 && !isWithinRadius(center.lat, center.lon, centerLat, centerLon, radiusMeters)) return;
 
         matchedWays.push({
           type: "way",

@@ -18,7 +18,7 @@ import {
   loadAccessibilityInfo,
 } from "../src/lib/db/queries/pois";
 import type { PoiProfile } from "../src/types";
-import { createLogger } from "../src/lib/logger";
+import { createLogger, formatEta } from "../src/lib/logger";
 import { POI_SELECT_FIELDS, toPoi } from "./lib/poi-row";
 
 const log = createLogger("embeddings");
@@ -82,6 +82,7 @@ async function generateEmbeddings(): Promise<void> {
 
   let processed = 0;
   let errors = 0;
+  const startMs = Date.now();
 
   for (let i = 0; i < targetPois.length; i += BATCH_SIZE) {
     const batch = targetPois.slice(i, i + BATCH_SIZE);
@@ -152,7 +153,7 @@ async function generateEmbeddings(): Promise<void> {
     }
 
     log.info(
-      `Progress: ${processed + errors}/${targetPois.length} (${errors} errors)`,
+      `${formatEta(startMs, processed + errors, targetPois.length)} (${errors} errors)`,
     );
   }
 

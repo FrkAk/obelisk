@@ -1,4 +1,4 @@
-import type { Poi, Tag, Cuisine, PoiProfile } from "@/types";
+import type { Poi, PoiProfile } from "@/types";
 
 /**
  * Builds a semantically rich embedding text string from POI data and its JSONB profile.
@@ -7,8 +7,8 @@ import type { Poi, Tag, Cuisine, PoiProfile } from "@/types";
  * Args:
  *     poi: The POI record.
  *     profile: The JSONB profile data from pois.profile column.
- *     tags: Array of tags associated with the POI.
- *     cuisines: Array of cuisines associated with the POI.
+ *     tags: Array of objects with at least a `name` property (Tag[] or string-wrapped).
+ *     cuisines: Array of objects with at least a `name` property (Cuisine[] or string-wrapped).
  *     accessibility: Optional accessibility flags.
  *
  * Returns:
@@ -17,8 +17,8 @@ import type { Poi, Tag, Cuisine, PoiProfile } from "@/types";
 export function buildEmbeddingText(
   poi: Poi,
   profile: PoiProfile | null,
-  tags: Tag[],
-  cuisines?: Cuisine[],
+  tags: { name: string }[],
+  cuisines?: { name: string }[],
   accessibility?: {
     wheelchair?: boolean | null;
     dogFriendly?: boolean | null;

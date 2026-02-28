@@ -66,61 +66,80 @@ setup:
 	@SETUP_START=$$(date +%s); \
 	printf "$(GREEN)Setting up Obelisk ($(SEED_LOCATION))...$(RESET)\n"; \
 	printf "\n"; \
-	printf "$(CYAN)[1/14]$(RESET) Building and starting services...\n"; \
+	\
+	printf "$(CYAN)[Phase 1]$(RESET) Building and starting services...\n"; \
 	$(COMPOSE) up -d --build; \
-	printf "Waiting for services...\n"; \
-	sleep 8; \
+	printf "Waiting for PostgreSQL...\n"; \
+	until $(COMPOSE) exec -T postgres pg_isready -U obelisk -d obelisk >/dev/null 2>&1; do sleep 1; done; \
+	printf "Waiting for Typesense...\n"; \
+	until curl -sf http://localhost:8108/health >/dev/null 2>&1; do sleep 1; done; \
+	printf "$(GREEN)Services healthy$(RESET)\n"; \
 	printf "\n"; \
-	printf "$(CYAN)[2/14]$(RESET) Enabling extensions and running migrations...\n"; \
-	$(COMPOSE) exec -T postgres psql -U obelisk -d obelisk -f /dev/stdin < drizzle/0001_enable_extensions.sql; \
-	$(COMPOSE) exec app bun run drizzle-kit push; \
+	\
+	printf "$(CYAN)[Phase 2]$(RESET) Migrations + Ollama models + PBF download (parallel)...\n"; \
+	( \
+		$(COMPOSE) exec -T postgres psql -U obelisk -d obelisk -f /dev/stdin < drizzle/0001_enable_extensions.sql && \
+		$(COMPOSE) exec -T app bun run drizzle-kit push \
+	) & PID_MIGRATE=$$!; \
+	( \
+		ollama pull $(OLLAMA_MODEL) && \
+		if [ "$(OLLAMA_SEARCH_MODEL)" != "$(OLLAMA_MODEL)" ]; then ollama pull $(OLLAMA_SEARCH_MODEL); fi && \
+		ollama pull $(OLLAMA_EMBED_MODEL) \
+	) & PID_OLLAMA=$$!; \
+	$(MAKE) download-pbf & PID_PBF=$$!; \
+	wait $$PID_MIGRATE || exit 1; \
+	wait $$PID_OLLAMA || exit 1; \
+	wait $$PID_PBF || exit 1; \
+	printf "$(GREEN)Phase 2 complete$(RESET)\n"; \
 	printf "\n"; \
-	printf "$(CYAN)[3/14]$(RESET) Ensuring Ollama models...\n"; \
-	ollama pull $(OLLAMA_MODEL); \
-	ollama pull $(OLLAMA_SEARCH_MODEL); \
-	ollama pull $(OLLAMA_EMBED_MODEL); \
-	printf "\n"; \
-	printf "$(CYAN)[4/14]$(RESET) Downloading external datasets...\n"; \
+	\
+	printf "$(CYAN)[Phase 3]$(RESET) Downloading external datasets...\n"; \
 	$(COMPOSE) exec app bun scripts/download-datasets.ts; \
 	printf "\n"; \
-	printf "$(CYAN)[5/14]$(RESET) Building tag enrichment map...\n"; \
-	$(COMPOSE) exec app bun scripts/build-taxonomy.ts; \
+	\
+	printf "$(CYAN)[Phase 4]$(RESET) Building taxonomy + brands (parallel)...\n"; \
+	$(COMPOSE) exec -T app bun scripts/build-taxonomy.ts & PID_TAX=$$!; \
+	$(COMPOSE) exec -T app bun scripts/build-brands.ts & PID_BRAND=$$!; \
+	wait $$PID_TAX || exit 1; \
+	wait $$PID_BRAND || exit 1; \
+	printf "$(GREEN)Phase 4 complete$(RESET)\n"; \
 	printf "\n"; \
-	printf "$(CYAN)[6/14]$(RESET) Building brand enrichment map...\n"; \
-	$(COMPOSE) exec app bun scripts/build-brands.ts; \
-	printf "\n"; \
-	printf "$(CYAN)[7/14]$(RESET) Downloading OSM PBF extract...\n"; \
-	$(MAKE) download-pbf; \
-	printf "\n"; \
-	printf "$(CYAN)[8/14]$(RESET) Seeding (regions, cuisines, tags, POIs)...\n"; \
+	\
+	printf "$(CYAN)[Phase 5]$(RESET) Seeding (regions, cuisines, tags, POIs)...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec app bun scripts/seed.ts; \
 	STEP_END=$$(date +%s); \
 	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Step 8 done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "$(GREEN)Seeding done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
-	printf "$(CYAN)[9/14]$(RESET) Enriching POIs with taxonomy data...\n"; \
+	\
+	printf "$(CYAN)[Phase 6]$(RESET) Enriching POIs with taxonomy data...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec app bun scripts/enrich-taxonomy.ts; \
 	STEP_END=$$(date +%s); \
 	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Step 9 done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "$(GREEN)Enrichment done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
-	printf "$(CYAN)[10/14]$(RESET) Generating stories...\n"; \
+	\
+	printf "$(CYAN)[Phase 7]$(RESET) Generating stories...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec app bun scripts/generate-stories.ts || true; \
 	STEP_END=$$(date +%s); \
 	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Step 10 done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "$(GREEN)Stories done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
-	printf "$(CYAN)[11/14]$(RESET) Syncing search index + generating embeddings...\n"; \
+	\
+	printf "$(CYAN)[Phase 8]$(RESET) Syncing search index + generating embeddings (parallel)...\n"; \
 	STEP_START=$$(date +%s); \
-	$(COMPOSE) exec app bun scripts/sync-typesense.ts; \
-	$(COMPOSE) exec app bun scripts/generate-embeddings.ts; \
+	$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \
+	$(COMPOSE) exec -T app bun scripts/generate-embeddings.ts & PID_EMBED=$$!; \
+	wait $$PID_SYNC || exit 1; \
+	wait $$PID_EMBED || exit 1; \
 	STEP_END=$$(date +%s); \
 	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Step 11 done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "$(GREEN)Search + embeddings done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
+	\
 	SETUP_END=$$(date +%s); \
 	TOTAL=$$((SETUP_END - SETUP_START)); \
 	printf "$(GREEN)Setup complete in %dm%ds!$(RESET) Run 'make run' to start\n" $$((TOTAL / 60)) $$((TOTAL % 60))
@@ -129,20 +148,23 @@ setup-quick:
 	@if [ ! -f db/dump.sql ]; then printf "$(RED)No db/dump.sql found. Run 'make setup' for full setup or 'make db-dump' first.$(RESET)\n"; exit 1; fi
 	@printf "$(GREEN)Quick setup from snapshot...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[1/5]$(RESET) Building and starting services...\n"
+	@printf "$(CYAN)[1/4]$(RESET) Building and starting services...\n"
 	$(COMPOSE) up -d --build
-	@printf "Waiting for services...\n"
-	@sleep 8
+	@printf "Waiting for PostgreSQL...\n"
+	@until $(COMPOSE) exec -T postgres pg_isready -U obelisk -d obelisk >/dev/null 2>&1; do sleep 1; done
+	@printf "Waiting for Typesense...\n"
+	@until curl -sf http://localhost:8108/health >/dev/null 2>&1; do sleep 1; done
+	@printf "$(GREEN)Services healthy$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[2/5]$(RESET) Restoring database from snapshot...\n"
+	@printf "$(CYAN)[2/4]$(RESET) Restoring database from snapshot...\n"
 	$(COMPOSE) exec -T postgres psql -U obelisk obelisk < db/dump.sql
 	@printf "\n"
-	@printf "$(CYAN)[4/5]$(RESET) Ensuring Ollama models...\n"
+	@printf "$(CYAN)[3/4]$(RESET) Ensuring Ollama models...\n"
 	ollama pull $(OLLAMA_MODEL)
-	ollama pull $(OLLAMA_SEARCH_MODEL)
+	@if [ "$(OLLAMA_SEARCH_MODEL)" != "$(OLLAMA_MODEL)" ]; then ollama pull $(OLLAMA_SEARCH_MODEL); fi
 	ollama pull $(OLLAMA_EMBED_MODEL)
 	@printf "\n"
-	@printf "$(CYAN)[5/5]$(RESET) Syncing search index...\n"
+	@printf "$(CYAN)[4/4]$(RESET) Syncing search index...\n"
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
 	@printf "\n"
 	@printf "$(GREEN)Quick setup complete!$(RESET) Run 'make run' to start\n"
@@ -264,12 +286,14 @@ db-restore:
 finish-setup:
 	@printf "$(GREEN)Finishing setup (stories + search + embeddings)...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[10/14]$(RESET) Generating stories...\n"
+	@printf "$(CYAN)[1/2]$(RESET) Generating stories...\n"
 	$(COMPOSE) exec app bun scripts/generate-stories.ts || true
 	@printf "\n"
-	@printf "$(CYAN)[11/14]$(RESET) Syncing search index + generating embeddings...\n"
-	$(COMPOSE) exec app bun scripts/sync-typesense.ts
-	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
+	@printf "$(CYAN)[2/2]$(RESET) Syncing search index + generating embeddings (parallel)...\n"
+	@$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \
+	$(COMPOSE) exec -T app bun scripts/generate-embeddings.ts & PID_EMBED=$$!; \
+	wait $$PID_SYNC || exit 1; \
+	wait $$PID_EMBED || exit 1
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 

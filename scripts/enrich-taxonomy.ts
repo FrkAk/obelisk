@@ -10,7 +10,7 @@ import type { PoiProfile } from "../src/types/api";
 const log = createLogger("enrich-taxonomy");
 
 const BATCH_SIZE = parseInt(process.env.ENRICH_BATCH_SIZE || "50", 10);
-const CONCURRENCY = parseInt(process.env.ENRICH_CONCURRENCY || "3", 10);
+const CONCURRENCY = parseInt(process.env.ENRICH_CONCURRENCY || "8", 10);
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "gemma3:4b-it-qat";
 
 interface TagEntry {
@@ -115,6 +115,12 @@ function buildSummaryPrompt(
   return lines.join("\n");
 }
 
+interface EnrichResult {
+  status: "enriched" | "failed" | "skipped";
+  poiId: string;
+  profile?: PoiProfile;
+}
+
 /**
  * Runs the taxonomy enrichment pipeline: loads taxonomy maps, iterates
  * through unenriched POIs, merges keywords/products, generates LLM
@@ -171,7 +177,7 @@ async function main() {
   for (let i = 0; i < toEnrich.length; i += BATCH_SIZE) {
     const batch = toEnrich.slice(i, i + BATCH_SIZE);
 
-    const results = await processWithConcurrency(batch, CONCURRENCY, async (poi: PoiRow) => {
+    const results = await processWithConcurrency<PoiRow, EnrichResult>(batch, CONCURRENCY, async (poi: PoiRow) => {
       const osmTags = poi.osmTags ?? {};
       const existingProfile: PoiProfile = poi.profile ?? {
         keywords: [],
@@ -237,31 +243,42 @@ async function main() {
         updatedProfile.summary = summary.trim();
         updatedProfile.enrichmentSource = enrichmentSource === "seed" ? "taxonomy+llm" : `${enrichmentSource}+llm`;
 
-        await db
-          .update(pois)
-          .set({
-            profile: updatedProfile,
-            embedding: null,
-            updatedAt: sql`now()`,
-          })
-          .where(eq(pois.id, poi.id));
-
-        return "enriched" as const;
+        return { status: "enriched", poiId: poi.id, profile: updatedProfile };
       } catch (error) {
         const msg = error instanceof Error ? error.message : "Unknown error";
         log.error(`${poi.name}: LLM failed — primaryTag=${primaryTag}, keywords=${mergedKeywords.length}, products=${mergedProducts.length} — ${msg}`);
-        return "failed" as const;
+        return { status: "failed", poiId: poi.id };
       }
     });
 
+    const toUpdate = results.filter(
+      (r): r is EnrichResult & { status: "enriched"; profile: PoiProfile } =>
+        r.status === "enriched" && r.profile !== undefined,
+    );
+
+    if (toUpdate.length > 0) {
+      await db.transaction(async (tx) => {
+        for (const item of toUpdate) {
+          await tx
+            .update(pois)
+            .set({
+              profile: item.profile,
+              embedding: null,
+              updatedAt: sql`now()`,
+            })
+            .where(eq(pois.id, item.poiId));
+        }
+      });
+    }
+
     for (const r of results) {
-      if (r === "enriched") enriched++;
-      else if (r === "failed") failed++;
+      if (r.status === "enriched") enriched++;
+      else if (r.status === "failed") failed++;
       else skipped++;
     }
 
     const done = Math.min(i + BATCH_SIZE, toEnrich.length);
-    log.info(`${formatEta(startMs, done, toEnrich.length)} — ${results.filter((r) => r === "enriched").length} enriched, ${results.filter((r) => r === "failed").length} failed`);
+    log.info(`${formatEta(startMs, done, toEnrich.length)} — ${toUpdate.length} enriched, ${results.filter((r) => r.status === "failed").length} failed`);
   }
 
   log.info("");

@@ -6,6 +6,6 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 COPY . .
-RUN mkdir -p .next && chown 1000:1000 .next
+RUN mkdir -p .next data
 
 EXPOSE 3000

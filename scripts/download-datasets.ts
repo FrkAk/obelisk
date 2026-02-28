@@ -100,7 +100,7 @@ function formatBytes(bytes: number): string {
  * Downloads Google Product Taxonomy to data/google_product_taxonomy.txt.
  */
 async function downloadGoogleTaxonomy(): Promise<void> {
-  log.info("[1/4] Google Product Taxonomy");
+  log.info("Google Product Taxonomy");
   const dest = join(DATA_DIR, "google_product_taxonomy.txt");
   if (shouldSkip(dest)) return;
 
@@ -108,7 +108,7 @@ async function downloadGoogleTaxonomy(): Promise<void> {
     "https://www.google.com/basepages/producttype/taxonomy.en-US.txt",
     dest,
   );
-  log.success(`OK ${formatBytes(bytes)}`);
+  log.success(`Google Taxonomy OK ${formatBytes(bytes)}`);
 }
 
 /**
@@ -116,7 +116,7 @@ async function downloadGoogleTaxonomy(): Promise<void> {
  * from the npm package tarball.
  */
 async function downloadNSI(): Promise<void> {
-  log.info("[2/4] Name Suggestion Index (NSI)");
+  log.info("Name Suggestion Index (NSI)");
   const nsiDir = join(DATA_DIR, "nsi");
   mkdirSync(nsiDir, { recursive: true });
 
@@ -171,12 +171,12 @@ async function downloadNSI(): Promise<void> {
   const { renameSync, rmSync } = await import("fs");
   if (!shouldSkip(nsiDest)) {
     renameSync(extractedNsi, nsiDest);
-    log.success(`OK nsi.json ${formatBytes(statSync(nsiDest).size)}`);
+    log.success(`NSI OK nsi.json ${formatBytes(statSync(nsiDest).size)}`);
   }
   if (!shouldSkip(dissolvedDest)) {
     renameSync(extractedDissolved, dissolvedDest);
     log.success(
-      `OK dissolved.json ${formatBytes(statSync(dissolvedDest).size)}`,
+      `NSI OK dissolved.json ${formatBytes(statSync(dissolvedDest).size)}`,
     );
   }
 
@@ -189,7 +189,7 @@ async function downloadNSI(): Promise<void> {
  * Adds a 1.5s delay between requests to be polite.
  */
 async function downloadTaginfo(): Promise<void> {
-  log.info("[3/4] OSM Taginfo");
+  log.info("OSM Taginfo");
   const dir = join(DATA_DIR, "taginfo");
   mkdirSync(dir, { recursive: true });
 
@@ -201,7 +201,7 @@ async function downloadTaginfo(): Promise<void> {
 
     const url = `https://taginfo.openstreetmap.org/api/4/key/values?key=${key}&sortname=count_all&sortorder=desc&page=1&rp=200&format=json`;
     const bytes = await download(url, dest);
-    log.success(`OK ${key}.json ${formatBytes(bytes)}`);
+    log.success(`Taginfo OK ${key}.json ${formatBytes(bytes)}`);
 
     if (key !== allKeys[allKeys.length - 1]) {
       await sleep(1500);
@@ -213,7 +213,7 @@ async function downloadTaginfo(): Promise<void> {
  * Runs a SPARQL query against Wikidata to fetch brand/industry/product data.
  */
 async function downloadWikidata(): Promise<void> {
-  log.info("[4/4] Wikidata Brand Data");
+  log.info("Wikidata Brand Data");
   const dest = join(DATA_DIR, "wikidata_brands.json");
   if (shouldSkip(dest)) return;
 
@@ -222,11 +222,12 @@ async function downloadWikidata(): Promise<void> {
     "User-Agent":
       "ObeliskBot/1.0 (https://github.com/obelisk; contact@obelisk.dev)",
   });
-  log.success(`OK ${formatBytes(bytes)}`);
+  log.success(`Wikidata OK ${formatBytes(bytes)}`);
 }
 
 /**
  * Downloads all external datasets required for the enrichment pipeline.
+ * Runs all four downloads in parallel where safe.
  */
 async function main(): Promise<void> {
   log.info("Downloading external datasets...");
@@ -234,10 +235,24 @@ async function main(): Promise<void> {
 
   mkdirSync(DATA_DIR, { recursive: true });
 
-  await downloadGoogleTaxonomy();
-  await downloadNSI();
-  await downloadTaginfo();
-  await downloadWikidata();
+  const TASK_NAMES = ["Google Taxonomy", "NSI", "Wikidata", "Taginfo"];
+  const results = await Promise.allSettled([
+    downloadGoogleTaxonomy(),
+    downloadNSI(),
+    downloadWikidata(),
+    downloadTaginfo(),
+  ]);
+
+  const failures = results
+    .map((r, i) =>
+      r.status === "rejected" ? `${TASK_NAMES[i]}: ${r.reason}` : null,
+    )
+    .filter(Boolean);
+
+  if (failures.length > 0) {
+    for (const f of failures) log.error(f as string);
+    throw new Error(`${failures.length} download(s) failed`);
+  }
 
   log.success("All datasets downloaded.");
 }

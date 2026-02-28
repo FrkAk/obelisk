@@ -264,62 +264,13 @@ function sumResults(results: ProcessResult[]): ProcessResult {
   return totals;
 }
 
-/**
- * Inserts cuisine links for a POI based on its OSM cuisine tag.
- *
- * @param poiId - Database ID of the POI.
- * @param osmTags - Raw OSM tags from the element.
- * @param cuisineSlugMap - Map of cuisine slug to database ID.
- * @returns Number of cuisine links inserted.
- */
-async function insertCuisinesForPoi(
-  poiId: string,
-  osmTags: Record<string, string>,
-  cuisineSlugMap: Map<string, string>,
-): Promise<number> {
-  if (!osmTags.cuisine || cuisineSlugMap.size === 0) return 0;
-
-  const cuisineSlugs = parseCuisineTag(osmTags.cuisine);
-  const cuisineValues = cuisineSlugs
-    .map((slug, i) => {
-      const cuisineId = cuisineSlugMap.get(slug);
-      return cuisineId ? { poiId, cuisineId, isPrimary: i === 0 } : null;
-    })
-    .filter((v): v is NonNullable<typeof v> => v !== null);
-
-  if (cuisineValues.length === 0) return 0;
-  await db.insert(poiCuisines).values(cuisineValues).onConflictDoNothing();
-  return cuisineValues.length;
-}
-
-/**
- * Inserts tag links for a POI based on its OSM tags and category.
- *
- * @param poiId - Database ID of the POI.
- * @param osmTags - Raw OSM tags from the element.
- * @param categorySlug - Determined category for this POI.
- * @param tagSlugMap - Map of tag slug to database ID.
- * @returns Number of tag links inserted.
- */
-async function insertTagsForPoi(
-  poiId: string,
-  osmTags: Record<string, string>,
-  categorySlug: CategorySlug,
-  tagSlugMap: Map<string, string>,
-): Promise<number> {
-  if (tagSlugMap.size === 0) return 0;
-
-  const tagSlugs = extractTagSlugs(osmTags, categorySlug);
-  const tagValues = tagSlugs
-    .map((slug) => {
-      const tagId = tagSlugMap.get(slug);
-      return tagId ? { poiId, tagId } : null;
-    })
-    .filter((v): v is NonNullable<typeof v> => v !== null);
-
-  if (tagValues.length === 0) return 0;
-  await db.insert(poiTags).values(tagValues).onConflictDoNothing();
-  return tagValues.length;
+/** Collected sub-table rows from processing a single OSM element. */
+interface ElementOutput {
+  result: ProcessResult;
+  contactRow?: { poiId: string } & ReturnType<typeof parseContactInfo>;
+  accessibilityRow?: { poiId: string } & AccessibilityData;
+  cuisineRows: Array<{ poiId: string; cuisineId: string; isPrimary: boolean }>;
+  tagRows: Array<{ poiId: string; tagId: string }>;
 }
 
 /**
@@ -389,20 +340,24 @@ export async function seedPois(location: LocationConfig): Promise<void> {
   const CONCURRENCY = 20;
 
   /**
-   * Processes a single OSM element: upserts the POI and inserts related data.
+   * Processes a single OSM element: upserts the POI and collects sub-table rows.
    *
    * @param el - OverpassElement from the PBF reader.
-   * @returns ProcessResult with counts of inserted rows.
+   * @returns ElementOutput with POI result and collected sub-table rows.
    */
-  async function processElement(el: OverpassElement): Promise<ProcessResult> {
-    const result = emptyResult();
+  async function processElement(el: OverpassElement): Promise<ElementOutput> {
+    const output: ElementOutput = {
+      result: emptyResult(),
+      cuisineRows: [],
+      tagRows: [],
+    };
 
     const osmTags = el.tags;
-    if (!osmTags?.name) return result;
+    if (!osmTags?.name) return output;
 
     const lat = el.lat ?? el.center?.lat;
     const lon = el.lon ?? el.center?.lon;
-    if (!lat || !lon) return result;
+    if (!lat || !lon) return output;
 
     const categorySlug = getCategorySlugFromTags(osmTags);
     const categoryId = categoryMap.get(categorySlug);
@@ -451,53 +406,111 @@ export async function seedPois(location: LocationConfig): Promise<void> {
       })
       .returning({ id: pois.id });
 
-    if (!insertedPoi) return result;
+    if (!insertedPoi) return output;
     const poiId = insertedPoi.id;
-    result.pois++;
+    output.result.pois++;
 
     const contact = parseContactInfo(osmTags);
+    if (hasContactData(contact)) {
+      output.contactRow = { poiId, ...contact };
+      output.result.contacts++;
+    }
+
     const access = parseAccessibility(osmTags);
+    if (hasAccessibilityData(access)) {
+      output.accessibilityRow = { poiId, ...access };
+      output.result.accessibility++;
+    }
 
-    await Promise.all(
-      [
-        hasContactData(contact)
-          ? db
-              .insert(contactInfo)
-              .values({ poiId, ...contact })
-              .onConflictDoUpdate({ target: contactInfo.poiId, set: contact })
-              .then(() => {
-                result.contacts++;
-              })
-          : null,
+    if (osmTags.cuisine && cuisineSlugMap.size > 0) {
+      const cuisineSlugs = parseCuisineTag(osmTags.cuisine);
+      for (let idx = 0; idx < cuisineSlugs.length; idx++) {
+        const cuisineId = cuisineSlugMap.get(cuisineSlugs[idx]);
+        if (cuisineId) {
+          output.cuisineRows.push({ poiId, cuisineId, isPrimary: idx === 0 });
+          output.result.cuisines++;
+        }
+      }
+    }
 
-        hasAccessibilityData(access)
-          ? db
-              .insert(accessibilityInfo)
-              .values({ poiId, ...access })
-              .onConflictDoUpdate({ target: accessibilityInfo.poiId, set: access })
-              .then(() => {
-                result.accessibility++;
-              })
-          : null,
+    if (tagSlugMap.size > 0) {
+      const tagSlugs = extractTagSlugs(osmTags, categorySlug);
+      for (const slug of tagSlugs) {
+        const tagId = tagSlugMap.get(slug);
+        if (tagId) {
+          output.tagRows.push({ poiId, tagId });
+          output.result.tags++;
+        }
+      }
+    }
 
-        insertCuisinesForPoi(poiId, osmTags, cuisineSlugMap).then((n) => {
-          result.cuisines += n;
-        }),
-
-        insertTagsForPoi(poiId, osmTags, categorySlug, tagSlugMap).then((n) => {
-          result.tags += n;
-        }),
-      ].filter(Boolean),
-    );
-
-    return result;
+    return output;
   }
 
   for (let i = 0; i < elements.length; i += BATCH_SIZE) {
     const batch = elements.slice(i, i + BATCH_SIZE);
 
-    const batchResults = await processWithConcurrency(batch, CONCURRENCY, processElement);
-    const batchTotals = sumResults(batchResults);
+    const batchOutputs = await processWithConcurrency(batch, CONCURRENCY, processElement);
+
+    // Collect all sub-table rows from the batch
+    const allContacts: Array<{ poiId: string } & ReturnType<typeof parseContactInfo>> = [];
+    const allAccessibility: Array<{ poiId: string } & AccessibilityData> = [];
+    const allCuisineLinks: Array<{ poiId: string; cuisineId: string; isPrimary: boolean }> = [];
+    const allTagLinks: Array<{ poiId: string; tagId: string }> = [];
+
+    for (const out of batchOutputs) {
+      if (out.contactRow) allContacts.push(out.contactRow);
+      if (out.accessibilityRow) allAccessibility.push(out.accessibilityRow);
+      allCuisineLinks.push(...out.cuisineRows);
+      allTagLinks.push(...out.tagRows);
+    }
+
+    // Batch insert sub-table rows
+    if (allContacts.length > 0) {
+      await db
+        .insert(contactInfo)
+        .values(allContacts)
+        .onConflictDoUpdate({
+          target: contactInfo.poiId,
+          set: {
+            phone: sql`EXCLUDED.phone`,
+            email: sql`EXCLUDED.email`,
+            website: sql`EXCLUDED.website`,
+            bookingUrl: sql`EXCLUDED.booking_url`,
+            instagram: sql`EXCLUDED.instagram`,
+            facebook: sql`EXCLUDED.facebook`,
+            openingHoursRaw: sql`EXCLUDED.opening_hours_raw`,
+          },
+        });
+    }
+
+    if (allAccessibility.length > 0) {
+      await db
+        .insert(accessibilityInfo)
+        .values(allAccessibility)
+        .onConflictDoUpdate({
+          target: accessibilityInfo.poiId,
+          set: {
+            wheelchair: sql`EXCLUDED.wheelchair`,
+            elevator: sql`EXCLUDED.elevator`,
+            accessibleRestroom: sql`EXCLUDED.accessible_restroom`,
+            strollerFriendly: sql`EXCLUDED.stroller_friendly`,
+            dogFriendly: sql`EXCLUDED.dog_friendly`,
+            parkingAvailable: sql`EXCLUDED.parking_available`,
+            notes: sql`EXCLUDED.notes`,
+          },
+        });
+    }
+
+    if (allCuisineLinks.length > 0) {
+      await db.insert(poiCuisines).values(allCuisineLinks).onConflictDoNothing();
+    }
+
+    if (allTagLinks.length > 0) {
+      await db.insert(poiTags).values(allTagLinks).onConflictDoNothing();
+    }
+
+    const batchTotals = sumResults(batchOutputs.map((o) => o.result));
 
     totals.pois += batchTotals.pois;
     totals.contacts += batchTotals.contacts;

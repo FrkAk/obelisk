@@ -13,15 +13,16 @@ import { checkOllamaHealth } from "../src/lib/ai/ollama";
 import { generateStory } from "../src/lib/ai/storyGenerator";
 import type { StoryPoiContext } from "../src/lib/ai/storyGenerator";
 import { processWithConcurrency } from "./lib/concurrency";
-import { loadTags, loadContactInfo } from "../src/lib/db/queries/pois";
+import { loadTagMap, loadContactMap } from "./lib/bulk-loaders";
 import { insertRemark } from "../src/lib/db/queries/remarks";
 import { createLogger, formatEta } from "../src/lib/logger";
 import { POI_SELECT_FIELDS, toPoi } from "./lib/poi-row";
+import type { Tag } from "../src/types/api";
 
 const log = createLogger("stories");
 
 const STORY_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
-const BATCH_LIMIT = parseInt(process.env.STORY_BATCH_LIMIT || "20", 10);
+const BATCH_LIMIT = parseInt(process.env.STORY_BATCH_LIMIT || "100", 10);
 const CONCURRENCY = parseInt(process.env.STORY_CONCURRENCY || "3", 10);
 
 /**
@@ -63,6 +64,13 @@ async function main(): Promise<void> {
     `Found ${poisWithoutRemarks.length} POIs without remarks (concurrency: ${CONCURRENCY})`,
   );
 
+  log.info("Bulk-loading context maps...");
+  const [tagMap, contactMap] = await Promise.all([
+    loadTagMap(),
+    loadContactMap(),
+  ]);
+  log.info(`Context: ${tagMap.size} tags, ${contactMap.size} contacts`);
+
   let savedCount = 0;
   let failedCount = 0;
   let skippedCount = 0;
@@ -78,10 +86,9 @@ async function main(): Promise<void> {
         const categoryName = row.categoryName ?? "Hidden Gems";
         const poi = toPoi(row);
 
-        const [poiTagList, contact] = await Promise.all([
-          loadTags(poi.id),
-          loadContactInfo(poi.id),
-        ]);
+        const tagNames = tagMap.get(poi.id) ?? [];
+        const poiTagList = tagNames.map((name) => ({ name })) as Tag[];
+        const contact = contactMap.get(poi.id) ?? null;
 
         const ctx: StoryPoiContext = {
           poi,

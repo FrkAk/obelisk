@@ -12,11 +12,7 @@ import { eq, isNull, sql, or } from "drizzle-orm";
 import { EMBED_MODEL, checkOllamaHealth } from "../src/lib/ai/ollama";
 import { buildEmbeddingText } from "../src/lib/ai/embeddingBuilder";
 import { embedTexts } from "../src/lib/ai/embeddings";
-import {
-  loadTags,
-  loadCuisines,
-  loadAccessibilityInfo,
-} from "../src/lib/db/queries/pois";
+import { loadTagMap, loadCuisineMap, loadAccessibilityMap } from "./lib/bulk-loaders";
 import type { PoiProfile } from "../src/types";
 import { createLogger, formatEta } from "../src/lib/logger";
 import { POI_SELECT_FIELDS, toPoi } from "./lib/poi-row";
@@ -80,6 +76,16 @@ async function generateEmbeddings(): Promise<void> {
     process.exit(0);
   }
 
+  log.info("Bulk-loading context maps...");
+  const [tagMap, cuisineMap, accessibilityMap] = await Promise.all([
+    loadTagMap(),
+    loadCuisineMap(),
+    loadAccessibilityMap(),
+  ]);
+  log.info(
+    `Context: ${tagMap.size} tags, ${cuisineMap.size} cuisines, ${accessibilityMap.size} accessibility`,
+  );
+
   let processed = 0;
   let errors = 0;
   const startMs = Date.now();
@@ -89,37 +95,27 @@ async function generateEmbeddings(): Promise<void> {
 
     const contexts: Array<{ poi: ReturnType<typeof toPoi>; text: string }> = [];
 
-    const contextResults = await Promise.allSettled(
-      batch.map(async (row) => {
+    for (const row of batch) {
+      try {
         const poi = toPoi(row);
         const profile = (row.profile as PoiProfile) ?? null;
-
-        const [poiTagList, poiCuisineList, accessibility] = await Promise.all([
-          loadTags(poi.id),
-          loadCuisines(poi.id),
-          loadAccessibilityInfo(poi.id),
-        ]);
+        const tagNames = tagMap.get(poi.id) ?? [];
+        const cuisineNames = cuisineMap.get(poi.id) ?? [];
+        const accessibility = accessibilityMap.get(poi.id) ?? null;
 
         const text = buildEmbeddingText(
           poi,
           profile,
-          poiTagList,
-          poiCuisineList,
+          tagNames.map((name) => ({ name })),
+          cuisineNames.map((name) => ({ name })),
           accessibility,
         );
 
-        return { poi, text };
-      }),
-    );
-
-    for (let j = 0; j < contextResults.length; j++) {
-      const result = contextResults[j];
-      if (result.status === "fulfilled") {
-        contexts.push(result.value);
-      } else {
+        contexts.push({ poi, text });
+      } catch (error) {
         errors++;
         log.error(
-          `Context load failed for "${batch[j].name}": ${result.reason}`,
+          `Context load failed for "${row.name}": ${error instanceof Error ? error.message : error}`,
         );
       }
     }
@@ -130,20 +126,19 @@ async function generateEmbeddings(): Promise<void> {
       const texts = contexts.map((c) => c.text);
       const embeddings = await embedTexts(texts);
 
-      await Promise.all(
-        contexts.map(async (ctx, j) => {
+      await db.transaction(async (tx) => {
+        for (let j = 0; j < contexts.length; j++) {
           const vectorStr = `[${embeddings[j].join(",")}]`;
-
-          await db.execute(
+          await tx.execute(
             sql`UPDATE pois
                 SET embedding = ${vectorStr}::vector,
                     updated_at = now()
-                WHERE id = ${ctx.poi.id}`,
+                WHERE id = ${contexts[j].poi.id}`,
           );
+        }
+      });
 
-          processed++;
-        }),
-      );
+      processed += contexts.length;
     } catch (error) {
       errors += contexts.length;
       log.error(

@@ -1,8 +1,13 @@
+/**
+ * Generates vector embeddings for POIs missing them (or stale ones).
+ * Processes POIs in batches, building embedding text from profile + related
+ * data, then calling Ollama to produce 768-dim vectors stored in pgvector.
+ *
+ * @module generate-embeddings
+ */
+
 import { db } from "../src/lib/db/client";
-import {
-  pois,
-  categories,
-} from "../src/lib/db/schema";
+import { pois, categories } from "../src/lib/db/schema";
 import { eq, isNull, sql, or } from "drizzle-orm";
 import { EMBED_MODEL, checkOllamaHealth } from "../src/lib/ai/ollama";
 import { buildEmbeddingText } from "../src/lib/ai/embeddingBuilder";
@@ -12,45 +17,22 @@ import {
   loadCuisines,
   loadAccessibilityInfo,
 } from "../src/lib/db/queries/pois";
-import type { Poi, PoiProfile } from "../src/types";
-import { createLogger } from "../src/lib/logger";
+import type { PoiProfile } from "../src/types";
+import { createLogger, formatEta } from "../src/lib/logger";
+import { POI_SELECT_FIELDS, toPoi } from "./lib/poi-row";
 
 const log = createLogger("embeddings");
 
 const BATCH_SIZE = parseInt(process.env.EMBED_BATCH_SIZE || "25", 10);
 const STALE_MODE = process.argv.includes("--stale");
 
-const POI_SELECT_FIELDS = {
-  id: pois.id,
-  osmId: pois.osmId,
-  name: pois.name,
-  categoryId: pois.categoryId,
-  regionId: pois.regionId,
-  latitude: pois.latitude,
-  longitude: pois.longitude,
-  address: pois.address,
-  locale: pois.locale,
-  osmType: pois.osmType,
-  osmTags: pois.osmTags,
-  profile: pois.profile,
-  wikipediaUrl: pois.wikipediaUrl,
-  imageUrl: pois.imageUrl,
-  embedding: pois.embedding,
-  createdAt: pois.createdAt,
-  updatedAt: pois.updatedAt,
-  categorySlug: categories.slug,
-} as const;
-
 /**
  * Fetches POIs that need embedding generation.
  * In default mode, selects all POIs without embeddings.
  * In stale mode, also includes POIs whose profile was updated after embedding.
  *
- * Args:
- *     stale: Whether to include stale embeddings.
- *
- * Returns:
- *     Array of POI rows with category slug.
+ * @param stale - Whether to include stale embeddings.
+ * @returns Array of POI rows with category slug.
  */
 async function fetchTargetPois(stale: boolean) {
   if (!stale) {
@@ -74,11 +56,9 @@ async function fetchTargetPois(stale: boolean) {
 }
 
 /**
- * Generates vector embeddings for POIs missing them (or stale ones).
- * Processes POIs in batches, building embedding text from profile + related
- * data, then calling Ollama to produce 768-dim vectors stored in pgvector.
+ * Generates and stores vector embeddings for POIs.
  */
-async function generateEmbeddings() {
+async function generateEmbeddings(): Promise<void> {
   const modeLabel = STALE_MODE ? "stale + missing" : "missing only";
   log.info(`Starting embedding generation (mode: ${modeLabel})...`);
 
@@ -91,7 +71,9 @@ async function generateEmbeddings() {
 
   const targetPois = await fetchTargetPois(STALE_MODE);
 
-  log.info(`Found ${targetPois.length} POIs to embed (batch size: ${BATCH_SIZE})`);
+  log.info(
+    `Found ${targetPois.length} POIs to embed (batch size: ${BATCH_SIZE})`,
+  );
 
   if (targetPois.length === 0) {
     log.info("Nothing to do");
@@ -100,42 +82,23 @@ async function generateEmbeddings() {
 
   let processed = 0;
   let errors = 0;
+  const startMs = Date.now();
 
   for (let i = 0; i < targetPois.length; i += BATCH_SIZE) {
     const batch = targetPois.slice(i, i + BATCH_SIZE);
 
-    const contexts: Array<{ poi: Poi; text: string }> = [];
+    const contexts: Array<{ poi: ReturnType<typeof toPoi>; text: string }> = [];
 
     const contextResults = await Promise.allSettled(
       batch.map(async (row) => {
-        const poi: Poi = {
-          id: row.id,
-          osmId: row.osmId,
-          name: row.name,
-          categoryId: row.categoryId,
-          regionId: row.regionId,
-          latitude: row.latitude,
-          longitude: row.longitude,
-          address: row.address,
-          locale: row.locale,
-          osmType: row.osmType,
-          osmTags: row.osmTags,
-          profile: row.profile as PoiProfile | null,
-          wikipediaUrl: row.wikipediaUrl,
-          imageUrl: row.imageUrl,
-          embedding: row.embedding,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-        };
-
+        const poi = toPoi(row);
         const profile = (row.profile as PoiProfile) ?? null;
 
-        const [poiTagList, poiCuisineList, accessibility] =
-          await Promise.all([
-            loadTags(poi.id),
-            loadCuisines(poi.id),
-            loadAccessibilityInfo(poi.id),
-          ]);
+        const [poiTagList, poiCuisineList, accessibility] = await Promise.all([
+          loadTags(poi.id),
+          loadCuisines(poi.id),
+          loadAccessibilityInfo(poi.id),
+        ]);
 
         const text = buildEmbeddingText(
           poi,
@@ -155,7 +118,9 @@ async function generateEmbeddings() {
         contexts.push(result.value);
       } else {
         errors++;
-        log.error(`Context load failed for "${batch[j].name}": ${result.reason}`);
+        log.error(
+          `Context load failed for "${batch[j].name}": ${result.reason}`,
+        );
       }
     }
 
@@ -188,7 +153,7 @@ async function generateEmbeddings() {
     }
 
     log.info(
-      `Progress: ${processed + errors}/${targetPois.length} (${errors} errors)`,
+      `${formatEta(startMs, processed + errors, targetPois.length)} (${errors} errors)`,
     );
   }
 

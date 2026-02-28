@@ -1,8 +1,7 @@
 services:
   app:
-    build:
-      context: .
-      target: dev
+    build: .
+    command: ["bun", "run", "dev"]
     user: "1000:1000"
     network_mode: "host"
     volumes:
@@ -21,7 +20,6 @@ services:
         condition: service_healthy
       typesense:
         condition: service_healthy
-    command: bun run dev
 
   postgres:
     image: pgvector/pgvector:pg15

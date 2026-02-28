@@ -1,6 +1,3 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
-
 /**
  * Builds tag_enrichment_map.json from OSM taginfo data and Google Product Taxonomy.
  *
@@ -9,7 +6,15 @@ import { join } from "path";
  * Outputs data/tag_enrichment_map.json with entries keyed by "key=value"
  * (e.g. "shop=clothes", "amenity=restaurant") containing keywords, products,
  * subtags, and matching Google taxonomy paths.
+ *
+ * @module build-taxonomy
  */
+
+import { readFileSync, writeFileSync, existsSync } from "fs";
+import { join } from "path";
+import { createLogger } from "../src/lib/logger";
+
+const log = createLogger("build-taxonomy");
 
 const DATA_DIR = join(import.meta.dirname, "..", "data");
 const TAGINFO_DIR = join(DATA_DIR, "taginfo");
@@ -32,8 +37,7 @@ interface TagEnrichmentEntry {
 /**
  * Loads and parses the Google Product Taxonomy file into a list of category paths.
  *
- * Returns:
- *     Array of taxonomy path strings (e.g. "Apparel & Accessories > Clothing").
+ * @returns Array of taxonomy path strings (e.g. "Apparel & Accessories > Clothing").
  */
 function loadGoogleTaxonomy(): string[] {
   const raw = readFileSync(TAXONOMY_FILE, "utf-8");
@@ -46,11 +50,8 @@ function loadGoogleTaxonomy(): string[] {
 /**
  * Loads a taginfo JSON file and returns the data entries.
  *
- * Args:
- *     filename: Name of the JSON file in the taginfo directory.
- *
- * Returns:
- *     Array of tag info entries, or empty array if file not found.
+ * @param filename - Name of the JSON file in the taginfo directory.
+ * @returns Array of tag info entries, or empty array if file not found.
  */
 function loadTagInfo(filename: string): TagInfoEntry[] {
   const filepath = join(TAGINFO_DIR, filename);
@@ -62,12 +63,9 @@ function loadTagInfo(filename: string): TagInfoEntry[] {
 /**
  * Finds Google taxonomy paths that match a set of search terms.
  *
- * Args:
- *     taxonomyLines: All taxonomy paths.
- *     searchTerms: Terms to match against (case-insensitive).
- *
- * Returns:
- *     Matching taxonomy path prefixes (up to 2 levels deep).
+ * @param taxonomyLines - All taxonomy paths.
+ * @param searchTerms - Terms to match against (case-insensitive).
+ * @returns Matching taxonomy path prefixes (up to 2 levels deep).
  */
 function findTaxonomyMatches(taxonomyLines: string[], searchTerms: string[]): string[] {
   const matches = new Set<string>();
@@ -92,12 +90,9 @@ function findTaxonomyMatches(taxonomyLines: string[], searchTerms: string[]): st
 /**
  * Extracts unique subtag values from a taginfo file.
  *
- * Args:
- *     filename: Taginfo JSON filename for the subtag key.
- *     minCount: Minimum global usage count to include.
- *
- * Returns:
- *     Sorted array of subtag value strings.
+ * @param filename - Taginfo JSON filename for the subtag key.
+ * @param minCount - Minimum global usage count to include.
+ * @returns Sorted array of subtag value strings.
  */
 function getSubtags(filename: string, minCount: number = 100): string[] {
   const entries = loadTagInfo(filename);
@@ -989,6 +984,145 @@ const HISTORIC_MAPPINGS: Record<string, TagMapping> = {
   },
 };
 
+const HEALTHCARE_MAPPINGS: Record<string, TagMapping> = {
+  doctor: {
+    keywords: ["doctor", "physician", "general practitioner", "medical practice"],
+    products: ["consultation", "checkup", "referral", "prescription"],
+    taxonomySearchTerms: ["health"],
+  },
+  pharmacy: {
+    keywords: ["pharmacy", "apotheke", "drugstore", "medication"],
+    products: ["prescription drugs", "over-the-counter medication", "vitamins", "first aid"],
+    taxonomySearchTerms: ["health"],
+  },
+  dentist: {
+    keywords: ["dentist", "dental care", "oral health"],
+    products: ["dental checkup", "cleaning", "filling", "orthodontics"],
+    taxonomySearchTerms: ["health"],
+  },
+  psychotherapist: {
+    keywords: ["psychotherapist", "therapist", "mental health", "counseling"],
+    products: ["therapy sessions", "cognitive behavioral therapy", "mental health support"],
+    taxonomySearchTerms: ["health"],
+  },
+  clinic: {
+    keywords: ["clinic", "medical clinic", "outpatient care", "health center"],
+    products: ["consultations", "diagnostics", "minor procedures", "lab tests"],
+    taxonomySearchTerms: ["health"],
+  },
+  physiotherapist: {
+    keywords: ["physiotherapist", "physical therapy", "rehabilitation"],
+    products: ["physical therapy", "massage", "rehabilitation exercises", "injury recovery"],
+    taxonomySearchTerms: ["health"],
+  },
+  alternative: {
+    keywords: ["alternative medicine", "holistic health", "naturopathy"],
+    products: ["acupuncture", "homeopathy", "herbal medicine", "naturopathic treatment"],
+    taxonomySearchTerms: ["health"],
+  },
+  hospital: {
+    keywords: ["hospital", "medical center", "emergency room", "inpatient care"],
+    products: ["emergency care", "surgery", "inpatient treatment", "diagnostics"],
+    taxonomySearchTerms: ["health"],
+  },
+  podiatrist: {
+    keywords: ["podiatrist", "foot care", "chiropody"],
+    products: ["foot examination", "orthotics", "nail care"],
+    taxonomySearchTerms: ["health"],
+  },
+  centre: {
+    keywords: ["health center", "medical center", "healthcare facility"],
+    products: ["consultations", "diagnostics", "specialist referrals"],
+    taxonomySearchTerms: ["health"],
+  },
+  laboratory: {
+    keywords: ["medical laboratory", "diagnostic lab", "blood tests"],
+    products: ["blood tests", "urine analysis", "pathology", "diagnostic imaging"],
+    taxonomySearchTerms: ["health"],
+  },
+  speech_therapist: {
+    keywords: ["speech therapist", "speech pathology", "language therapy"],
+    products: ["speech therapy", "language development", "voice therapy"],
+    taxonomySearchTerms: ["health"],
+  },
+  midwife: {
+    keywords: ["midwife", "prenatal care", "birthing support"],
+    products: ["prenatal checkups", "birth preparation", "postnatal care"],
+    taxonomySearchTerms: ["health"],
+  },
+  counselling: {
+    keywords: ["counseling", "psychological counseling", "support services"],
+    products: ["counseling sessions", "crisis support", "family therapy"],
+    taxonomySearchTerms: ["health"],
+  },
+  blood_donation: {
+    keywords: ["blood donation", "blood bank", "donor center"],
+    products: ["blood donation", "plasma donation", "platelet donation"],
+    taxonomySearchTerms: ["health"],
+  },
+  psychiatry: {
+    keywords: ["psychiatrist", "psychiatry", "mental health specialist"],
+    products: ["psychiatric evaluation", "medication management", "therapy"],
+    taxonomySearchTerms: ["health"],
+  },
+  optometrist: {
+    keywords: ["optometrist", "eye care", "vision test"],
+    products: ["eye exam", "vision correction", "contact lens fitting"],
+    taxonomySearchTerms: ["health", "vision care"],
+  },
+  occupational_therapist: {
+    keywords: ["occupational therapist", "rehabilitation", "daily living skills"],
+    products: ["occupational therapy", "workplace adaptation", "motor skills training"],
+    taxonomySearchTerms: ["health"],
+  },
+  audiologist: {
+    keywords: ["audiologist", "hearing specialist", "audiology"],
+    products: ["hearing test", "hearing aid fitting", "tinnitus treatment"],
+    taxonomySearchTerms: ["health"],
+  },
+  mammography: {
+    keywords: ["mammography", "breast screening", "cancer screening"],
+    products: ["mammogram", "breast examination", "screening"],
+    taxonomySearchTerms: ["health"],
+  },
+  hospice: {
+    keywords: ["hospice", "palliative care", "end-of-life care"],
+    products: ["palliative care", "comfort care", "family support"],
+    taxonomySearchTerms: ["health"],
+  },
+  sample_collection: {
+    keywords: ["sample collection", "specimen collection", "lab sample point"],
+    products: ["blood draw", "urine collection", "specimen transport"],
+    taxonomySearchTerms: ["health"],
+  },
+};
+
+const NATURAL_MAPPINGS: Record<string, TagMapping> = {
+  water: {
+    keywords: ["lake", "pond", "river", "water body", "natural water"],
+    products: ["swimming", "fishing", "boating", "scenic views"],
+    taxonomySearchTerms: [],
+  },
+  tree: {
+    keywords: ["notable tree", "heritage tree", "landmark tree"],
+    products: [],
+    taxonomySearchTerms: [],
+  },
+};
+
+const RAILWAY_MAPPINGS: Record<string, TagMapping> = {
+  tram_stop: {
+    keywords: ["tram stop", "streetcar stop", "light rail", "public transport"],
+    products: ["tram service", "transit connections"],
+    taxonomySearchTerms: [],
+  },
+  station: {
+    keywords: ["train station", "railway station", "rail hub", "public transport"],
+    products: ["train service", "transit connections", "ticket purchase"],
+    taxonomySearchTerms: [],
+  },
+};
+
 /**
  * Builds the tag enrichment map by combining OSM taginfo data,
  * manual mappings, and Google Product Taxonomy cross-references.
@@ -1000,11 +1134,10 @@ function buildTagEnrichmentMap(): Record<string, TagEnrichmentEntry> {
   /**
    * Processes a set of tag mappings for an OSM key and merges them into the result.
    *
-   * Args:
-   *     osmKey: OSM key name (e.g. "shop", "amenity").
-   *     mappings: Manual mappings for known tag values.
-   *     tagInfoFile: Taginfo JSON filename for this key.
-   *     subtags: Optional map of tag value to subtag filename.
+   * @param osmKey - OSM key name (e.g. "shop", "amenity").
+   * @param mappings - Manual mappings for known tag values.
+   * @param tagInfoFile - Taginfo JSON filename for this key.
+   * @param subtags - Optional map of tag value to subtag filename.
    */
   function addEntries(
     osmKey: string,
@@ -1064,16 +1197,36 @@ function buildTagEnrichmentMap(): Record<string, TagEnrichmentEntry> {
   addEntries("tourism", TOURISM_MAPPINGS, "tourism.json");
   addEntries("historic", HISTORIC_MAPPINGS, "historic.json");
 
+  for (const [osmKey, mappings] of [
+    ["healthcare", HEALTHCARE_MAPPINGS],
+    ["natural", NATURAL_MAPPINGS],
+    ["railway", RAILWAY_MAPPINGS],
+  ] as [string, Record<string, TagMapping>][]) {
+    for (const [value, mapping] of Object.entries(mappings)) {
+      const key = `${osmKey}=${value}`;
+      const googleTax =
+        mapping.taxonomySearchTerms.length > 0
+          ? findTaxonomyMatches(taxonomy, mapping.taxonomySearchTerms)
+          : [];
+      result[key] = {
+        keywords: mapping.keywords,
+        products: mapping.products,
+        subtags: [],
+        googleTaxonomy: googleTax,
+      };
+    }
+  }
+
   return result;
 }
 
-console.log("Building tag enrichment map...");
+log.info("Building tag enrichment map...");
 
 const tagMap = buildTagEnrichmentMap();
 const entryCount = Object.keys(tagMap).length;
 
 writeFileSync(OUTPUT_FILE, JSON.stringify(tagMap, null, 2));
-console.log(`Wrote ${entryCount} entries to ${OUTPUT_FILE}`);
+log.success(`Wrote ${entryCount} entries to ${OUTPUT_FILE}`);
 
 const byKey: Record<string, number> = {};
 for (const k of Object.keys(tagMap)) {
@@ -1081,5 +1234,5 @@ for (const k of Object.keys(tagMap)) {
   byKey[osmKey] = (byKey[osmKey] ?? 0) + 1;
 }
 for (const [k, v] of Object.entries(byKey)) {
-  console.log(`  ${k}: ${v} entries`);
+  log.info(`${k}: ${v} entries`);
 }

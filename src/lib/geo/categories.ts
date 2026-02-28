@@ -142,20 +142,52 @@ export function getCategorySlug(value: string): CategorySlug {
  * Determines a category slug from a full set of OSM tags using key-level heuristics.
  * Checks tag keys (historic, tourism, amenity, leisure, etc.) in priority order.
  *
- * Args:
- *     tags: OSM tag key-value pairs.
- *
- * Returns:
- *     The best-matching CategorySlug based on tag keys and values.
+ * @param tags - OSM tag key-value pairs.
+ * @returns The best-matching CategorySlug based on tag keys and values.
  */
 export function getCategorySlugFromTags(tags: Record<string, string>): CategorySlug {
   if (tags.historic) return "history";
-  if (tags.tourism === "museum") return "art";
+  if (tags.tourism === "museum" || tags.tourism === "gallery") return "art";
   if (tags.tourism === "viewpoint") return "views";
-  if (tags.amenity && OSM_CATEGORY_MAP[tags.amenity]) return OSM_CATEGORY_MAP[tags.amenity];
-  if (tags.leisure === "park" || tags.natural) return "nature";
-  if (tags.architect || tags.building === "church") return "architecture";
+  if (tags.tourism === "artwork") return "art";
+  if (tags.tourism === "attraction") return "culture";
+
+  const foodAmenities = ["restaurant", "cafe", "fast_food", "biergarten", "ice_cream", "food_court"];
+  if (foodAmenities.includes(tags.amenity)) return "food";
+
+  const nightlifeAmenities = ["bar", "pub", "nightclub"];
+  if (nightlifeAmenities.includes(tags.amenity)) return "nightlife";
+
+  const healthAmenities = ["hospital", "pharmacy", "clinic", "doctors", "dentist"];
+  if (healthAmenities.includes(tags.amenity) || tags.healthcare) return "health";
+
+  const educationAmenities = ["university", "school", "college", "kindergarten", "library"];
+  if (educationAmenities.includes(tags.amenity)) return "education";
+
+  const serviceAmenities = ["police", "fire_station", "bank", "post_office"];
+  if (serviceAmenities.includes(tags.amenity)) return "services";
+
   if (tags.shop) return "shopping";
-  if (tags.tourism) return "hidden";
+
+  const natureLeisure = ["park", "garden", "nature_reserve"];
+  if (natureLeisure.includes(tags.leisure) || tags.natural) return "nature";
+
+  const sportsLeisure = ["sports_centre", "stadium", "fitness_centre", "swimming_pool", "pitch"];
+  if (sportsLeisure.includes(tags.leisure)) return "sports";
+
+  if (tags.amenity === "theatre" || tags.amenity === "cinema" || tags.amenity === "community_centre") {
+    return "culture";
+  }
+
+  if (tags.amenity === "bus_station" || tags.railway) return "transport";
+
+  if (tags.tourism === "hotel" || tags.tourism === "hostel" || tags.tourism === "guest_house") {
+    return "services";
+  }
+
+  if (tags.architect || tags.building === "church" || tags.amenity === "place_of_worship") {
+    return "architecture";
+  }
+
   return "hidden";
 }

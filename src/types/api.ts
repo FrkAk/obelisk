@@ -309,6 +309,7 @@ export const DEFAULT_GEOFENCE_CONFIG: GeofenceConfig = {
   sessionDurationMs: 30 * 60 * 1000,
 };
 
+// TODO: derive from seeded location for multi-city support
 export const MUNICH_CENTER = {
   latitude: 48.137154,
   longitude: 11.576124,

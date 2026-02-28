@@ -1,6 +1,3 @@
-import { readFileSync, writeFileSync } from "fs";
-import { join } from "path";
-
 /**
  * Builds brand_enrichment_map.json from NSI and Wikidata SPARQL data.
  *
@@ -8,7 +5,15 @@ import { join } from "path";
  *
  * Outputs data/brand_enrichment_map.json keyed by Wikidata QID with brand name,
  * industry, products, NSI path, and estimated price tier.
+ *
+ * @module build-brands
  */
+
+import { readFileSync, writeFileSync } from "fs";
+import { join } from "path";
+import { createLogger } from "../src/lib/logger";
+
+const log = createLogger("build-brands");
 
 const DATA_DIR = join(import.meta.dirname, "..", "data");
 const NSI_FILE = join(DATA_DIR, "nsi", "nsi.json");
@@ -45,8 +50,7 @@ interface BrandEntry {
 /**
  * Loads NSI data and builds a map from Wikidata QID to brand info.
  *
- * Returns:
- *     Map of QID -> { name, nsiPath, tags }.
+ * @returns Map of QID to brand info (name, nsiPath, tags).
  */
 function loadNsi(): Map<string, { name: string; nsiPath: string; tags: Record<string, string> }> {
   const raw = JSON.parse(readFileSync(NSI_FILE, "utf-8"));
@@ -77,8 +81,7 @@ function loadNsi(): Map<string, { name: string; nsiPath: string; tags: Record<st
 /**
  * Loads Wikidata SPARQL results and groups products/industries by QID.
  *
- * Returns:
- *     Map of QID -> { name, industries, products }.
+ * @returns Map of QID to brand data (name, industries, products).
  */
 function loadWikidata(): Map<string, { name: string; industries: Set<string>; products: Set<string> }> {
   const raw = JSON.parse(readFileSync(WIKIDATA_FILE, "utf-8"));
@@ -134,13 +137,10 @@ const LUXURY_PATHS = ["brands/shop/jewelry", "brands/shop/watches", "brands/shop
 /**
  * Estimates a price tier for a brand based on name, path, and industry.
  *
- * Args:
- *     name: Brand display name.
- *     nsiPath: NSI category path.
- *     industry: Industry label from Wikidata.
- *
- * Returns:
- *     Price tier string: "$", "$$", "$$$", or "$$$$".
+ * @param name - Brand display name.
+ * @param nsiPath - NSI category path.
+ * @param industry - Industry label from Wikidata.
+ * @returns Price tier string: "$", "$$", "$$$", or "$$$$".
  */
 function estimatePriceTier(name: string, nsiPath: string, industry: string): string {
   if (LUXURY_BRANDS.has(name)) return "$$$$";
@@ -207,11 +207,8 @@ const PATH_PRODUCTS: Record<string, string[]> = {
 /**
  * Infers product terms from the NSI path.
  *
- * Args:
- *     nsiPath: The NSI category path (e.g. "brands/shop/clothes").
- *
- * Returns:
- *     Array of inferred product strings.
+ * @param nsiPath - The NSI category path (e.g. "brands/shop/clothes").
+ * @returns Array of inferred product strings.
  */
 function inferProducts(nsiPath: string): string[] {
   return PATH_PRODUCTS[nsiPath] ?? [];
@@ -271,11 +268,8 @@ function buildBrandMap(): Record<string, BrandEntry> {
 /**
  * Converts an NSI path to a human-readable industry string.
  *
- * Args:
- *     nsiPath: NSI category path (e.g. "brands/shop/clothes").
- *
- * Returns:
- *     Industry description string.
+ * @param nsiPath - NSI category path (e.g. "brands/shop/clothes").
+ * @returns Industry description string.
  */
 function nsiPathToIndustry(nsiPath: string): string {
   const parts = nsiPath.split("/");
@@ -296,19 +290,19 @@ function nsiPathToIndustry(nsiPath: string): string {
   }
 }
 
-console.log("Building brand enrichment map...");
+log.info("Building brand enrichment map...");
 
 const brandMap = buildBrandMap();
 const entryCount = Object.keys(brandMap).length;
 
 writeFileSync(OUTPUT_FILE, JSON.stringify(brandMap, null, 2));
-console.log(`Wrote ${entryCount} entries to ${OUTPUT_FILE}`);
+log.success(`Wrote ${entryCount} entries to ${OUTPUT_FILE}`);
 
 const withProducts = Object.values(brandMap).filter((b) => b.products.length > 0).length;
 const withIndustry = Object.values(brandMap).filter((b) => b.industry.length > 0).length;
 const withNsi = Object.values(brandMap).filter((b) => b.nsiPath.length > 0).length;
 
-console.log(`  With products: ${withProducts}`);
-console.log(`  With industry: ${withIndustry}`);
-console.log(`  From NSI: ${withNsi}`);
-console.log(`  From Wikidata only: ${entryCount - withNsi}`);
+log.info(`With products: ${withProducts}`);
+log.info(`With industry: ${withIndustry}`);
+log.info(`From NSI: ${withNsi}`);
+log.info(`From Wikidata only: ${entryCount - withNsi}`);

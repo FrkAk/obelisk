@@ -9,7 +9,8 @@ Next.js 16 (App Router) + React 19, Tailwind CSS v4, Framer Motion v12, Drizzle 
 ## Commands
 
 - `make setup` -- full bootstrap (14 steps: docker, migrations, models, datasets, seed, enrich, stories, search)
-- `make run` / `make run-local` -- start at localhost:3000 (or LAN-exposed)
+- `make run` / `make run-local` -- start dev at localhost:3000 (or LAN-exposed)
+- `make run-public` -- production build + Cloudflare Tunnel (obelisk.obeliskark.com)
 - `make stop` / `make destroy` -- stop (preserve data) or nuke everything
 - `make rebuild` -- clean rebuild (.next + containers)
 - `make seed-all` -- seed regions, cuisines, tags, POIs in order
@@ -68,7 +69,7 @@ db/dump.sql                 # Database dump for quick restore
 - **Search**: two-engine hybrid (Typesense keyword + pgvector semantic), fused via Reciprocal Rank Fusion in `src/lib/search/ranking.ts`. Query parsing in `queryParser.ts` (230+ fast-path entries, LLM fallback).
 - **POI enrichment**: static taxonomy maps in `data/` (built by `build-taxonomy.ts` and `build-brands.ts`), not runtime API calls. POI profile lives in JSONB `pois.profile` column.
 - **DB schema**: single source of truth in `src/lib/db/schema.ts`. Migrations via `drizzle-kit push`.
-- **Docker**: 3 services (app on host network:3000, postgres:5432, typesense:8108). App container runs `bun run dev`.
+- **Docker**: 3 services (app on host network:3000, postgres:5432, typesense:8108). Base compose has no app command (Dockerfile CMD defaults to `bun run dev`). `docker-compose.local.yml` exposes to LAN. `docker-compose.prod.yml` overlay runs `bun run build` + `bun run start` with `NODE_ENV=production` + Cloudflare Tunnel.
 
 ## Conventions
 

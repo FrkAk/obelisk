@@ -12,7 +12,7 @@ import {
 import { eq } from "drizzle-orm";
 import { initCollection, upsertDocuments } from "../src/lib/search/typesense";
 import { buildTypesenseDocument } from "../src/lib/search/profileSummary";
-import { createLogger } from "../src/lib/logger";
+import { createLogger, formatEta } from "../src/lib/logger";
 import type { PoiProfile } from "../src/types/api";
 
 const log = createLogger("sync-typesense");
@@ -22,8 +22,7 @@ const BATCH_SIZE = 100;
 /**
  * Loads all POI tags as a map from poiId to tag name array.
  *
- * Returns:
- *     Map of poiId to string array of tag names.
+ * @returns Map of poiId to string array of tag names.
  */
 async function loadTagMap(): Promise<Map<string, string[]>> {
   const rows = await db
@@ -49,8 +48,7 @@ async function loadTagMap(): Promise<Map<string, string[]>> {
 /**
  * Loads all POI cuisines as a map from poiId to cuisine name array.
  *
- * Returns:
- *     Map of poiId to string array of cuisine names.
+ * @returns Map of poiId to string array of cuisine names.
  */
 async function loadCuisineMap(): Promise<Map<string, string[]>> {
   const rows = await db
@@ -76,8 +74,7 @@ async function loadCuisineMap(): Promise<Map<string, string[]>> {
 /**
  * Loads accessibility data for all POIs as a map from poiId to accessibility fields.
  *
- * Returns:
- *     Map of poiId to object with wheelchair, dogFriendly, elevator, parkingAvailable.
+ * @returns Map of poiId to accessibility fields object.
  */
 async function loadAccessibilityMap(): Promise<
   Map<string, { wheelchair: boolean | null; dogFriendly: boolean | null; elevator: boolean | null; parkingAvailable: boolean | null }>
@@ -176,11 +173,12 @@ async function syncTypesense() {
   });
 
   let synced = 0;
+  const startMs = Date.now();
   for (let i = 0; i < documents.length; i += BATCH_SIZE) {
     const batch = documents.slice(i, i + BATCH_SIZE);
     await upsertDocuments(batch);
     synced += batch.length;
-    log.info(`Synced ${synced}/${documents.length}`);
+    log.info(formatEta(startMs, synced, documents.length));
   }
 
   log.success(`Done! Synced ${synced} documents to Typesense`);

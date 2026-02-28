@@ -1,13 +1,16 @@
 /**
+ * Worker pool pattern for concurrent processing with shared index management.
+ *
+ * @module concurrency
+ */
+
+/**
  * Processes items concurrently using a worker pool pattern.
  *
- * Args:
- *     items: Array of items to process.
- *     concurrency: Maximum number of concurrent workers.
- *     fn: Async function to apply to each item.
- *
- * Returns:
- *     Array of results in the same order as the input items.
+ * @param items - Array of items to process.
+ * @param concurrency - Maximum number of concurrent workers.
+ * @param fn - Async function to apply to each item.
+ * @returns Array of results in the same order as the input items.
  */
 export async function processWithConcurrency<T, R>(
   items: T[],

@@ -46,7 +46,7 @@ drizzle/*.sql
 /db/
 
 # OSM data extracts
-/data/
+/data*/
 
 # IDE
 .idea/

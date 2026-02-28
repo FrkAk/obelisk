@@ -4,7 +4,7 @@ import { pois, categories } from "../src/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { generateText, checkOllamaHealth } from "../src/lib/ai/ollama";
 import { processWithConcurrency } from "./lib/concurrency";
-import { createLogger } from "../src/lib/logger";
+import { createLogger, formatEta } from "../src/lib/logger";
 import type { PoiProfile } from "../src/types/api";
 
 const log = createLogger("enrich-taxonomy");
@@ -31,33 +31,28 @@ interface BrandEntry {
 /**
  * Loads and parses a JSON file from the data directory.
  *
- * Args:
- *     path: Relative path to the JSON file.
- *
- * Returns:
- *     Parsed JSON object.
+ * @param path - Relative path to the JSON file.
+ * @returns Parsed JSON object.
  */
 function loadJson<T>(path: string): T {
   const raw = readFileSync(path, "utf-8");
   return JSON.parse(raw) as T;
 }
 
-const TAG_KEY_PRIORITY = ["shop", "amenity", "tourism", "historic", "leisure", "natural", "building"];
+const TAG_KEY_PRIORITY = ["shop", "amenity", "tourism", "historic", "leisure", "natural"];
 
 /**
  * Determines the primary OSM tag key=value for enrichment lookup.
- * Mirrors the logic in determineCategorySlug from seed-pois.ts.
+ * Mirrors the logic in determineCategorySlug from seed-pois.
  *
- * Args:
- *     osmTags: Raw OSM tags from the POI.
- *
- * Returns:
- *     Primary tag string like "shop=clothes" or "amenity=restaurant", or null.
+ * @param osmTags - Raw OSM tags from the POI.
+ * @returns Primary tag string like "shop=clothes" or "amenity=restaurant", or null.
  */
 function determinePrimaryTag(osmTags: Record<string, string>): string | null {
   for (const key of TAG_KEY_PRIORITY) {
     if (osmTags[key]) {
-      return `${key}=${osmTags[key]}`;
+      const value = osmTags[key].split(";")[0].trim();
+      return `${key}=${value}`;
     }
   }
   if (osmTags.railway) return `railway=${osmTags.railway}`;
@@ -68,15 +63,12 @@ function determinePrimaryTag(osmTags: Record<string, string>): string | null {
 /**
  * Builds the LLM prompt for generating a place description.
  *
- * Args:
- *     name: POI name.
- *     categorySlug: Category slug.
- *     profile: Current profile data (with merged keywords/products).
- *     address: POI address or null.
- *     brandInfo: Brand name and price tier if available.
- *
- * Returns:
- *     Prompt string for the LLM.
+ * @param name - POI name.
+ * @param categorySlug - Category slug.
+ * @param profile - Current profile data (with merged keywords/products).
+ * @param address - POI address or null.
+ * @param brandInfo - Brand name and price tier if available.
+ * @returns Prompt string for the LLM.
  */
 function buildSummaryPrompt(
   name: string,
@@ -174,13 +166,10 @@ async function main() {
   let enriched = 0;
   let skipped = 0;
   let failed = 0;
+  const startMs = Date.now();
 
   for (let i = 0; i < toEnrich.length; i += BATCH_SIZE) {
     const batch = toEnrich.slice(i, i + BATCH_SIZE);
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(toEnrich.length / BATCH_SIZE);
-
-    log.info(`Batch ${batchNum}/${totalBatches} (${batch.length} POIs)`);
 
     const results = await processWithConcurrency(batch, CONCURRENCY, async (poi: PoiRow) => {
       const osmTags = poi.osmTags ?? {};
@@ -271,7 +260,8 @@ async function main() {
       else skipped++;
     }
 
-    log.info(`  Batch done: ${results.filter((r) => r === "enriched").length} enriched, ${results.filter((r) => r === "failed").length} failed`);
+    const done = Math.min(i + BATCH_SIZE, toEnrich.length);
+    log.info(`${formatEta(startMs, done, toEnrich.length)} — ${results.filter((r) => r === "enriched").length} enriched, ${results.filter((r) => r === "failed").length} failed`);
   }
 
   log.info("");

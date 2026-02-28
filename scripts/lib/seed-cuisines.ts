@@ -1,5 +1,14 @@
-import { db } from "../src/lib/db/client";
-import { cuisines } from "../src/lib/db/schema";
+/**
+ * Seeds the cuisine taxonomy into the database.
+ *
+ * @module seed-cuisines
+ */
+
+import { db } from "../../src/lib/db/client";
+import { cuisines } from "../../src/lib/db/schema";
+import { createLogger } from "../../src/lib/logger";
+
+const log = createLogger("seed-cuisines");
 
 interface CuisineEntry {
   slug: string;
@@ -166,21 +175,25 @@ const CUISINE_DATA: CuisineEntry[] = [
 ];
 
 /**
- * Seeds the cuisine taxonomy into the database.
- * Inserts top-level cuisines first, then children with parent references.
+ * Seeds the cuisine taxonomy. Inserts top-level entries first, then children.
+ * Uses onConflictDoNothing so re-runs are safe.
  */
-async function main() {
-  console.log("Seeding cuisines...");
+export async function seedCuisines(): Promise<void> {
+  log.info("Seeding cuisines...");
 
-  const parentSlugs = new Set(CUISINE_DATA.filter((c) => c.parentSlug).map((c) => c.parentSlug!));
+  const parentSlugs = new Set(
+    CUISINE_DATA.filter((c) => c.parentSlug).map((c) => c.parentSlug!),
+  );
   const topLevel = CUISINE_DATA.filter((c) => !c.parentSlug);
   const children = CUISINE_DATA.filter((c) => c.parentSlug);
 
   const missingParents = [...parentSlugs].filter(
-    (ps) => !topLevel.some((t) => t.slug === ps) && !children.some((c) => c.slug === ps),
+    (ps) =>
+      !topLevel.some((t) => t.slug === ps) &&
+      !children.some((c) => c.slug === ps),
   );
   if (missingParents.length > 0) {
-    console.warn("Warning: parent slugs referenced but not defined:", missingParents);
+    log.warn("Parent slugs referenced but not defined:", missingParents);
   }
 
   const BATCH_SIZE = 50;
@@ -189,19 +202,13 @@ async function main() {
     const batch = topLevel.slice(i, i + BATCH_SIZE);
     await db.insert(cuisines).values(batch).onConflictDoNothing();
   }
-  console.log(`  Inserted ${topLevel.length} top-level cuisines`);
 
   for (let i = 0; i < children.length; i += BATCH_SIZE) {
     const batch = children.slice(i, i + BATCH_SIZE);
     await db.insert(cuisines).values(batch).onConflictDoNothing();
   }
-  console.log(`  Inserted ${children.length} child cuisines`);
 
-  console.log(`Cuisines seeded: ${CUISINE_DATA.length} total`);
-  process.exit(0);
+  log.success(
+    `Cuisines seeded: ${topLevel.length} top-level + ${children.length} children = ${CUISINE_DATA.length} total`,
+  );
 }
-
-main().catch((error) => {
-  console.error("Cuisine seeding failed:", error);
-  process.exit(1);
-});

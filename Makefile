@@ -1,4 +1,4 @@
-.PHONY: help setup finish-setup run run-local stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-taxonomy sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-taxonomy sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -29,8 +29,9 @@ help:
 	@printf "$(GREEN)Commands:$(RESET)\n"
 	@printf "  $(CYAN)setup$(RESET)          First-time setup (deps, db, model, seed)\n"
 	@printf "  $(CYAN)finish-setup$(RESET)   Continue setup after enrich (stories + search + embeddings)\n"
-	@printf "  $(CYAN)run$(RESET)        Start on localhost:3000\n"
-	@printf "  $(CYAN)run-local$(RESET)  Start exposed to local network (same WiFi)\n"
+	@printf "  $(CYAN)run$(RESET)            Start on localhost:3000\n"
+	@printf "  $(CYAN)run-local$(RESET)      Start exposed to local network (same WiFi)\n"
+	@printf "  $(CYAN)run-public$(RESET)     Start with Cloudflare Tunnel (obelisk.obeliskark.com)\n"
 	@printf "  $(CYAN)stop$(RESET)       Stop services (keeps data)\n"
 	@printf "  $(CYAN)logs$(RESET)       View database logs\n"
 	@printf "  $(CYAN)rebuild$(RESET)    Clean rebuild (deps + next cache)\n"
@@ -123,8 +124,24 @@ run-local:
 	printf "Press Ctrl+C to stop\n"
 	$(COMPOSE) -f docker-compose.yml -f docker-compose.local.yml up
 
+run-public:
+	@printf "$(GREEN)Starting Obelisk (production, public via Cloudflare Tunnel)...$(RESET)\n"
+	@printf "\n"
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml up -d
+	@sleep 5
+	@setsid cloudflared tunnel --pidfile /tmp/cloudflared.pid run obelisk > /tmp/cloudflared.log 2>&1 &
+	@sleep 3
+	@printf "$(GREEN)App running:$(RESET)\n"
+	@printf "  Local:   http://localhost:3000\n"
+	@printf "  Public:  https://obelisk.obeliskark.com\n"
+	@printf "  Tunnel:  PID $$(cat /tmp/cloudflared.pid 2>/dev/null || echo 'starting...')\n"
+	@printf "  Logs:    /tmp/cloudflared.log\n"
+	@printf "\n"
+	@printf "Run '$(CYAN)make stop$(RESET)' to stop everything\n"
+
 stop:
 	@printf "Stopping services...\n"
+	@if [ -f /tmp/cloudflared.pid ]; then kill $$(cat /tmp/cloudflared.pid) 2>/dev/null; rm -f /tmp/cloudflared.pid; printf "Tunnel stopped\n"; fi
 	$(COMPOSE) down
 	@printf "$(GREEN)Stopped.$(RESET) Data preserved.\n"
 

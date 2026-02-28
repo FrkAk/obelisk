@@ -1,14 +1,5 @@
+# Production overlay: builds and serves (instead of dev hot-reload)
+# Use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up
 services:
   app:
-    build:
-      context: .
-      target: prod
-    network_mode: "host"
-    env_file:
-      - .env.local
-    environment:
-      DATABASE_URL: postgresql://obelisk:${DB_PASSWORD}@localhost:5432/obelisk
-      OLLAMA_URL: http://127.0.0.1:11434
-    depends_on:
-      - postgres
-    restart: unless-stopped
+    command: ["sh", "-c", "bun run build && bun run start"]

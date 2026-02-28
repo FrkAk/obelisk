@@ -9,6 +9,7 @@ import { loadTags, loadContactInfo } from "@/lib/db/queries/pois";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
 import { getCategorySlug } from "@/lib/geo/categories";
+import { buildProfile } from "@/lib/poi/profile";
 import type { CategorySlug, PoiProfile } from "@/types";
 import { getCurrentRemarkForPoi, insertRemark } from "@/lib/db/queries/remarks";
 
@@ -152,6 +153,10 @@ async function createPoiFromExternal(
   if (externalPoi.hasWifi) osmTags.internet_access = "wlan";
   if (externalPoi.hasOutdoorSeating) osmTags.outdoor_seating = "yes";
 
+  const profile = Object.keys(osmTags).length > 0
+    ? buildProfile(osmTags, categorySlug)
+    : null;
+
   const insertResult = await db
     .insert(pois)
     .values({
@@ -164,6 +169,7 @@ async function createPoiFromExternal(
       wikipediaUrl: externalPoi.wikipediaUrl ?? null,
       imageUrl: externalPoi.imageUrl ?? null,
       osmTags: Object.keys(osmTags).length > 0 ? osmTags : null,
+      profile,
     })
     .onConflictDoNothing({ target: pois.osmId })
     .returning();

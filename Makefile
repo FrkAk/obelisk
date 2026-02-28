@@ -1,4 +1,4 @@
-.PHONY: help setup finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-taxonomy sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup setup-quick finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-taxonomy sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -28,6 +28,7 @@ help:
 	@printf "\n"
 	@printf "$(GREEN)Commands:$(RESET)\n"
 	@printf "  $(CYAN)setup$(RESET)          First-time setup (deps, db, model, seed)\n"
+	@printf "  $(CYAN)setup-quick$(RESET)    Quick setup from db/dump.sql (skip seed + enrich)\n"
 	@printf "  $(CYAN)finish-setup$(RESET)   Continue setup after enrich (stories + search + embeddings)\n"
 	@printf "  $(CYAN)run$(RESET)            Start on localhost:3000\n"
 	@printf "  $(CYAN)run-local$(RESET)      Start exposed to local network (same WiFi)\n"
@@ -105,6 +106,28 @@ setup:
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
+setup-quick:
+	@if [ ! -f db/dump.sql ]; then printf "$(RED)No db/dump.sql found. Run 'make setup' for full setup or 'make db-dump' first.$(RESET)\n"; exit 1; fi
+	@printf "$(GREEN)Quick setup from snapshot...$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)[1/5]$(RESET) Building and starting services...\n"
+	$(COMPOSE) up -d --build
+	@printf "Waiting for services...\n"
+	@sleep 8
+	@printf "\n"
+	@printf "$(CYAN)[2/5]$(RESET) Restoring database from snapshot...\n"
+	$(COMPOSE) exec -T postgres psql -U obelisk obelisk < db/dump.sql
+	@printf "\n"
+	@printf "$(CYAN)[4/5]$(RESET) Ensuring Ollama models...\n"
+	ollama pull $(OLLAMA_MODEL)
+	ollama pull $(OLLAMA_SEARCH_MODEL)
+	ollama pull $(OLLAMA_EMBED_MODEL)
+	@printf "\n"
+	@printf "$(CYAN)[5/5]$(RESET) Syncing search index...\n"
+	$(COMPOSE) exec app bun scripts/sync-typesense.ts
+	@printf "\n"
+	@printf "$(GREEN)Quick setup complete!$(RESET) Run 'make run' to start\n"
+
 run:
 	@printf "$(GREEN)Starting Obelisk...$(RESET)\n"
 	@printf "\n"
@@ -163,8 +186,8 @@ destroy:
 	@printf "Done. Run 'make setup' to start fresh.\n"
 
 download-pbf:
-	@PBF_URL=$$(bun -e "const{getLocation}=require('./scripts/lib/locations');console.log(getLocation().pbfUrl)"); \
-	PBF_FILE=$$(bun -e "const{getLocation}=require('./scripts/lib/locations');console.log(getLocation().pbfFilename)"); \
+	@PBF_URL=$$(bun -e "const{getLocation}=require('./src/lib/geo/locations');console.log(getLocation().pbfUrl)"); \
+	PBF_FILE=$$(bun -e "const{getLocation}=require('./src/lib/geo/locations');console.log(getLocation().pbfFilename)"); \
 	if [ -f "data/$$PBF_FILE" ]; then \
 		printf "$(GREEN)PBF extract already exists (data/$$PBF_FILE), skipping download$(RESET)\n"; \
 	else \

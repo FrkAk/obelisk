@@ -10,7 +10,7 @@
  */
 
 import { createLogger } from "../src/lib/logger";
-import { getLocation } from "./lib/locations";
+import { getLocation } from "../src/lib/geo/locations";
 import { seedRegions } from "./lib/seed-regions";
 import { seedCuisines } from "./lib/seed-cuisines";
 import { seedTags } from "./lib/seed-tags";

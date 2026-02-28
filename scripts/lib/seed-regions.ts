@@ -8,7 +8,7 @@ import { db } from "../../src/lib/db/client";
 import { regions } from "../../src/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createLogger } from "../../src/lib/logger";
-import type { LocationConfig } from "./locations";
+import type { LocationConfig } from "../../src/lib/geo/locations";
 
 const log = createLogger("seed-regions");
 

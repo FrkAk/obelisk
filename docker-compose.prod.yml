@@ -2,4 +2,6 @@
 # Use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up
 services:
   app:
+    environment:
+      NODE_ENV: production
     command: ["sh", "-c", "bun run build && bun run start"]

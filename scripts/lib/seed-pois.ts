@@ -18,12 +18,13 @@ import {
 } from "../../src/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import type { CategorySlug } from "../../src/types";
-import type { PoiProfile } from "../../src/types/api";
 import type { OverpassElement } from "../../src/types/api";
 import { readPoisFromPbf } from "./pbf-reader";
 import { processWithConcurrency } from "./concurrency";
 import { createLogger } from "../../src/lib/logger";
-import type { LocationConfig } from "./locations";
+import type { LocationConfig } from "../../src/lib/geo/locations";
+import { getCategorySlugFromTags } from "../../src/lib/geo/categories";
+import { buildProfile } from "../../src/lib/poi/profile";
 
 const log = createLogger("seed-pois");
 
@@ -62,59 +63,6 @@ const CATEGORY_DATA: Array<{
   { name: "Education", slug: "education", icon: "book", color: "#FFAB40" },
   { name: "Services", slug: "services", icon: "briefcase", color: "#A1887F" },
 ];
-
-/**
- * Determines the category slug for a POI based on its OSM tags.
- *
- * @param osmTags - Raw OSM tags from the element.
- * @returns CategorySlug matching the most appropriate category.
- */
-function determineCategorySlug(osmTags: Record<string, string>): CategorySlug {
-  if (osmTags.historic) return "history";
-  if (osmTags.tourism === "museum" || osmTags.tourism === "gallery") return "art";
-  if (osmTags.tourism === "viewpoint") return "views";
-  if (osmTags.tourism === "artwork") return "art";
-  if (osmTags.tourism === "attraction") return "culture";
-
-  const foodAmenities = ["restaurant", "cafe", "fast_food", "biergarten", "ice_cream", "food_court"];
-  if (foodAmenities.includes(osmTags.amenity)) return "food";
-
-  const nightlifeAmenities = ["bar", "pub", "nightclub"];
-  if (nightlifeAmenities.includes(osmTags.amenity)) return "nightlife";
-
-  const healthAmenities = ["hospital", "pharmacy", "clinic", "doctors", "dentist"];
-  if (healthAmenities.includes(osmTags.amenity) || osmTags.healthcare) return "health";
-
-  const educationAmenities = ["university", "school", "college", "kindergarten", "library"];
-  if (educationAmenities.includes(osmTags.amenity)) return "education";
-
-  const serviceAmenities = ["police", "fire_station", "bank", "post_office"];
-  if (serviceAmenities.includes(osmTags.amenity)) return "services";
-
-  if (osmTags.shop) return "shopping";
-
-  const natureLeisure = ["park", "garden", "nature_reserve"];
-  if (natureLeisure.includes(osmTags.leisure) || osmTags.natural) return "nature";
-
-  const sportsLeisure = ["sports_centre", "stadium", "fitness_centre", "swimming_pool", "pitch"];
-  if (sportsLeisure.includes(osmTags.leisure)) return "sports";
-
-  if (osmTags.amenity === "theatre" || osmTags.amenity === "cinema" || osmTags.amenity === "community_centre") {
-    return "culture";
-  }
-
-  if (osmTags.amenity === "bus_station" || osmTags.railway) return "transport";
-
-  if (osmTags.tourism === "hotel" || osmTags.tourism === "hostel" || osmTags.tourism === "guest_house") {
-    return "services";
-  }
-
-  if (osmTags.architect || osmTags.building === "church" || osmTags.amenity === "place_of_worship") {
-    return "architecture";
-  }
-
-  return "hidden";
-}
 
 /**
  * Splits a semicolon-delimited OSM tag value into trimmed parts.
@@ -215,139 +163,6 @@ function hasAccessibilityData(data: AccessibilityData): boolean {
     data.parkingAvailable !== null ||
     data.notes !== null
   );
-}
-
-/**
- * Builds a PoiProfile from OSM tags for the given category.
- *
- * @param osmTags - Raw OSM tags from the PBF element.
- * @param categorySlug - Determined category for this POI.
- * @returns A PoiProfile with seed-time data (keywords/products/summary filled by enrich-taxonomy).
- */
-function buildProfile(osmTags: Record<string, string>, categorySlug: CategorySlug): PoiProfile {
-  const osmExtracted: Record<string, string> = {};
-  const attributes: Record<string, unknown> = {};
-
-  const subtypeExtractors: Record<string, () => string | undefined> = {
-    food: () => osmTags.amenity ?? osmTags.shop,
-    nightlife: () => osmTags.amenity,
-    shopping: () => osmTags.shop,
-    history: () => osmTags.historic,
-    architecture: () => {
-      const buildingSubtypes: Record<string, string> = {
-        church: "church", cathedral: "cathedral", chapel: "chapel",
-        mosque: "mosque", synagogue: "synagogue", temple: "temple",
-      };
-      return buildingSubtypes[osmTags.building] ?? (osmTags.amenity === "place_of_worship" ? "church" : undefined);
-    },
-    nature: () => osmTags.leisure ?? osmTags.natural,
-    art: () => osmTags.tourism ?? osmTags.amenity,
-    culture: () => osmTags.tourism ?? osmTags.amenity,
-    views: () => osmTags["tower:type"] === "observation" ? "tower" : "viewpoint",
-    sports: () => osmTags.leisure ?? osmTags.sport,
-    health: () => osmTags.amenity ?? osmTags.healthcare,
-    transport: () => osmTags.railway ?? osmTags.amenity,
-    education: () => osmTags.amenity,
-    services: () => osmTags.amenity ?? osmTags.tourism,
-    hidden: () => osmTags.amenity ?? osmTags.tourism,
-  };
-
-  const subtype = subtypeExtractors[categorySlug]?.() ?? undefined;
-
-  const osmSubtagKeys = [
-    "clothes", "shoes", "beauty", "books", "cuisine", "sport",
-    "brand", "brand:wikidata", "operator:wikidata", "description",
-  ];
-  for (const key of osmSubtagKeys) {
-    if (osmTags[key]) {
-      osmExtracted[key.replace(":", "")] = osmTags[key];
-    }
-  }
-
-  switch (categorySlug) {
-    case "food": {
-      if (osmTags.outdoor_seating) attributes.outdoorSeating = osmTags.outdoor_seating === "yes";
-      if (osmTags.takeaway) attributes.takeaway = osmTags.takeaway === "yes";
-      if (osmTags.delivery) attributes.delivery = osmTags.delivery === "yes";
-      if (osmTags["diet:vegetarian"]) attributes.vegetarian = osmTags["diet:vegetarian"];
-      if (osmTags["diet:vegan"]) attributes.vegan = osmTags["diet:vegan"];
-      break;
-    }
-    case "history": {
-      if (osmTags.start_date) attributes.yearBuilt = parseYear(osmTags.start_date);
-      if (osmTags.heritage) attributes.heritageLevel = parseHeritageLevel(osmTags.heritage);
-      if (osmTags.ruins === "yes") attributes.preservationStatus = "ruins";
-      break;
-    }
-    case "architecture": {
-      const style = osmTags.architecture ?? osmTags["building:architecture"];
-      if (style) attributes.primaryStyle = style;
-      if (osmTags.architect) attributes.architect = osmTags.architect;
-      if (osmTags.start_date) attributes.yearBuilt = parseYear(osmTags.start_date);
-      if (osmTags.denomination) attributes.denomination = osmTags.denomination;
-      break;
-    }
-    case "nature": {
-      if (osmTags["sac_scale"]) attributes.trailDifficulty = mapTrailDifficulty(osmTags["sac_scale"]);
-      if (osmTags.lit) attributes.litAtNight = osmTags.lit === "yes";
-      break;
-    }
-    case "views": {
-      if (osmTags.ele) attributes.elevationM = osmTags.ele;
-      if (osmTags.direction) attributes.viewDirection = osmTags.direction;
-      break;
-    }
-    default:
-      break;
-  }
-
-  return {
-    subtype,
-    osmExtracted: Object.keys(osmExtracted).length > 0 ? osmExtracted : undefined,
-    keywords: [],
-    products: [],
-    summary: "",
-    enrichmentSource: "seed",
-    attributes,
-  };
-}
-
-/**
- * Extracts a year number from a date string.
- *
- * @param dateStr - Date string, potentially with leading negative sign.
- * @returns Parsed year as integer, or null if unparseable.
- */
-function parseYear(dateStr: string): number | null {
-  const match = dateStr.match(/^(-?\d{1,4})/);
-  if (match) return parseInt(match[1]);
-  return null;
-}
-
-/**
- * Maps an OSM heritage tag value to a standardized level string.
- *
- * @param heritage - Raw heritage tag value.
- * @returns Heritage level: "unesco", "national", "regional", or "local".
- */
-function parseHeritageLevel(heritage: string): string | null {
-  if (heritage.includes("1") || heritage.toLowerCase().includes("world")) return "unesco";
-  if (heritage.includes("2") || heritage.toLowerCase().includes("national")) return "national";
-  if (heritage.includes("3") || heritage.toLowerCase().includes("regional")) return "regional";
-  if (heritage.includes("4") || heritage.toLowerCase().includes("local")) return "local";
-  return "local";
-}
-
-/**
- * Maps a SAC hiking scale value to a simplified difficulty string.
- *
- * @param sacScale - SAC scale value (e.g. "hiking", "T1", "mountain_hiking").
- * @returns Difficulty level: "easy", "moderate", or "difficult".
- */
-function mapTrailDifficulty(sacScale: string): string | null {
-  if (sacScale === "hiking" || sacScale === "T1") return "easy";
-  if (sacScale === "mountain_hiking" || sacScale === "T2") return "moderate";
-  return "difficult";
 }
 
 /**
@@ -589,7 +404,7 @@ export async function seedPois(location: LocationConfig): Promise<void> {
     const lon = el.lon ?? el.center?.lon;
     if (!lat || !lon) return result;
 
-    const categorySlug = determineCategorySlug(osmTags);
+    const categorySlug = getCategorySlugFromTags(osmTags);
     const categoryId = categoryMap.get(categorySlug);
 
     const address = osmTags["addr:street"]

@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
         id: pois.id,
         name: pois.name,
         address: pois.address,
+        locale: pois.locale,
         wikipediaUrl: pois.wikipediaUrl,
         osmTags: pois.osmTags,
         profile: pois.profile,
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
             latitude: poi.latitude,
             longitude: poi.longitude,
             address: poi.address,
-            locale: "de-DE",
+            locale: poi.locale,
             osmType: null,
             osmTags: poi.osmTags,
             profile,
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
 
         const insertedRemark = await insertRemark({
           poiId: poi.id,
-          locale: "de-DE",
+          locale: poi.locale,
           story,
         });
 

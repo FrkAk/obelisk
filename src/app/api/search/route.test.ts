@@ -9,6 +9,7 @@ const mockParseQueryIntent = mock(() =>
     source: "fast-path" as const,
   })
 );
+const mockGeocodeQuery = mock(() => Promise.resolve([]));
 const mockSearchPOIs = mock(() =>
   Promise.resolve([
     {
@@ -36,6 +37,9 @@ const mockRankResults = mock((input: { typesenseResults: unknown[] }) =>
 
 mock.module("@/lib/search/queryParser", () => ({
   parseQueryIntent: mockParseQueryIntent,
+}));
+mock.module("@/lib/search/geocoding", () => ({
+  geocodeQuery: mockGeocodeQuery,
 }));
 mock.module("@/lib/search/typesense", () => ({
   searchPOIs: mockSearchPOIs,

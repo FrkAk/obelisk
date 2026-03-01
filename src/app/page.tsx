@@ -71,6 +71,7 @@ export default function Home() {
   const [hasMapMovedSinceSearch, setHasMapMovedSinceSearch] = useState(false);
   const [previousSheetMode, setPreviousSheetMode] = useState<SheetMode>(null);
   const [flyToLocation, setFlyToLocation] = useState<{ latitude: number; longitude: number; ts: number } | null>(null);
+  const [searchPinLocation, setSearchPinLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const lastSearchQueryRef = useRef<string | null>(null);
   const regenerateCooldownsRef = useRef<Map<string, number>>(new Map());
@@ -183,6 +184,7 @@ export default function Home() {
     setSelectedRemark(null);
     setSelectedPoi(null);
     setPreviousSheetMode(null);
+    setSearchPinLocation(null);
   }, []);
 
   const handleViewportChange = useCallback(
@@ -291,6 +293,7 @@ export default function Home() {
     setLastSearchQuery(null);
     setHasMapMovedSinceSearch(false);
     lastSearchQueryRef.current = null;
+    setSearchPinLocation(null);
     if (sheetMode === "search") {
       setSheetOpen(false);
       setSheetMode(null);
@@ -328,6 +331,10 @@ export default function Home() {
       latitude: result.latitude,
       longitude: result.longitude,
       ts: Date.now(),
+    });
+    setSearchPinLocation({
+      latitude: result.latitude,
+      longitude: result.longitude,
     });
   }, [sheetMode]);
 
@@ -434,6 +441,7 @@ export default function Home() {
         isLoading={isLoading}
         userLocation={hasRealLocation ? location : null}
         flyToLocation={flyToLocation}
+        searchPinLocation={searchPinLocation}
       />
 
       <div className="absolute top-safe-area left-4 right-4 z-20 pt-4">

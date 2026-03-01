@@ -6,6 +6,7 @@ import { MapView, type MapBounds } from "./MapView";
 import { POIPin } from "./POIPin";
 import { ClusterPin } from "./ClusterPin";
 import { UserLocationMarker } from "./UserLocationMarker";
+import { SearchPin } from "./SearchPin";
 import type { Remark, GeoLocation, CategorySlug, PoiWithCategory, ViewportBounds } from "@/types/api";
 import { CATEGORY_COLORS } from "@/types/api";
 
@@ -19,6 +20,7 @@ interface MapContainerProps {
   isLoading: boolean;
   userLocation?: GeoLocation | null;
   flyToLocation?: { latitude: number; longitude: number; ts: number } | null;
+  searchPinLocation?: { latitude: number; longitude: number } | null;
 }
 
 type RemarkProperties = { remark: Remark & { poi: PoiWithCategory } };
@@ -38,6 +40,7 @@ export function MapContainer({
   isLoading,
   userLocation,
   flyToLocation,
+  searchPinLocation,
 }: MapContainerProps) {
   const [viewState, setViewState] = useState<{ zoom: number; bounds: MapBounds | null }>({
     zoom: 14,
@@ -156,6 +159,12 @@ export function MapContainer({
         flyToLocation={flyToLocation}
       >
         {userLocation && <UserLocationMarker location={userLocation} />}
+        {searchPinLocation && (
+          <SearchPin
+            latitude={searchPinLocation.latitude}
+            longitude={searchPinLocation.longitude}
+          />
+        )}
         {clusters.map((cluster) => {
           const [longitude, latitude] = cluster.geometry.coordinates;
           const props = cluster.properties as { cluster?: boolean; cluster_id?: number; point_count?: number; remark?: Remark & { poi: PoiWithCategory } };

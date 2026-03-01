@@ -3,6 +3,7 @@ import { z } from "zod";
 import { parseQueryIntent } from "@/lib/search/queryParser";
 import { searchPOIs } from "@/lib/search/typesense";
 import { semanticSearch } from "@/lib/search/semantic";
+import { geocodeQuery } from "@/lib/search/geocoding";
 import { getRandomRemark } from "@/lib/db/queries/search";
 import { rankResults } from "@/lib/search/ranking";
 import { haversineDistance } from "@/lib/geo/distance";
@@ -118,6 +119,7 @@ export async function POST(request: NextRequest) {
             parseMs,
             typesenseMs: 0,
             semanticMs: 0,
+            geocodingMs: 0,
             totalMs: Date.now() - startTime,
           },
         };
@@ -143,7 +145,7 @@ export async function POST(request: NextRequest) {
       ? `${query} ${intent.keywords.join(" ")}`
       : query;
 
-    const [typesenseSettled, semanticSettled] =
+    const [typesenseSettled, semanticSettled, geocodingSettled] =
       await Promise.allSettled([
         (async () => {
           const tsStart = Date.now();
@@ -172,6 +174,11 @@ export async function POST(request: NextRequest) {
             intent.keywords
           );
           return { results: hits, ms: Date.now() - semStart };
+        })(),
+        (async () => {
+          const geoStart = Date.now();
+          const results = await geocodeQuery(query, location.latitude, location.longitude);
+          return { results, ms: Date.now() - geoStart };
         })(),
       ]);
 
@@ -222,6 +229,15 @@ export async function POST(request: NextRequest) {
         ? semanticSettled.value.ms
         : 0;
 
+    const geocodingResults =
+      geocodingSettled.status === "fulfilled"
+        ? geocodingSettled.value.results
+        : [];
+    const geocodingMs =
+      geocodingSettled.status === "fulfilled"
+        ? geocodingSettled.value.ms
+        : 0;
+
     if (typesenseSettled.status === "rejected") {
       log.error("Typesense failed:", typesenseSettled.reason);
     } else {
@@ -238,6 +254,11 @@ export async function POST(request: NextRequest) {
         `Semantic: ${semanticResults.length} hits in ${semanticMs}ms${top ? ` — top: "${top.name}" (sim: ${top.similarity.toFixed(3)})` : ""}`
       );
     }
+    if (geocodingSettled.status === "rejected") {
+      log.error("Geocoding failed:", geocodingSettled.reason);
+    } else if (geocodingResults.length > 0) {
+      log.info(`Geocoding: ${geocodingResults.length} hits in ${geocodingMs}ms`);
+    }
 
     const typesenseWeight = intent.keywords.length > 0 ? 1.0 : 0.1;
 
@@ -249,7 +270,19 @@ export async function POST(request: NextRequest) {
       typesenseWeight,
     });
 
-    const finalResults = ranked.slice(0, limit);
+    const dedupedGeo = geocodingResults.filter((geo) =>
+      !ranked.some(
+        (poi) =>
+          haversineDistance(geo.latitude, geo.longitude, poi.latitude, poi.longitude) < 50
+      )
+    );
+
+    const isPOIQuery = intent.source === "fast-path";
+    const mergedResults = isPOIQuery
+      ? [...ranked, ...dedupedGeo]
+      : [...dedupedGeo, ...ranked];
+
+    const finalResults = mergedResults.slice(0, limit);
 
     const totalMs = Date.now() - startTime;
     log.info(
@@ -273,6 +306,7 @@ export async function POST(request: NextRequest) {
         parseMs,
         typesenseMs,
         semanticMs,
+        geocodingMs,
         totalMs,
       },
     };

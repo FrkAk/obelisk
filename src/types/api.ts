@@ -134,8 +134,9 @@ export interface SearchResult {
   hasStory: boolean;
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
+  placeType?: string;
   remark?: Remark & { poi: Poi & { category?: Category } };
-  source: "typesense" | "semantic";
+  source: "typesense" | "semantic" | "geocoding";
 }
 
 export interface SearchResponse {
@@ -145,6 +146,7 @@ export interface SearchResponse {
     parseMs: number;
     typesenseMs: number;
     semanticMs: number;
+    geocodingMs: number;
     totalMs: number;
   };
 }

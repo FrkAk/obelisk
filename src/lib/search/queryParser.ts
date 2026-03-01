@@ -244,11 +244,8 @@ const DISCOVERY_QUERIES = new Set([
  * Parses a search query into structured intent using fast-path lookup
  * or embedding-based classification fallback.
  *
- * Args:
- *     query: The user's search query string.
- *
- * Returns:
- *     Structured intent with category, keywords, cuisine types, and filters.
+ * @param query - The user's search query string.
+ * @returns Structured intent with category, keywords, cuisine types, and filters.
  */
 export async function parseQueryIntent(query: string): Promise<ParsedIntent> {
   if (!query.trim()) {

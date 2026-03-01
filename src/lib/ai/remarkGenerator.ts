@@ -31,103 +31,233 @@ interface CategoryPersona {
   tipStyle: string;
 }
 
+const FOOD_CATEGORIES = new Set(["food", "nightlife"]);
+const HISTORY_CATEGORIES = new Set(["history", "architecture"]);
+const CULTURE_CATEGORIES = new Set(["culture", "education"]);
+const NATURE_CATEGORIES = new Set(["nature"]);
+
+/**
+ * Extracts verified facts from OSM tags as a structured block for the LLM prompt.
+ * Category-aware: extracts different tags based on what's relevant per category.
+ *
+ * @param osmTags - Raw OSM tags from the POI.
+ * @param categorySlug - Category slug for context-aware extraction.
+ * @returns Formatted "VERIFIED FACTS" block, or empty string if no useful tags found.
+ */
+function extractOsmFacts(
+  osmTags: Record<string, string> | null,
+  categorySlug: string,
+): string {
+  if (!osmTags || Object.keys(osmTags).length === 0) return "";
+
+  const facts: string[] = [];
+
+  const description = osmTags["description"] || osmTags["description:en"];
+  if (description) facts.push(`Description: ${description}`);
+
+  const startDate = osmTags["start_date"] || osmTags["year_of_construction"];
+  if (startDate) facts.push(`Built: ${startDate}`);
+
+  const oldName = osmTags["old_name"];
+  if (oldName) facts.push(`Former name: ${oldName}`);
+
+  if (osmTags["wikipedia"]) facts.push("Has Wikipedia article (notable topic)");
+
+  if (FOOD_CATEGORIES.has(categorySlug)) {
+    const cuisine = osmTags["cuisine"];
+    if (cuisine) facts.push(`Cuisine: ${cuisine.replace(/;/g, ", ")}`);
+    if (osmTags["outdoor_seating"] === "yes") facts.push("Has outdoor seating");
+    if (osmTags["indoor_seating"] === "yes") facts.push("Has indoor seating");
+    const dietVeg = osmTags["diet:vegetarian"];
+    if (dietVeg === "yes" || dietVeg === "only") facts.push(`Vegetarian: ${dietVeg}`);
+    const dietVegan = osmTags["diet:vegan"];
+    if (dietVegan === "yes" || dietVegan === "only") facts.push(`Vegan: ${dietVegan}`);
+    if (osmTags["takeaway"] === "yes") facts.push("Offers takeaway");
+  }
+
+  if (HISTORY_CATEGORIES.has(categorySlug)) {
+    const inscription = osmTags["inscription"] || osmTags["inscription:en"];
+    if (inscription) facts.push(`Inscription: "${inscription}"`);
+    const architect = osmTags["architect"];
+    if (architect) facts.push(`Architect: ${architect}`);
+    if (osmTags["heritage"]) facts.push(`Heritage designation: ${osmTags["heritage"]}`);
+    const memorial = osmTags["memorial"];
+    if (memorial) facts.push(`Memorial type: ${memorial}`);
+    const material = osmTags["material"];
+    if (material) facts.push(`Material: ${material}`);
+    const historic = osmTags["historic"];
+    if (historic) facts.push(`Historic type: ${historic}`);
+  }
+
+  if (CULTURE_CATEGORIES.has(categorySlug)) {
+    const religion = osmTags["religion"];
+    if (religion) facts.push(`Religion: ${religion}`);
+    const denomination = osmTags["denomination"];
+    if (denomination) facts.push(`Denomination: ${denomination}`);
+    const sport = osmTags["sport"];
+    if (sport) facts.push(`Sport: ${sport}`);
+  }
+
+  if (NATURE_CATEGORIES.has(categorySlug)) {
+    const natural = osmTags["natural"];
+    if (natural) facts.push(`Natural type: ${natural}`);
+    const elevation = osmTags["ele"];
+    if (elevation) facts.push(`Elevation: ${elevation}m`);
+  }
+
+  if (facts.length === 0) return "";
+
+  return `VERIFIED FACTS (from official records — these are TRUE):
+${facts.map((f) => `- ${f}`).join("\n")}`;
+}
+
+/**
+ * Builds a two-section data context: verified OSM facts and enrichment profile data.
+ * Labels each section so the model knows which data to trust.
+ *
+ * @param profile - JSONB profile from enrichment pipeline.
+ * @param osmTags - Raw OSM tags from the POI.
+ * @param categorySlug - Category slug for OSM extraction.
+ * @returns Combined data context string for the LLM prompt.
+ */
+function buildDataContext(
+  profile: PoiProfile | null,
+  osmTags: Record<string, string> | null,
+  categorySlug: string,
+): string {
+  const sections: string[] = [];
+
+  const osmFacts = extractOsmFacts(osmTags, categorySlug);
+  if (osmFacts) sections.push(osmFacts);
+
+  const profileParts: string[] = [];
+  if (profile) {
+    if (profile.subtype) profileParts.push(`Type: ${profile.subtype}`);
+    if (profile.keywords && profile.keywords.length > 0)
+      profileParts.push(`Keywords: ${profile.keywords.join(", ")}`);
+    if (profile.products && profile.products.length > 0)
+      profileParts.push(`Products/Services: ${profile.products.join(", ")}`);
+    if (profile.summary) profileParts.push(`Summary: ${profile.summary}`);
+
+    for (const [key, value] of Object.entries(profile.attributes ?? {})) {
+      if (value != null && value !== "") {
+        if (Array.isArray(value)) {
+          if (value.length > 0) profileParts.push(`${key}: ${value.join(", ")}`);
+        } else {
+          profileParts.push(`${key}: ${String(value)}`);
+        }
+      }
+    }
+  }
+
+  if (profileParts.length > 0) {
+    sections.push(`PROFILE DATA (from enrichment — keywords/products are reliable, summary may be generic):
+${profileParts.join("\n")}`);
+  }
+
+  return sections.length > 0 ? sections.join("\n\n") : "No data available — write about what's visible and the atmosphere.";
+}
+
 const CATEGORY_PERSONAS: Record<string, CategoryPersona> = {
   food: {
-    voice: "You're a passionate foodie friend who lives for discovering amazing eats. You've tried every kitchen in town and know exactly what makes each place special. You speak with enthusiasm about flavors, atmospheres, and those little details only a true food lover notices.",
-    perspective: "Focus on the culinary experience - the signature dishes, the vibe, who would love this place. Share it like you're recommending your favorite spot to a hungry friend.",
-    tipStyle: "Share a foodie insider tip - best time to visit, what to order, or a secret menu item if mentioned.",
+    voice: "You eat here, not review here. Lead with what surprised you — the crowd, the ritual, the one dish everyone orders. Connect the food to the neighborhood.",
+    perspective: "Who comes here and why? What would someone remember a week later?",
+    tipStyle: "One thing to order or one time to visit.",
   },
   history: {
-    voice: "You're that friend who makes history come alive - not the boring textbook kind, but the fascinating stories behind places. You know the tales that locals whisper about and can connect the past to the present in ways that make people see a place differently.",
-    perspective: "Bring out the human stories and historical significance. What happened here? Why does it matter? Make history feel relevant and intriguing, not dusty.",
-    tipStyle: "Share a historical insight or the best way to appreciate the historical significance of this place.",
+    voice: "You make the past feel close. Lead with the human story — who was here, what happened, why it still matters. Skip the textbook voice.",
+    perspective: "What would someone miss if they walked past? What's the story these walls hold?",
+    tipStyle: "How to actually experience the history — where to look, when to visit, what to notice.",
   },
   art: {
-    voice: "You're the artsy friend who sees beauty everywhere and knows the local creative scene inside out. You appreciate both classic masterpieces and street art, and you understand what makes a space culturally significant.",
-    perspective: "Focus on the artistic and creative aspects - the aesthetic, the cultural value, what makes it visually or artistically special.",
-    tipStyle: "Share an art lover's tip - best lighting time, hidden details to notice, or how to truly appreciate what's here.",
+    voice: "You see what others miss. Lead with what caught your eye — a detail, a contrast, an unexpected feeling. Art is about looking, not lecturing.",
+    perspective: "What makes this worth stopping for? What would you point out to a friend?",
+    tipStyle: "Where to look, what to notice, best light or time.",
   },
   nature: {
-    voice: "You're the outdoorsy friend who knows every trail, park, and green space. You find peace in nature and love sharing those special spots where the city fades away and you can breathe.",
-    perspective: "Emphasize the natural beauty, the escape from urban life, the sensory experience. What sounds, smells, and sights make this place special?",
-    tipStyle: "Share a nature lover's tip - best season to visit, what wildlife to look for, or the most peaceful spot.",
+    voice: "You know where the city disappears. Lead with the sensory shift — what changes when you step into this space. Sound, light, air.",
+    perspective: "What does this place feel like? Why does someone need this escape?",
+    tipStyle: "Best time, best route in, what to watch for.",
   },
   architecture: {
-    voice: "You're the design-savvy friend who notices buildings others walk past. You appreciate the craftsmanship, the history of structures, and can explain why a facade or a doorway is actually remarkable.",
-    perspective: "Highlight the architectural details, the style, the craftsmanship. What makes this structure stand out? What story does the building itself tell?",
-    tipStyle: "Share an architecture tip - best angle to view it, interesting details to notice, or the best time for photos.",
+    voice: "You notice buildings others walk past. Lead with the detail that stops you — a doorway, a facade, a strange angle. Buildings tell stories through craft.",
+    perspective: "What makes this structure remarkable? What story does the building tell?",
+    tipStyle: "Where to stand, what detail to notice, best angle.",
   },
   views: {
-    voice: "You're the friend with the camera who knows every scenic spot and golden hour location. You've watched countless sunsets and know exactly where to go for that perfect view.",
-    perspective: "Paint the picture of what can be seen from here. What makes this viewpoint special? What's the experience of standing there?",
-    tipStyle: "Share a photographer's tip - best time of day, weather conditions, or the perfect spot to stand.",
+    voice: "You know every rooftop and hilltop. Lead with what the view reveals — the skyline, the river, the Alps on a clear day. A view is a story about a city.",
+    perspective: "What can someone see from here that they can't see anywhere else?",
+    tipStyle: "Best time of day, best weather, where exactly to stand.",
   },
   culture: {
-    voice: "You're the cultured friend who's always first to know about performances, events, and cultural happenings. You appreciate traditions, celebrations, and the living culture of a place.",
-    perspective: "Focus on the cultural significance, traditions, or performances. What cultural experience can someone have here?",
-    tipStyle: "Share a culture insider's tip - what events to catch, local customs, or how to fully experience the culture.",
+    voice: "You're first to every opening night. Lead with what the experience feels like — the energy, the crowd, the moment the lights dim.",
+    perspective: "What cultural experience happens here? Why does it matter beyond entertainment?",
+    tipStyle: "When to go, what to expect, how to get the most from it.",
   },
   hidden: {
-    voice: "You're the curious explorer friend who finds the places that aren't in any guidebook. You love the thrill of discovery and sharing those 'you won't believe what I found' moments.",
-    perspective: "Emphasize the discovery aspect - why is this place special? What makes it a hidden gem worth seeking out?",
-    tipStyle: "Share an explorer's tip - how to find it, what to look for, or why it's worth the detour.",
+    voice: "You find what guidebooks miss. Lead with how you discovered this place — the turn you took, the door you noticed. Discovery is the story.",
+    perspective: "Why is this worth seeking out? What's the reward for those who find it?",
+    tipStyle: "How to find it, what to look for, why it's easy to miss.",
   },
   shopping: {
-    voice: "You're the fashion-forward friend who knows every boutique, market, and hidden shop. You love finding unique items and know where to get the best deals.",
-    perspective: "Focus on what makes this shop unique - the vibe, the selection, the experience.",
-    tipStyle: "Share a shopper's tip - best time to visit for sales, unique items to look for, or nearby shops worth combining.",
+    voice: "You know every Laden and Markt worth browsing. Lead with what makes this shop different from every other one — the selection, the owner, the vibe.",
+    perspective: "What would someone find here that they won't find in a chain? Why browse instead of click?",
+    tipStyle: "Best time to browse, what to look for, what most people miss.",
   },
   nightlife: {
-    voice: "You're the friend who knows every bar, club, and late-night spot. You know which places have the best cocktails, the liveliest crowds, and the hidden speakeasies.",
-    perspective: "Focus on the atmosphere, the drinks, the crowd, and what makes this spot stand out after dark.",
-    tipStyle: "Share a nightlife insider tip - best nights to go, signature drinks, or how to get past the door.",
+    voice: "You know where the night gets interesting. Lead with the atmosphere — what you hear, see, and feel when you walk in.",
+    perspective: "What's the crowd like? What makes this spot stand out after dark?",
+    tipStyle: "Best night, what to drink, how to get in.",
   },
   transport: {
-    voice: "You're the friend who knows every bus line, metro connection, and shortcut through the city. You appreciate the engineering behind transit systems and know which stations have stories to tell.",
-    perspective: "Focus on the transit experience - the connections, the architecture of the station, its role in the city's mobility. What makes this stop more than just a place to wait?",
-    tipStyle: "Share a transit insider tip - best connections, off-peak times, or interesting features of this station.",
+    voice: "You see stations as more than stops. Lead with what makes this one different — the architecture, the history, the hidden detail most commuters miss.",
+    perspective: "What story does this station tell? Why should someone look up from their phone?",
+    tipStyle: "What to notice, best time to appreciate it, connections worth knowing.",
   },
   education: {
-    voice: "You're the intellectually curious friend who loves campus walks and library visits. You know which institutions shaped the city's academic identity and where knowledge comes alive.",
-    perspective: "Focus on the academic and intellectual significance - what's taught or researched here, who walked these halls, what makes this institution special.",
-    tipStyle: "Share an education insider tip - public lectures, library access, campus tours, or notable spots to visit.",
+    voice: "You love campus walks and quiet libraries. Lead with what this institution means to the city — who studied here, what was discovered, why the building matters.",
+    perspective: "What's the intellectual or architectural significance? What's publicly accessible?",
+    tipStyle: "What's open to visitors, when to go, what to see.",
   },
   health: {
-    voice: "You're the wellness-minded friend who knows every spa, clinic, and healing spot in town. You value places that care for body and mind.",
-    perspective: "Focus on the care and wellness aspect - what services are offered, the atmosphere, the history of healing at this location.",
-    tipStyle: "Share a practical health tip - booking advice, what to expect, or hidden wellness features.",
+    voice: "You know where care meets craft. Lead with what makes this place more than functional — the building, the history, the approach to wellness.",
+    perspective: "What's notable beyond the service? Any architectural or historical significance?",
+    tipStyle: "Practical info — how to access, what to expect, best approach.",
   },
   sports: {
-    voice: "You're the sports enthusiast who knows every pitch, pool, and arena. You live for match days and morning runs, and you know the stories behind the venues.",
-    perspective: "Focus on the sporting experience - the atmosphere, the history of competitions here, what activities are available.",
-    tipStyle: "Share a sports insider tip - best times to visit, equipment rental, or the best spot to watch a match.",
+    voice: "You know every pitch, pool, and arena. Lead with the atmosphere — match day energy, morning calm, the community around the sport.",
+    perspective: "What's the sporting experience here? What's the history and energy?",
+    tipStyle: "When to visit, what's accessible, where to watch.",
   },
   services: {
-    voice: "You're the practical friend who knows how the city works. You've navigated every bureaucracy and know which service points have surprising histories.",
-    perspective: "Focus on what makes this service point noteworthy beyond its function - its architecture, history, or role in the community.",
-    tipStyle: "Share a practical tip - best times to avoid queues, online alternatives, or an interesting historical detail.",
+    voice: "You find the stories behind functional places. Lead with what makes this building or location noteworthy — the architecture, the history, the neighborhood role.",
+    perspective: "What's interesting about this place beyond its function?",
+    tipStyle: "Practical tip — best time, what to know, anything unexpected.",
   },
 };
 
 const DEFAULT_PERSONA: CategoryPersona = {
-  voice: "You're a friendly local who knows the neighborhood well. You enjoy sharing interesting spots with visitors and friends.",
-  perspective: "Share what makes this place worth visiting in a casual, friendly way.",
-  tipStyle: "Share a practical local tip for visiting this place.",
+  voice: "You're a friendly local who knows the neighborhood well. Lead with what's interesting — the vibe, the detail, the reason to stop.",
+  perspective: "What makes this place worth a moment of someone's time?",
+  tipStyle: "One practical thing to know before visiting.",
 };
 
+/**
+ * Returns the category-specific persona or the default fallback.
+ *
+ * @param categorySlug - Category slug key.
+ * @returns Matching CategoryPersona.
+ */
 function getPersona(categorySlug: string): CategoryPersona {
   return CATEGORY_PERSONAS[categorySlug] ?? DEFAULT_PERSONA;
 }
 
 /**
  * Scores POI data richness to determine remark generation confidence level.
- * Based on JSONB profile completeness: keywords, products, summary, and tags.
+ * Based on JSONB profile completeness, OSM tags, and metadata.
  *
- * Args:
- *     ctx: Full POI context with JSONB profile and metadata.
- *
- * Returns:
- *     Confidence level: "high" (score >= 5), "medium" (>= 2), or "low".
+ * @param ctx - Full POI context with JSONB profile and metadata.
+ * @returns Confidence level: "high" (score >= 5), "medium" (>= 2), or "low".
  */
 export function assessConfidence(ctx: RemarkPoiContext): "high" | "medium" | "low" {
   let score = 0;
@@ -148,98 +278,91 @@ export function assessConfidence(ctx: RemarkPoiContext): "high" | "medium" | "lo
   if (ctx.contactInfo != null) score += 1;
   if (ctx.poi.wikipediaUrl) score += 1;
 
+  const osmTags = ctx.poi.osmTags;
+  if (osmTags) {
+    if (osmTags["description"] || osmTags["description:en"]) score += 2;
+    if (osmTags["start_date"] || osmTags["year_of_construction"]) score += 1;
+    if (osmTags["inscription"] || osmTags["inscription:en"]) score += 2;
+  }
+
   if (score >= 5) return "high";
   if (score >= 2) return "medium";
   return "low";
 }
 
-function buildHonestyGuidelines(confidence: "high" | "medium" | "low"): string {
-  if (confidence === "low") {
-    return `HONESTY REQUIREMENT: You have very limited information about this place. Be upfront about it:
-- Say something like "I haven't checked this place out myself" or "I don't have much info on this one"
-- DO NOT pretend you know things you don't
-- DO NOT make up positive claims
-- It's okay to say "might be worth checking out" instead of "you'll love it"`;
-  }
-
-  if (confidence === "medium") {
-    return `HONESTY REQUIREMENT: You have some basic information but not a complete picture:
-- Be genuine - share what you know, admit what you don't
-- Don't oversell - phrases like "seems interesting" are better than "amazing"`;
-  }
-
-  return `HONESTY REQUIREMENT: You have good information to work with, but still:
-- Only share what the data supports
-- Be enthusiastic if warranted, but don't exaggerate
-- Your reputation depends on being trustworthy, not just positive`;
-}
-
 /**
- * Builds a human-readable context string from a JSONB PoiProfile for the LLM prompt.
- * Formats keywords, products, summary, subtype, and attributes into a newline-separated string.
+ * Returns a single-sentence honesty guideline based on data confidence.
  *
- * Args:
- *     profile: JSONB profile data from the pois table.
- *
- * Returns:
- *     Newline-separated profile summary string for the LLM prompt.
+ * @param confidence - Data richness confidence level.
+ * @returns Honesty guideline string for the prompt.
  */
-function buildProfileContext(profile: PoiProfile | null): string {
-  if (!profile) return "No profile data available.";
-
-  const parts: string[] = [];
-
-  if (profile.subtype) parts.push(`Type: ${profile.subtype}`);
-  if (profile.summary) parts.push(`Description: ${profile.summary}`);
-  if (profile.keywords && profile.keywords.length > 0) parts.push(`Keywords: ${profile.keywords.join(", ")}`);
-  if (profile.products && profile.products.length > 0) parts.push(`Products/Services: ${profile.products.join(", ")}`);
-
-  for (const [key, value] of Object.entries(profile.attributes ?? {})) {
-    if (value != null && value !== "") {
-      if (Array.isArray(value)) {
-        if (value.length > 0) parts.push(`${key}: ${value.join(", ")}`);
-      } else {
-        parts.push(`${key}: ${String(value)}`);
-      }
-    }
-  }
-
-  return parts.length > 0 ? parts.join("\n") : "Limited profile data available.";
+function buildHonestyGuidelines(confidence: "high" | "medium" | "low"): string {
+  if (confidence === "low")
+    return "HONESTY: You have almost no information — be upfront about it. Describe what's visible, not what you imagine.";
+  if (confidence === "medium")
+    return "HONESTY: You have some context but gaps — share what you know, skip what you don't.";
+  return "HONESTY: You have solid data — be enthusiastic where warranted, but only about what the data supports.";
 }
 
 const CATEGORY_FEW_SHOT: Partial<Record<string, string>> = {
-  shopping: `TITLE: The Vintage Goldmine
-TEASER: Vintage finds, no crowds
-REMARK: On a quiet Gasse off the main drag, this Laden has the kind of curated selection you won't find in any Kaufhaus. The owner knows every piece by heart and the vibe is relaxed — no pushy sales, just good finds.
-LOCAL_TIP: Go on weekday mornings when new stock hits the shelves. Ask about their alterations service.`,
-  food: `TITLE: Honest Bavarian Comfort
-TEASER: Schnitzel done right
-REMARK: This Wirtshaus does one thing and does it well — proper Bavarian comfort food without the tourist markup. The Schnitzel is hand-pounded and the Kartoffelsalat is made fresh. Nothing fancy, just gemütlich and real.
-LOCAL_TIP: Skip the English menu and point at what the Stammgäste are having. The Tagesgericht is always the move.`,
-  culture: `TITLE: The Quiet Stage
-TEASER: Seats so close you feel it
-REMARK: While everyone queues for the big Staatstheater, this kleine Bühne puts on shows that actually surprise you. The intimate space means every seat is a good one, and the crowd is a mix of students and regulars who know what's up.
-LOCAL_TIP: Check their Abendkasse — last-minute tickets are half price and almost always available on weeknights.`,
-  history: `TITLE: Walls That Remember
-TEASER: Centuries in one courtyard
-REMARK: Most people walk right past this unassuming Altbau without a second glance. But these walls have seen centuries — from medieval Handwerker to wartime shelter. The courtyard alone tells more stories than most museums in the Altstadt.
-LOCAL_TIP: Visit at dusk when the courtyard is empty and the old Laternen flicker on. That's when you feel the history.`,
-  art: `TITLE: Color on Every Corner
-TEASER: Watch artists at work
-REMARK: This Atelier doubles as gallery and workspace, and you can watch Künstler at work most afternoons. The rotating exhibits favor local talent over big names, and the vibe is refreshingly ungezwungen — no velvet ropes here.
-LOCAL_TIP: First Thursday each month is Vernissage night — free wine, the artists are there, and it's genuinely good.`,
+  food: `TITLE: The Kitchen That Doesn't Rush
+TEASER: Bavarian, no shortcuts
+REMARK: Three generations of the same family have cooked here, and the Kartoffelsalat recipe hasn't changed once. The crowd is half Stammgäste who don't need menus and half newcomers trying to figure out the system. Both leave full.
+LOCAL_TIP: Weekday lunch is the move — the Tagesgericht changes daily and runs out by 1pm.`,
+
+  history: `TITLE: Names on Stone, Stories in Air
+TEASER: 1923 and still standing
+REMARK: This memorial went up three years after the war ended, when grief was still fresh and names meant faces people remembered. The courtyard swallows street noise whole — stand still for ten seconds and you'll feel the weight of it.
+LOCAL_TIP: Read the inscription slowly. It was written when every name on that stone still had a mother waiting.`,
+
+  art: `TITLE: Color Without Permission
+TEASER: Art that doesn't need a frame
+REMARK: While the big galleries charge admission, this space lets you watch Künstler at work on any given afternoon. The walls rotate monthly and favor local talent over safe names.
+LOCAL_TIP: First Thursdays are Vernissage night — free wine, the artists show up, and it's genuinely good.`,
+
+  nature: `TITLE: Where the City Lets Go
+TEASER: Ten steps from traffic to silence
+REMARK: The noise drops the moment you step past the treeline. This wetland has its own clock — herons in the morning, frogs at dusk, silence in between. Munich forgets it exists, which is exactly the point.
+LOCAL_TIP: Early morning before the joggers arrive. Bring binoculars if you have them.`,
+
+  architecture: `TITLE: The Door Nobody Notices
+TEASER: Built 1892, still stunning
+REMARK: Everyone looks at the facade, but the real craft is in the doorway — hand-carved stone that took someone months. The building survived the war mostly intact, which in this Viertel makes it almost unique.
+LOCAL_TIP: Stand across the street at eye level with the second floor. That's where the detail starts.`,
+
+  shopping: `TITLE: The Rack That Tells Stories
+TEASER: Curated, not cluttered
+REMARK: The owner picks every piece and can tell you where it came from. No algorithm, no warehouse — just taste and a quiet Laden on a side street. The vibe is unhurried and the prices are fair.
+LOCAL_TIP: Weekday mornings when new stock arrives. Ask about alterations.`,
+
+  hidden: `TITLE: Behind the Unmarked Door
+TEASER: Walk past it twice first
+REMARK: No sign, no Google listing, just a door that looks residential. Behind it is a courtyard that opens into something Munich keeps to itself. The kind of place that rewards curiosity.
+LOCAL_TIP: Look for the green door with the brass handle. The courtyard is open during daylight hours.`,
+
+  culture: `TITLE: Seats Close Enough to Feel It
+TEASER: Small stage, big energy
+REMARK: While everyone queues for the Staatstheater, this kleine Bühne puts on shows that surprise. The room holds maybe eighty people, every seat is a good one, and the crowd knows what they came for.
+LOCAL_TIP: Check their Abendkasse — last-minute tickets are half price on weeknights.`,
+
+  views: `TITLE: The Skyline You Earn
+TEASER: Alps on a clear day
+REMARK: The climb is short but the reward is the whole city laid out — Frauenkirche towers, Isar curve, and on clear days the Alps line the horizon. Most people don't know this spot exists.
+LOCAL_TIP: Late afternoon for the best light. The bench on the left side has the widest angle.`,
+
+  nightlife: `TITLE: Where the Bass Finds You
+TEASER: Low lights, good crowd
+REMARK: The door is easy to miss but the sound carries once you're close. Inside it's dark, the drinks are strong, and the DJ plays for the room, not the playlist. The crowd skews local and the energy builds slowly.
+LOCAL_TIP: Don't show up before midnight — the good sets start late. Cash only at the bar.`,
 };
 
 /**
- * Builds the full LLM prompt for remark generation using persona, profile, and locale.
+ * Builds the full LLM prompt for remark generation using persona, data context, and locale.
  *
- * Args:
- *     ctx: Full POI context with profile, tags, and contact info.
- *     confidence: Data richness confidence level.
- *     locale: Detected locale for language and cultural flavor.
- *
- * Returns:
- *     Assembled prompt string for the LLM.
+ * @param ctx - Full POI context with profile, tags, and OSM data.
+ * @param confidence - Data richness confidence level.
+ * @param locale - Detected locale for language and cultural flavor.
+ * @returns Assembled prompt string for the LLM.
  */
 function buildPrompt(
   ctx: RemarkPoiContext,
@@ -247,23 +370,20 @@ function buildPrompt(
   locale: LocaleInfo,
 ): string {
   const persona = getPersona(ctx.categorySlug);
-  const profileContext = buildProfileContext(ctx.profile);
+  const dataContext = buildDataContext(ctx.profile, ctx.poi.osmTags, ctx.categorySlug);
   const honesty = buildHonestyGuidelines(confidence);
   const languagePrompt = buildLanguagePrompt(locale);
   const tagNames = ctx.tags.map((t) => t.name).join(", ");
   const fewShot = CATEGORY_FEW_SHOT[ctx.categorySlug] ?? CATEGORY_FEW_SHOT["food"]!;
 
-  return `${persona.voice}
-
-IMPORTANT - YOUR REPUTATION MATTERS: You're known for being honest and trustworthy. Friends come to you because you tell it like it is.
+  return `You are writing a short remark about a place in Munich. ${persona.voice}
 
 Place: ${ctx.poi.name}
 Category: ${ctx.categoryName}
 Address: ${ctx.poi.address ?? "the neighborhood"}
 Tags: ${tagNames || "none"}
 
-STRUCTURED PROFILE DATA:
-${profileContext}
+${dataContext}
 
 ${honesty}
 
@@ -271,39 +391,25 @@ ${languagePrompt}
 
 ${persona.perspective}
 
-CRITICAL RULES:
-- NEVER cite review scores, star ratings, or "X reviews" - locals don't talk like that
-- NEVER quote website marketing copy or taglines
-- DO talk about the vibe, atmosphere, what makes it special to YOU
-- Sound like you're texting a friend, not writing a Tripadvisor review
-- Write in plain text only. No asterisks, no bold, no italics, no markdown formatting.
-- NEVER use these filler phrases: "you know?", "not flashy", "tucked away", "a real find", "a real gem", "a proper"
-- NEVER start with "Okay, so"
-- Each story must sound fresh — avoid repeating patterns from other stories
+WRITING CRAFT: Lead with what's surprising. Use contrast. Be specific about atmosphere — what you hear, see, smell. Write in plain text only, no markdown formatting.
 
-GROUNDING: Only mention specific dishes, products, or services that appear in the STRUCTURED PROFILE DATA above. Do not invent menu items, nearby businesses, or events.
+GROUNDING: Only state specifics from VERIFIED FACTS. If you don't have details, write about atmosphere, not invented facts. Do not invent menu items, dates, architects, or events.
 
-Write:
+Write EXACTLY this format:
 1. TITLE: Catchy, local-feeling (3-5 words)
-2. TEASER: Write an ORIGINAL short hook (3-7 words) specific to THIS place.
-   Do NOT use generic phrases. Make it specific to what makes this place unique.
-   Bad: "Where locals actually go", "A proper local spot", "Worth the detour"
-   Good: "Schnitzel worth the queue", "Books & coffee since 1892", "Bavaria's tiniest gallery"
-3. REMARK: 2-3 SHORT sentences. Be concise.
+2. TEASER: Original short hook (3-7 words) specific to THIS place. Not generic.
+3. REMARK: 3-4 sentences. Be vivid but grounded.
 4. LOCAL_TIP: 1-2 sentences. ${persona.tipStyle}
-   IMPORTANT: Do NOT start with "If you're". Vary your opener.
-   Do NOT invent staff names, specific dishes, or nearby businesses not in the data above.
-   Only recommend items/services explicitly listed in the STRUCTURED PROFILE DATA.
 
-Here is an example of EXACTLY the voice, length, and format I want:
+Example of the voice and format I want:
 
 ${fewShot}
 
-Now write yours for "${ctx.poi.name}". Format your response EXACTLY like this:
-TITLE: [your title]
-TEASER: [your teaser]
-REMARK: [your remark]
-LOCAL_TIP: [your tip]`;
+Now write yours for "${ctx.poi.name}":
+TITLE:
+TEASER:
+REMARK:
+LOCAL_TIP:`;
 }
 
 const BANNED_TEASERS = [
@@ -344,11 +450,8 @@ const GENERIC_FALLBACKS = ["Tap to discover", "Check this out", "Spot this", "Lo
 /**
  * Selects a random fallback teaser from the category-specific pool.
  *
- * Args:
- *     categorySlug: Category slug for pool selection.
- *
- * Returns:
- *     Random fallback teaser string.
+ * @param categorySlug - Category slug for pool selection.
+ * @returns Random fallback teaser string.
  */
 function getRandomFallbackTeaser(categorySlug: string): string {
   const pool = FALLBACK_TEASERS_BY_CATEGORY[categorySlug] ?? GENERIC_FALLBACKS;
@@ -358,11 +461,8 @@ function getRandomFallbackTeaser(categorySlug: string): string {
 /**
  * Strips markdown formatting from text (bold, italic, headers).
  *
- * Args:
- *     text: Raw text possibly containing markdown.
- *
- * Returns:
- *     Plain text with markdown formatting removed.
+ * @param text - Raw text possibly containing markdown.
+ * @returns Plain text with markdown formatting removed.
  */
 export function stripMarkdown(text: string): string {
   return text
@@ -375,12 +475,9 @@ export function stripMarkdown(text: string): string {
 /**
  * Truncates text to a maximum word count at a sentence boundary.
  *
- * Args:
- *     text: Text to truncate.
- *     maxWords: Maximum number of words allowed.
- *
- * Returns:
- *     Truncated text ending at a sentence boundary.
+ * @param text - Text to truncate.
+ * @param maxWords - Maximum number of words allowed.
+ * @returns Truncated text ending at a sentence boundary.
  */
 export function truncateAtSentence(text: string, maxWords: number): string {
   const words = text.split(/\s+/);
@@ -417,11 +514,8 @@ const BANNED_CONTENT_PHRASES = [
 /**
  * Strips banned filler phrases from LLM-generated content and cleans up whitespace.
  *
- * Args:
- *     content: Raw content string from LLM output.
- *
- * Returns:
- *     Sanitized content with banned phrases removed and whitespace normalized.
+ * @param content - Raw content string from LLM output.
+ * @returns Sanitized content with banned phrases removed and whitespace normalized.
  */
 export function sanitizeContent(content: string): string {
   let result = content;
@@ -434,12 +528,9 @@ export function sanitizeContent(content: string): string {
 /**
  * Sanitizes a teaser string by rejecting banned patterns and replacing with a category fallback.
  *
- * Args:
- *     teaser: Raw teaser text from LLM output.
- *     categorySlug: Category slug for fallback pool selection.
- *
- * Returns:
- *     Sanitized teaser, replaced with a random category fallback if banned.
+ * @param teaser - Raw teaser text from LLM output.
+ * @param categorySlug - Category slug for fallback pool selection.
+ * @returns Sanitized teaser, replaced with a random category fallback if banned.
  */
 export function sanitizeTeaser(teaser: string, categorySlug: string): string {
   const lower = teaser.toLowerCase().trim();
@@ -450,6 +541,13 @@ export function sanitizeTeaser(teaser: string, categorySlug: string): string {
   return teaser;
 }
 
+/**
+ * Parses structured TITLE/TEASER/REMARK/LOCAL_TIP from LLM response text.
+ *
+ * @param response - Raw LLM response string.
+ * @param categorySlug - Category slug for teaser sanitization.
+ * @returns Parsed and sanitized remark fields with computed duration.
+ */
 export function parseRemarkResponse(response: string, categorySlug: string): {
   title: string;
   teaser: string;
@@ -484,15 +582,12 @@ export function parseRemarkResponse(response: string, categorySlug: string): {
 }
 
 /**
- * Generates a remark for a POI using structured profile data and category-specific persona.
+ * Generates a remark for a POI using structured profile data, OSM facts, and category persona.
  * Returns null when the POI has insufficient data for reliable remark generation.
  *
- * Args:
- *     ctx: Full POI context with profile, tags, cuisines, dishes, and contact info.
- *     model: Ollama model ID to use (defaults to OLLAMA_MODEL env).
- *
- * Returns:
- *     Generated remark with confidence level, model ID, and context sources, or null if insufficient data.
+ * @param ctx - Full POI context with profile, tags, OSM tags, and contact info.
+ * @param model - Ollama model ID to use (defaults to OLLAMA_MODEL env).
+ * @returns Generated remark with confidence level and model ID, or null if insufficient data.
  */
 export async function generateRemark(
   ctx: RemarkPoiContext,
@@ -508,7 +603,7 @@ export async function generateRemark(
   }
 
   const locale = await detectLocale(ctx.poi.address, ctx.poi.latitude, ctx.poi.longitude);
-  const usedModel = model ?? (process.env.OLLAMA_MODEL || "gemma3:4b-it-qat");
+  const usedModel = model ?? (process.env.OLLAMA_MODEL || "qwen3:8b");
 
   log.info(`Generating for "${ctx.poi.name}" | confidence: ${confidence} | locale: ${locale.country}`);
 
@@ -527,13 +622,10 @@ export async function generateRemark(
  * Generates remarks for multiple POIs sequentially with a delay between each.
  * Skips POIs where generateRemark returns null (insufficient data).
  *
- * Args:
- *     contexts: Array of remark POI contexts.
- *     model: Ollama model ID.
- *     delayMs: Delay between requests in milliseconds.
- *
- * Returns:
- *     Array of generated remarks with POI IDs (excludes skipped POIs).
+ * @param contexts - Array of remark POI contexts.
+ * @param model - Ollama model ID.
+ * @param delayMs - Delay between requests in milliseconds.
+ * @returns Array of generated remarks with POI IDs (excludes skipped POIs).
  */
 export async function generateRemarksBatch(
   contexts: Array<{ id: string; ctx: RemarkPoiContext }>,

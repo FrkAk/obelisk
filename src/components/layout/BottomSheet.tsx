@@ -95,12 +95,12 @@ export function BottomSheet({
             className="fixed inset-0 z-40"
             style={{
               backgroundColor: `rgba(0, 0, 0, ${0.04 + elevationLevel * 0.04})`,
+              pointerEvents: "none",
             }}
             variants={overlayVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
-            onClick={onClose}
           />
 
           <motion.div

@@ -223,7 +223,7 @@ export function MapView({
         cursor={cursorStyle}
         attributionControl={false}
         maxZoom={18}
-        minZoom={10}
+        minZoom={0}
       >
         {children}
       </Map>

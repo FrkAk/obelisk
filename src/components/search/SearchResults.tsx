@@ -181,6 +181,10 @@ interface CategoryInfo {
 }
 
 function getCategoryInfo(result: SearchResult): CategoryInfo {
+  if (result.source === "geocoding") {
+    return { name: result.placeType ?? "location", icon: "📌", color: "#5AC8FA" };
+  }
+
   const slug = result.category as CategorySlug;
   const color = CATEGORY_COLORS[slug];
   if (color) {

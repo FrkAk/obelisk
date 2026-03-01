@@ -15,7 +15,7 @@ interface POIPinProps {
  * Unified minimal glassmorphic pin for all POIs on the map.
  *
  * Args:
- *     remark: The story remark with associated POI data.
+ *     remark: The remark with associated POI data.
  *     isSelected: Whether this pin is currently selected.
  *     onClick: Callback when pin is tapped.
  */
@@ -40,7 +40,7 @@ export const POIPin = memo(function POIPin({
       <button
         className="relative flex items-center justify-center transition-transform duration-200"
         style={{ transform: isSelected ? "scale(1.2)" : "scale(1)" }}
-        aria-label={`View story: ${remark.title}`}
+        aria-label={`View remark: ${remark.title}`}
       >
         {isSelected && (
           <div

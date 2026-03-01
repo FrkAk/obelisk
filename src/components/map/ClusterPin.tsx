@@ -59,7 +59,7 @@ export const ClusterPin = memo(function ClusterPin({
           height: size,
           boxShadow: `0 2px 8px rgba(0, 0, 0, 0.1), 0 0 0 1.5px ${color}40`,
         }}
-        aria-label={`Cluster of ${pointCount} stories, click to expand`}
+        aria-label={`Cluster of ${pointCount} remarks, click to expand`}
       >
         <div
           className="absolute inset-0 rounded-full"

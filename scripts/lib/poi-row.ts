@@ -1,5 +1,5 @@
 /**
- * Shared POI query fields and row-to-Poi mapper used by generate-stories
+ * Shared POI query fields and row-to-Poi mapper used by generate-remarks
  * and generate-embeddings scripts.
  *
  * @module poi-row

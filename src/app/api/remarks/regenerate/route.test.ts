@@ -8,9 +8,9 @@ const mockVersionBumpRemark = mock(() =>
   Promise.resolve({
     id: "remark-002",
     poiId: "poi-001",
-    title: "New Story Title",
+    title: "New Remark Title",
     teaser: "New teaser",
-    content: "New full story content.",
+    content: "New full remark content.",
     localTip: "New local tip.",
     durationSeconds: 60,
     locale: "de-DE",
@@ -22,11 +22,11 @@ const mockVersionBumpRemark = mock(() =>
   })
 );
 const mockCheckOllamaHealth = mock(() => Promise.resolve(true));
-const mockGenerateStory = mock(() =>
+const mockGenerateRemark = mock(() =>
   Promise.resolve({
-    title: "New Story Title",
+    title: "New Remark Title",
     teaser: "New teaser",
-    content: "New full story content.",
+    content: "New full remark content.",
     localTip: "New local tip.",
     durationSeconds: 60,
     modelId: "gemma3:4b-it-qat",
@@ -55,8 +55,8 @@ mock.module("@/lib/db/queries/pois", () => ({
   loadTags: mockLoadTags,
   loadContactInfo: mockLoadContactInfo,
 }));
-mock.module("@/lib/ai/storyGenerator", () => ({
-  generateStory: mockGenerateStory,
+mock.module("@/lib/ai/remarkGenerator", () => ({
+  generateRemark: mockGenerateRemark,
 }));
 mock.module("@/lib/ai/ollama", () => ({
   checkOllamaHealth: mockCheckOllamaHealth,
@@ -126,6 +126,6 @@ describe("POST /api/remarks/regenerate", () => {
     const body = await response.json();
     expect(body.remark.id).toBe("remark-002");
     expect(body.remark.version).toBe(2);
-    expect(body.remark.title).toBe("New Story Title");
+    expect(body.remark.title).toBe("New Remark Title");
   });
 });

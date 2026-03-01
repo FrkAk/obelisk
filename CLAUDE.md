@@ -1,6 +1,6 @@
 # Obelisk
 
-Contextual discovery platform -- AI-generated stories surface as users walk through Munich. Single-city MVP. Product spec in `Obelisk.md`, roadmap in `Plan.md`.
+Contextual discovery platform -- AI-generated remarks surface as users walk through Munich. Single-city MVP. Product spec in `Obelisk.md`, roadmap in `Plan.md`.
 
 ## Tech Stack
 
@@ -8,7 +8,7 @@ Next.js 16 (App Router) + React 19, Tailwind CSS v4, Framer Motion v12, Drizzle 
 
 ## Commands
 
-- `make setup` -- full bootstrap (14 steps: docker, migrations, models, datasets, seed, enrich, stories, search)
+- `make setup` -- full bootstrap (14 steps: docker, migrations, models, datasets, seed, enrich, remarks, search)
 - `make run` / `make run-local` -- start dev at localhost:3000 (or LAN-exposed)
 - `make run-public` -- production build + Cloudflare Tunnel (obelisk.obeliskark.com)
 - `make stop` / `make destroy` -- stop (preserve data) or nuke everything
@@ -37,7 +37,7 @@ src/
 │   ├── map/                # MapView, MapControls, POIPin, ClusterPin, UserLocationMarker
 │   ├── search/             # SearchBar, SearchResults
 │   ├── poi/                # POICard
-│   ├── story/              # StoryNotification
+│   ├── remark/             # RemarkNotification
 │   ├── layout/             # BottomSheet
 │   └── ui/                 # GlassCard, GlassButton, GlassPill, ShimmerText
 ├── hooks/                  # useGeolocation, useGeofence, useNearbyRemarks, useSearch
@@ -46,7 +46,7 @@ src/
 │   │   ├── client.ts       # Drizzle ORM + postgres connection
 │   │   ├── schema.ts       # All table definitions
 │   │   └── queries/        # pois, remarks, search
-│   ├── ai/                 # ollama client, storyGenerator, embeddingBuilder, localization
+│   ├── ai/                 # ollama client, remarkGenerator, embeddingBuilder, localization
 │   ├── search/             # queryParser, typesense, semantic, ranking, overpass
 │   ├── geo/                # distance (haversine + geoBounds), categories (OSM mapping)
 │   └── ui/                 # animations, constants

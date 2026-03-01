@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { pois, categories } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { generateStory } from "@/lib/ai/storyGenerator";
-import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
+import { generateRemark } from "@/lib/ai/remarkGenerator";
+import type { RemarkPoiContext } from "@/lib/ai/remarkGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { loadTags, loadContactInfo } from "@/lib/db/queries/pois";
 import { z } from "zod";
@@ -42,7 +42,7 @@ const bodySchema = z.object({
 
 
 /**
- * Generates a story for a specific external POI.
+ * Generates a remark for a specific external POI.
  *
  * Args:
  *     poi: External POI data.
@@ -230,14 +230,14 @@ async function generateAndSaveRemark(
   const categorySlug = poi.categorySlug ?? "hidden";
   const profile = (poi.profile as PoiProfile | null) ?? null;
 
-  log.info(`Generating story for: "${poi.name}" with category: "${categoryName}"`);
+  log.info(`Generating remark for: "${poi.name}" with category: "${categoryName}"`);
 
   const [poiTagList, contact] = await Promise.all([
     loadTags(poi.id),
     loadContactInfo(poi.id),
   ]);
 
-  const storyCtx: StoryPoiContext = {
+  const remarkCtx: RemarkPoiContext = {
     poi: {
       id: poi.id,
       osmId: poi.osmId,
@@ -264,21 +264,21 @@ async function generateAndSaveRemark(
     contactInfo: contact,
   };
 
-  const story = await generateStory(storyCtx);
+  const generated = await generateRemark(remarkCtx);
 
-  if (!story) {
+  if (!generated) {
     return NextResponse.json(
-      { error: "Insufficient data for story generation" },
+      { error: "Insufficient data for remark generation" },
       { status: 422 },
     );
   }
 
-  log.success(`Generated story — Title: "${story.title}"`);
+  log.success(`Generated remark — Title: "${generated.title}"`);
 
   const insertedRemark = await insertRemark({
     poiId: poi.id,
     locale: poi.locale,
-    story,
+    remark: generated,
   });
 
   const remarkWithPoi = {

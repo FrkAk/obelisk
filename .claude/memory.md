@@ -27,7 +27,7 @@ Replaced web-scraping enrichment pipeline (SearXNG + HTML scraping + LLM extract
 **Search changes:**
 - Dropped from 3 engines to 2 (removed Obelisk DB full-text search on remarks)
 - Added `products` and `keywords` fields to Typesense schema
-- Removed enrichment gates from sync-typesense, generate-embeddings, generate-stories
+- Removed enrichment gates from sync-typesense, generate-embeddings, generate-remarks
 - All POIs now indexed and embedded
 
 **Deleted (~4,175 lines):**
@@ -71,13 +71,13 @@ Replaced web-scraping enrichment pipeline (SearXNG + HTML scraping + LLM extract
 ### IMPORTANT: Story Generation
 
 **RC6: assessConfidence crashes on POIs with partial profiles**
-- `src/lib/ai/storyGenerator.ts:135` — `profile.keywords.length` throws when `keywords` is undefined
+- `src/lib/ai/remarkGenerator.ts:135` — `profile.keywords.length` throws when `keywords` is undefined
 - Same for `products` (line 138) and `attributes` (line 142)
 - Profile exists but optional fields are missing — needs optional chaining
 - Causes story generation to skip affected POIs entirely
 
 **RC7: Story prompt issues**
-- `src/lib/ai/storyGenerator.ts:269` — repetitive teasers ("Seriously, you *need* to try this place" in 15/21 stories)
+- `src/lib/ai/remarkGenerator.ts:269` — repetitive teasers ("Seriously, you *need* to try this place" in 15/21 remarks)
 - `src/lib/ai/localization.ts:225-248` — always passes same 5 German expressions, model uses ALL of them in every story
 - No effective anti-hallucination for specific claims (nearby businesses, dishes)
 - Investigate more for these cases from docker logs
@@ -123,7 +123,7 @@ make setup (14 steps):
   8. build-taxonomy + build-brands
   9. seed-pois (from OSM PBF → pois.profile JSONB)
   10. enrich-taxonomy (merge taxonomy + brand maps + LLM synthesis)
-  11. generate-stories
+  11. generate-remarks
   12. sync-typesense
   13. generate-embeddings
   14. bun run dev
@@ -147,7 +147,7 @@ Query → queryParser (230+ fast-path OR embedding classifier fallback)
 - Ranking: `src/lib/search/ranking.ts`
 - Profile summary: `src/lib/search/profileSummary.ts`
 - Embedding builder: `src/lib/ai/embeddingBuilder.ts`
-- Story generator: `src/lib/ai/storyGenerator.ts`
+- Remark generator: `src/lib/ai/remarkGenerator.ts`
 - Localization: `src/lib/ai/localization.ts`
 
 ---

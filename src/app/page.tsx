@@ -2,7 +2,7 @@
 
 import { MapContainer } from "@/components/map/MapContainer";
 import { BottomSheet } from "@/components/layout/BottomSheet";
-import { StoryNotification } from "@/components/story/StoryNotification";
+import { RemarkNotification } from "@/components/remark/RemarkNotification";
 import { SearchBar } from "@/components/search/SearchBar";
 import { SearchResults } from "@/components/search/SearchResults";
 import { POICard } from "@/components/poi/POICard";
@@ -15,7 +15,7 @@ import type { Remark, PoiWithCategory, SearchResult, ExternalPOI, ViewportBounds
 import { haversineDistance } from "@/lib/geo/distance";
 import { springTransitions } from "@/lib/ui/animations";
 
-type SheetMode = "story" | "search" | "poi" | null;
+type SheetMode = "remark" | "search" | "poi" | null;
 
 /**
  * Converts a PoiWithCategory from a remark query into an ExternalPOI shape.
@@ -165,14 +165,14 @@ export default function Home() {
 
   const handlePinClick = useCallback((remark: Remark & { poi: PoiWithCategory }) => {
     setSelectedRemark(remark);
-    setSheetMode("story");
+    setSheetMode("remark");
     setSheetOpen(true);
   }, []);
 
   const handleNotificationTap = useCallback(() => {
     if (triggeredRemark) {
       setSelectedRemark(triggeredRemark);
-      setSheetMode("story");
+      setSheetMode("remark");
       setSheetOpen(true);
       dismissNotification();
     }
@@ -243,7 +243,7 @@ export default function Home() {
         if (data.remark) {
           setSelectedRemark(data.remark);
           setSelectedPoi(null);
-          setSheetMode("story");
+          setSheetMode("remark");
         } else {
           setSelectedPoi(data.poi);
           setSelectedRemark(null);
@@ -306,7 +306,7 @@ export default function Home() {
     if (result.remark) {
       setSelectedRemark(result.remark);
       setSelectedPoi(null);
-      setSheetMode("story");
+      setSheetMode("remark");
     } else {
       const externalPoi: ExternalPOI = {
         id: result.id,
@@ -338,7 +338,7 @@ export default function Home() {
     });
   }, [sheetMode]);
 
-  const handleGenerateStoryForPoi = useCallback(async () => {
+  const handleGenerateRemarkForPoi = useCallback(async () => {
     if (!selectedPoi) return;
 
     setGeneratingPoiId(selectedPoi.id);
@@ -352,14 +352,14 @@ export default function Home() {
 
       if (!response.ok) {
         const error = await response.json();
-        console.error("Failed to generate story:", error);
+        console.error("Failed to generate remark:", error);
         return;
       }
 
       const data = await response.json();
       setSelectedRemark(data.remark);
     } catch (error) {
-      console.error("Error generating story:", error);
+      console.error("Error generating remark:", error);
     } finally {
       setGeneratingPoiId(null);
     }
@@ -393,7 +393,7 @@ export default function Home() {
     );
   }, [selectedPoi, selectedRemark]);
 
-  const handleRegenerateStory = useCallback(async () => {
+  const handleRegenerateRemark = useCallback(async () => {
     if (!selectedRemark || isRegenerating || cooldownRemaining > 0) return;
 
     const poiId = selectedRemark.poi.id;
@@ -413,7 +413,7 @@ export default function Home() {
 
       if (!response.ok) {
         const error = await response.json();
-        console.error("Failed to regenerate story:", error);
+        console.error("Failed to regenerate remark:", error);
         return;
       }
 
@@ -423,7 +423,7 @@ export default function Home() {
       regenerateCooldownsRef.current.set(poiId, Date.now());
       setCooldownRemaining(REGENERATE_COOLDOWN_MS / 1000);
     } catch (error) {
-      console.error("Error regenerating story:", error);
+      console.error("Error regenerating remark:", error);
     } finally {
       setIsRegenerating(false);
     }
@@ -483,7 +483,7 @@ export default function Home() {
       </AnimatePresence>
 
       {triggeredRemark && !sheetOpen && (
-        <StoryNotification
+        <RemarkNotification
           remark={triggeredRemark}
           onTap={handleNotificationTap}
           onDismiss={dismissNotification}
@@ -491,7 +491,7 @@ export default function Home() {
       )}
 
       <BottomSheet isOpen={sheetOpen} onClose={handleSheetClose}>
-        {(sheetMode === "story" || sheetMode === "poi") && (
+        {(sheetMode === "remark" || sheetMode === "poi") && (
           isLookingUpPoi ? (
             <div className="py-12 flex flex-col items-center justify-center">
               <div className="w-8 h-8 border-2 border-coral border-t-transparent rounded-full animate-spin mb-4" />
@@ -502,8 +502,8 @@ export default function Home() {
               poi={selectedPoi ?? remarkPoiToExternalPOI(selectedRemark!.poi)}
               remark={selectedRemark}
               onNavigate={handleNavigateToPoi}
-              onGenerateStory={!selectedRemark ? handleGenerateStoryForPoi : undefined}
-              onRegenerate={selectedRemark ? handleRegenerateStory : undefined}
+              onGenerateRemark={!selectedRemark ? handleGenerateRemarkForPoi : undefined}
+              onRegenerate={selectedRemark ? handleRegenerateRemark : undefined}
               isGenerating={selectedPoi ? generatingPoiId === selectedPoi.id : false}
               isRegenerating={isRegenerating}
               cooldownRemaining={cooldownRemaining}

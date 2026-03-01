@@ -163,7 +163,7 @@ async function reverseGeocodeCountry(
 }
 
 /**
- * Builds a language instruction block for story generation prompts.
+ * Builds a language instruction block for remark generation prompts.
  * Provides curated examples but encourages the LLM to use its own knowledge.
  *
  * Args:

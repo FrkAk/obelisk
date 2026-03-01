@@ -3,8 +3,8 @@ import { db } from "@/lib/db/client";
 import { pois } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getRemarkById, versionBumpRemark } from "@/lib/db/queries/remarks";
-import { generateStory } from "@/lib/ai/storyGenerator";
-import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
+import { generateRemark } from "@/lib/ai/remarkGenerator";
+import type { RemarkPoiContext } from "@/lib/ai/remarkGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { loadTags, loadContactInfo } from "@/lib/db/queries/pois";
 import { z } from "zod";
@@ -18,7 +18,7 @@ const bodySchema = z.object({
 });
 
 /**
- * Regenerates a story for an existing remark using version-bumping.
+ * Regenerates a remark for an existing remark using version-bumping.
  * Old remark is kept (is_current=false), new version inserted.
  *
  * Args:
@@ -70,14 +70,14 @@ export async function POST(request: NextRequest) {
 
     const profile = (poiRow[0]?.profile as PoiProfile | null) ?? null;
 
-    log.info(`Generating new story for: "${existingRemark.poi.name}"`);
+    log.info(`Generating new remark for: "${existingRemark.poi.name}"`);
 
     const [poiTagList, contact] = await Promise.all([
       loadTags(existingRemark.poi.id),
       loadContactInfo(existingRemark.poi.id),
     ]);
 
-    const storyCtx: StoryPoiContext = {
+    const remarkCtx: RemarkPoiContext = {
       poi: {
         id: existingRemark.poi.id,
         osmId: existingRemark.poi.osmId,
@@ -104,21 +104,21 @@ export async function POST(request: NextRequest) {
       contactInfo: contact,
     };
 
-    const story = await generateStory(storyCtx);
+    const generated = await generateRemark(remarkCtx);
 
-    if (!story) {
+    if (!generated) {
       return NextResponse.json(
-        { error: "Insufficient data for story regeneration" },
+        { error: "Insufficient data for remark regeneration" },
         { status: 422 },
       );
     }
 
-    log.success(`Generated new story - Title: "${story.title}"`);
+    log.success(`Generated new remark - Title: "${generated.title}"`);
 
     const newRemark = await versionBumpRemark(
       remarkId,
       existingRemark.poi.id,
-      story,
+      generated,
     );
 
     const remarkWithPoi = {
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
       remark: remarkWithPoi,
     });
   } catch (error) {
-    log.error("Error regenerating story:", error);
+    log.error("Error regenerating remark:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

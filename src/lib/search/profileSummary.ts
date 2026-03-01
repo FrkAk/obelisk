@@ -37,7 +37,7 @@ export interface TypesenseDocInput {
   categorySlug: string;
   profile: PoiProfile | null;
   tags: string[];
-  hasStory: boolean;
+  hasRemark: boolean;
   cuisines: string[];
   wheelchair: boolean | null;
   dogFriendly: boolean | null;
@@ -79,7 +79,7 @@ export function buildTypesenseDocument(input: TypesenseDocInput): TypesensePoiDo
     freeEntry: input.freeEntry ?? undefined,
     openingHours: input.openingHours ?? undefined,
     location: [input.latitude, input.longitude],
-    hasStory: input.hasStory,
+    hasRemark: input.hasRemark,
     hasOutdoorSeating: osmTags?.outdoor_seating === "yes",
     hasWifi: osmTags?.internet_access === "wlan" || osmTags?.internet_access === "yes",
     address: input.address ?? "",

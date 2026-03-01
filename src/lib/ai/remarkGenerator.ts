@@ -4,9 +4,9 @@ import type { LocaleInfo } from "./localization";
 import type { Poi, Tag, PoiProfile, ContactInfo } from "@/types";
 import { createLogger } from "@/lib/logger";
 
-const log = createLogger("storyGenerator");
+const log = createLogger("remarkGenerator");
 
-export interface StoryPoiContext {
+export interface RemarkPoiContext {
   poi: Poi;
   categorySlug: string;
   categoryName: string;
@@ -15,7 +15,7 @@ export interface StoryPoiContext {
   contactInfo?: ContactInfo | null;
 }
 
-export interface GeneratedStory {
+export interface GeneratedRemark {
   title: string;
   teaser: string;
   content: string;
@@ -120,7 +120,7 @@ function getPersona(categorySlug: string): CategoryPersona {
 }
 
 /**
- * Scores POI data richness to determine story generation confidence level.
+ * Scores POI data richness to determine remark generation confidence level.
  * Based on JSONB profile completeness: keywords, products, summary, and tags.
  *
  * Args:
@@ -129,7 +129,7 @@ function getPersona(categorySlug: string): CategoryPersona {
  * Returns:
  *     Confidence level: "high" (score >= 5), "medium" (>= 2), or "low".
  */
-export function assessConfidence(ctx: StoryPoiContext): "high" | "medium" | "low" {
+export function assessConfidence(ctx: RemarkPoiContext): "high" | "medium" | "low" {
   let score = 0;
   const profile = ctx.profile;
 
@@ -210,28 +210,28 @@ function buildProfileContext(profile: PoiProfile | null): string {
 const CATEGORY_FEW_SHOT: Partial<Record<string, string>> = {
   shopping: `TITLE: The Vintage Goldmine
 TEASER: Vintage finds, no crowds
-STORY: On a quiet Gasse off the main drag, this Laden has the kind of curated selection you won't find in any Kaufhaus. The owner knows every piece by heart and the vibe is relaxed — no pushy sales, just good finds.
+REMARK: On a quiet Gasse off the main drag, this Laden has the kind of curated selection you won't find in any Kaufhaus. The owner knows every piece by heart and the vibe is relaxed — no pushy sales, just good finds.
 LOCAL_TIP: Go on weekday mornings when new stock hits the shelves. Ask about their alterations service.`,
   food: `TITLE: Honest Bavarian Comfort
 TEASER: Schnitzel done right
-STORY: This Wirtshaus does one thing and does it well — proper Bavarian comfort food without the tourist markup. The Schnitzel is hand-pounded and the Kartoffelsalat is made fresh. Nothing fancy, just gemütlich and real.
+REMARK: This Wirtshaus does one thing and does it well — proper Bavarian comfort food without the tourist markup. The Schnitzel is hand-pounded and the Kartoffelsalat is made fresh. Nothing fancy, just gemütlich and real.
 LOCAL_TIP: Skip the English menu and point at what the Stammgäste are having. The Tagesgericht is always the move.`,
   culture: `TITLE: The Quiet Stage
 TEASER: Seats so close you feel it
-STORY: While everyone queues for the big Staatstheater, this kleine Bühne puts on shows that actually surprise you. The intimate space means every seat is a good one, and the crowd is a mix of students and regulars who know what's up.
+REMARK: While everyone queues for the big Staatstheater, this kleine Bühne puts on shows that actually surprise you. The intimate space means every seat is a good one, and the crowd is a mix of students and regulars who know what's up.
 LOCAL_TIP: Check their Abendkasse — last-minute tickets are half price and almost always available on weeknights.`,
   history: `TITLE: Walls That Remember
 TEASER: Centuries in one courtyard
-STORY: Most people walk right past this unassuming Altbau without a second glance. But these walls have seen centuries — from medieval Handwerker to wartime shelter. The courtyard alone tells more stories than most museums in the Altstadt.
+REMARK: Most people walk right past this unassuming Altbau without a second glance. But these walls have seen centuries — from medieval Handwerker to wartime shelter. The courtyard alone tells more stories than most museums in the Altstadt.
 LOCAL_TIP: Visit at dusk when the courtyard is empty and the old Laternen flicker on. That's when you feel the history.`,
   art: `TITLE: Color on Every Corner
 TEASER: Watch artists at work
-STORY: This Atelier doubles as gallery and workspace, and you can watch Künstler at work most afternoons. The rotating exhibits favor local talent over big names, and the vibe is refreshingly ungezwungen — no velvet ropes here.
+REMARK: This Atelier doubles as gallery and workspace, and you can watch Künstler at work most afternoons. The rotating exhibits favor local talent over big names, and the vibe is refreshingly ungezwungen — no velvet ropes here.
 LOCAL_TIP: First Thursday each month is Vernissage night — free wine, the artists are there, and it's genuinely good.`,
 };
 
 /**
- * Builds the full LLM prompt for story generation using persona, profile, and locale.
+ * Builds the full LLM prompt for remark generation using persona, profile, and locale.
  *
  * Args:
  *     ctx: Full POI context with profile, tags, and contact info.
@@ -242,7 +242,7 @@ LOCAL_TIP: First Thursday each month is Vernissage night — free wine, the arti
  *     Assembled prompt string for the LLM.
  */
 function buildPrompt(
-  ctx: StoryPoiContext,
+  ctx: RemarkPoiContext,
   confidence: "high" | "medium" | "low",
   locale: LocaleInfo,
 ): string {
@@ -289,7 +289,7 @@ Write:
    Do NOT use generic phrases. Make it specific to what makes this place unique.
    Bad: "Where locals actually go", "A proper local spot", "Worth the detour"
    Good: "Schnitzel worth the queue", "Books & coffee since 1892", "Bavaria's tiniest gallery"
-3. STORY: 2-3 SHORT sentences. Be concise.
+3. REMARK: 2-3 SHORT sentences. Be concise.
 4. LOCAL_TIP: 1-2 sentences. ${persona.tipStyle}
    IMPORTANT: Do NOT start with "If you're". Vary your opener.
    Do NOT invent staff names, specific dishes, or nearby businesses not in the data above.
@@ -302,7 +302,7 @@ ${fewShot}
 Now write yours for "${ctx.poi.name}". Format your response EXACTLY like this:
 TITLE: [your title]
 TEASER: [your teaser]
-STORY: [your story]
+REMARK: [your remark]
 LOCAL_TIP: [your tip]`;
 }
 
@@ -450,7 +450,7 @@ export function sanitizeTeaser(teaser: string, categorySlug: string): string {
   return teaser;
 }
 
-export function parseStoryResponse(response: string, categorySlug: string): {
+export function parseRemarkResponse(response: string, categorySlug: string): {
   title: string;
   teaser: string;
   content: string;
@@ -458,17 +458,17 @@ export function parseStoryResponse(response: string, categorySlug: string): {
   durationSeconds: number;
 } {
   const titleMatch = response.match(/TITLE:\s*(.+?)(?=\nTEASER:|$)/is);
-  const teaserMatch = response.match(/TEASER:\s*(.+?)(?=\nSTORY:|$)/is);
-  const storyMatch = response.match(/STORY:\s*(.+?)(?=\nLOCAL_TIP:|$)/is);
+  const teaserMatch = response.match(/TEASER:\s*(.+?)(?=\nREMARK:|$)/is);
+  const remarkMatch = response.match(/REMARK:\s*(.+?)(?=\nLOCAL_TIP:|$)/is);
   const tipMatch = response.match(/LOCAL_TIP:\s*(.+?)$/is);
 
-  const rawContent = stripMarkdown(storyMatch?.[1]?.trim() || response.slice(0, 300));
+  const rawContent = stripMarkdown(remarkMatch?.[1]?.trim() || response.slice(0, 300));
   const cleanContent = sanitizeContent(rawContent);
   const content = truncateAtSentence(cleanContent, 100);
   const rawTeaser = stripMarkdown(teaserMatch?.[1]?.trim() || "Tap to discover");
   const teaser = sanitizeTeaser(rawTeaser, categorySlug);
-  const rawTitle = stripMarkdown(titleMatch?.[1]?.trim() || "A Hidden Story");
-  const rawTip = stripMarkdown(tipMatch?.[1]?.trim() || "Ask locals for more stories!");
+  const rawTitle = stripMarkdown(titleMatch?.[1]?.trim() || "A Hidden Remark");
+  const rawTip = stripMarkdown(tipMatch?.[1]?.trim() || "Ask locals for more!");
   const localTip = sanitizeContent(rawTip);
 
   const wordCount = content.split(/\s+/).length;
@@ -484,26 +484,26 @@ export function parseStoryResponse(response: string, categorySlug: string): {
 }
 
 /**
- * Generates a story for a POI using structured profile data and category-specific persona.
- * Returns null when the POI has insufficient data for reliable story generation.
+ * Generates a remark for a POI using structured profile data and category-specific persona.
+ * Returns null when the POI has insufficient data for reliable remark generation.
  *
  * Args:
  *     ctx: Full POI context with profile, tags, cuisines, dishes, and contact info.
  *     model: Ollama model ID to use (defaults to OLLAMA_MODEL env).
  *
  * Returns:
- *     Generated story with confidence level, model ID, and context sources, or null if insufficient data.
+ *     Generated remark with confidence level, model ID, and context sources, or null if insufficient data.
  */
-export async function generateStory(
-  ctx: StoryPoiContext,
+export async function generateRemark(
+  ctx: RemarkPoiContext,
   model?: string,
-): Promise<GeneratedStory | null> {
+): Promise<GeneratedRemark | null> {
   const confidence = assessConfidence(ctx);
   const hasKeywords = (ctx.profile?.keywords?.length ?? 0) > 0;
   const hasProducts = (ctx.profile?.products?.length ?? 0) > 0;
 
   if (confidence === "low" && !hasKeywords && !hasProducts) {
-    log.info(`Skipping "${ctx.poi.name}" — insufficient data for reliable story`);
+    log.info(`Skipping "${ctx.poi.name}" — insufficient data for reliable remark`);
     return null;
   }
 
@@ -514,7 +514,7 @@ export async function generateStory(
 
   const prompt = buildPrompt(ctx, confidence, locale);
   const response = await generateText(prompt, usedModel);
-  const parsed = parseStoryResponse(response, ctx.categorySlug);
+  const parsed = parseRemarkResponse(response, ctx.categorySlug);
 
   return {
     ...parsed,
@@ -524,32 +524,32 @@ export async function generateStory(
 }
 
 /**
- * Generates stories for multiple POIs sequentially with a delay between each.
- * Skips POIs where generateStory returns null (insufficient data).
+ * Generates remarks for multiple POIs sequentially with a delay between each.
+ * Skips POIs where generateRemark returns null (insufficient data).
  *
  * Args:
- *     contexts: Array of story POI contexts.
+ *     contexts: Array of remark POI contexts.
  *     model: Ollama model ID.
  *     delayMs: Delay between requests in milliseconds.
  *
  * Returns:
- *     Array of generated stories with POI IDs (excludes skipped POIs).
+ *     Array of generated remarks with POI IDs (excludes skipped POIs).
  */
-export async function generateStoriesBatch(
-  contexts: Array<{ id: string; ctx: StoryPoiContext }>,
+export async function generateRemarksBatch(
+  contexts: Array<{ id: string; ctx: RemarkPoiContext }>,
   model?: string,
   delayMs: number = 300,
-): Promise<Array<{ poiId: string; story: GeneratedStory }>> {
-  const results: Array<{ poiId: string; story: GeneratedStory }> = [];
+): Promise<Array<{ poiId: string; remark: GeneratedRemark }>> {
+  const results: Array<{ poiId: string; remark: GeneratedRemark }> = [];
 
   for (const { id, ctx } of contexts) {
     try {
-      const story = await generateStory(ctx, model);
-      if (!story) {
+      const remark = await generateRemark(ctx, model);
+      if (!remark) {
         log.info(`Skipped: ${ctx.poi.name} (insufficient data)`);
         continue;
       }
-      results.push({ poiId: id, story });
+      results.push({ poiId: id, remark });
       log.info(`Generated: ${ctx.poi.name}`);
     } catch (error) {
       log.error(

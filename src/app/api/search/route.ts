@@ -56,7 +56,7 @@ function typesenseHitToSearchResult(
     description: hit.description,
     cuisine: hit.cuisines?.join(", "),
     amenityType: hit.amenityType,
-    hasStory: hit.hasStory,
+    hasRemark: hit.hasRemark,
     hasOutdoorSeating: hit.hasOutdoorSeating,
     hasWifi: hit.hasWifi,
     source: "typesense",
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
           ),
           score: 100,
           address: randomRemark.poi.address ?? undefined,
-          hasStory: true,
+          hasRemark: true,
           remark: randomRemark as SearchResult["remark"],
           source: "typesense",
         };
@@ -295,7 +295,7 @@ export async function POST(request: NextRequest) {
       const r = topN[i];
       const dist = r.distance ? `${(r.distance / 1000).toFixed(1)}km` : "?";
       log.info(
-        `  #${i + 1} "${r.name}" — score: ${r.score.toFixed(4)}, src: ${r.source}, dist: ${dist}${r.hasStory ? " ★" : ""}`
+        `  #${i + 1} "${r.name}" — score: ${r.score.toFixed(4)}, src: ${r.source}, dist: ${dist}${r.hasRemark ? " ★" : ""}`
       );
     }
 

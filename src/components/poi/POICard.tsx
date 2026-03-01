@@ -14,7 +14,7 @@ interface POICardProps {
   poi: ExternalPOI;
   remark?: (Remark & { poi: Poi & { category?: Category } }) | null;
   onNavigate?: () => void;
-  onGenerateStory?: () => void;
+  onGenerateRemark?: () => void;
   onRegenerate?: () => void;
   onBack?: () => void;
   isGenerating?: boolean;
@@ -38,20 +38,20 @@ function formatPhone(phone: string): string {
  *
  * Args:
  *     poi: External POI data.
- *     remark: Optional existing Obelisk story.
+ *     remark: Optional existing Obelisk remark.
  *     onNavigate: Callback when navigation is requested.
- *     onGenerateStory: Callback to generate story.
- *     onRegenerate: Callback to regenerate existing story.
- *     isGenerating: Whether story generation is in progress.
- *     isRegenerating: Whether story regeneration is in progress.
+ *     onGenerateRemark: Callback to generate remark.
+ *     onRegenerate: Callback to regenerate existing remark.
+ *     isGenerating: Whether remark generation is in progress.
+ *     isRegenerating: Whether remark regeneration is in progress.
  *     cooldownRemaining: Seconds before regeneration allowed.
- *     autoGenerate: Auto-trigger generation if no story exists.
+ *     autoGenerate: Auto-trigger generation if no remark exists.
  */
 export function POICard({
   poi,
   remark,
   onNavigate,
-  onGenerateStory,
+  onGenerateRemark,
   onRegenerate,
   onBack,
   isGenerating = false,
@@ -61,7 +61,7 @@ export function POICard({
 }: POICardProps) {
   const categoryIcon = CATEGORY_ICONS[poi.category as CategorySlug] ?? "📍";
   const categoryColor = CATEGORY_COLORS[poi.category as CategorySlug] || CATEGORY_COLORS.history;
-  const hasStory = !!remark;
+  const hasRemark = !!remark;
   const isLoading = isGenerating || isRegenerating;
 
   const hasTriggeredRef = useRef<string | null>(null);
@@ -69,16 +69,16 @@ export function POICard({
   useEffect(() => {
     if (
       autoGenerate &&
-      !hasStory &&
+      !hasRemark &&
       !isGenerating &&
-      onGenerateStory &&
+      onGenerateRemark &&
       hasTriggeredRef.current !== poi?.id
     ) {
       hasTriggeredRef.current = poi?.id ?? null;
-      onGenerateStory();
+      onGenerateRemark();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoGenerate, hasStory, isGenerating, poi?.id]);
+  }, [autoGenerate, hasRemark, isGenerating, poi?.id]);
 
   return (
     <motion.article
@@ -187,7 +187,7 @@ export function POICard({
 
       <div>
         <AnimatePresence mode="wait">
-          {isLoading && !hasStory ? (
+          {isLoading && !hasRemark ? (
             <motion.div
               key="shimmer"
               initial={{ opacity: 0 }}
@@ -215,11 +215,11 @@ export function POICard({
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-                <span className="font-medium">Creating story...</span>
+                <span className="font-medium">Creating remark...</span>
               </div>
               <ShimmerText lines={4} />
             </motion.div>
-          ) : hasStory ? (
+          ) : hasRemark ? (
             <motion.div
               key="content"
               initial={{ opacity: 0 }}
@@ -277,7 +277,7 @@ export function POICard({
               className="text-center py-6"
             >
               <p className="text-[var(--foreground-secondary)] text-[15px]">
-                No story yet for this place
+                No remark yet for this place
               </p>
             </motion.div>
           )}
@@ -306,7 +306,7 @@ export function POICard({
           </motion.button>
         )}
 
-        {hasStory && onRegenerate && (
+        {hasRemark && onRegenerate && (
           <motion.button
             className="flex items-center justify-center w-11 h-11 glass-floating rounded-xl disabled:opacity-50"
             onClick={onRegenerate}

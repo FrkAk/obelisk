@@ -9,7 +9,7 @@ Last updated time: February 26, 2026
 
 Obelisk is a **next-generation intelligent map** that deeply understands every place in the world. Unlike traditional maps that show you data and wait for you to search, Obelisk already knows what you need — and shows you before you ask.
 
-Today's maps are transactional tools. Obelisk is building toward a **full daily-driver map replacement** — starting with what no other map has: genuine semantic understanding of places. Every café, monument, park, and hidden courtyard has a rich profile of what it is, what makes it special, and who it's right for. This intelligence powers everything: contextual discovery, ambient storytelling, and eventually navigation, transit, and daily use.
+Today's maps are transactional tools. Obelisk is building toward a **full daily-driver map replacement** — starting with what no other map has: genuine semantic understanding of places. Every café, monument, park, and hidden courtyard has a rich profile of what it is, what makes it special, and who it's right for. This intelligence powers everything: contextual discovery, ambient remarking, and eventually navigation, transit, and daily use.
 
 **Core Philosophy:** Be the knowledgeable local friend everyone wishes they had in every city.
 
@@ -44,7 +44,7 @@ This research loop is exhausting, repetitive, and often wrong — because rating
 - People still ask friends and locals for recommendations
 - The best discoveries are accidental, not searched
 - Context matters more than ratings
-- Stories make places memorable
+- Remarks make places memorable
 - Decision fatigue is real
 
 ### The Gap
@@ -68,7 +68,7 @@ Every POI in Obelisk has a deep semantic profile — not just a name and address
 | **Primary Goal** | Efficient navigation | Intelligent understanding + discovery |
 | **Knowledge** | Business listings, user reviews | Deep semantic profiles, taxonomy, embeddings |
 | **Mode** | Reactive (you search) | Proactive (it already knows) |
-| **Content** | Business data, reviews | Stories, context, local knowledge, semantic understanding |
+| **Content** | Business data, reviews | Remarks, context, local knowledge, semantic understanding |
 | **Personalization** | Based on search history | Based on interests, context, time, and place understanding |
 | **Discovery** | Sponsored results first | Best match based on genuine understanding |
 | **Experience** | Look at screen, read reviews | Glance at map, trust the intelligence |
@@ -78,10 +78,10 @@ Every POI in Obelisk has a deep semantic profile — not just a name and address
 
 1. **Semantic Understanding** - Every place has a deep profile: what it is, what makes it special, who it's for
 2. **Zero-Friction Discovery** - The map shows you the right places before you search
-3. **Ambient Storytelling** - Stories find you as you walk, powered by proximity intelligence
+3. **Ambient Remarking** - Remarks find you as you walk, powered by proximity intelligence
 4. **Contextual Awareness** - Time, weather, your interests, your pace — everything factors in
 5. **Audio-First** - Hands-free exploration, eyes on the world
-6. **Emotional Connection** - Places have stories, not just ratings
+6. **Emotional Connection** - Places have remarks, not just ratings
 
 ---
 
@@ -89,18 +89,18 @@ Every POI in Obelisk has a deep semantic profile — not just a name and address
 
 ### 4.1 Remarks (Primary Feature)
 
-**The soul of Obelisk** - Contextual stories that surface automatically as you explore.
+**The soul of Obelisk** - Contextual remarks that surface automatically as you explore.
 
 **How it works:**
 
 1. Walking near an interesting place triggers a subtle notification
 2. A 3-5 word teaser appears: *"The Fountain's Secret"*
-3. Tap to hear a 30-60 second story narrated in conversational tone
-4. Or keep walking—another story will find you
+3. Tap to hear a 30-60 second remark narrated in conversational tone
+4. Or keep walking—another remark will find you
 
 **Types of Remarks:**
 
-- **AI-Generated**: LLM creates stories from OSM, Wikipedia, historical data, business webpage
+- **AI-Generated**: LLM creates remarks from OSM, Wikipedia, historical data, business webpage
 - **User-Created**: Locals share their knowledge, create tours, add tips
 - **Curated Tours**: Thematic walking routes (Architecture, Food, History, etc.)
 
@@ -129,7 +129,7 @@ Every POI in Obelisk has a deep semantic profile — not just a name and address
 
 **Synchronized shared experiences**
 
-- Listen to the same audio/story with friends simultaneously
+- Listen to the same audio/remark with friends simultaneously
 - Shared walking tours where everyone hears the same narration
 - Focus on the world together, not your screens
 - Creates bonding through shared discovery
@@ -148,7 +148,7 @@ Every POI in Obelisk has a deep semantic profile — not just a name and address
 **Preference Learning:**
 
 - Learns your interests over time (history, food, architecture, nature)
-- Adapts story density to your pace
+- Adapts remark density to your pace
 - Suggests based on time of day, weather, mood
 
 ### 4.5 Echoes
@@ -164,7 +164,7 @@ Every POI in Obelisk has a deep semantic profile — not just a name and address
 
 **Place-first social layer**
 
-A full social experience where every post is pinned to a real place. Share photos, stories, and recommendations from your travels. Follow explorers whose taste you trust, like posts that inspire you, build your own profile of places you've been. The feed isn't a timeline — it's the world map.
+A full social experience where every post is pinned to a real place. Share photos, remarks, and recommendations from your travels. Follow explorers whose taste you trust, like posts that inspire you, build your own profile of places you've been. The feed isn't a timeline — it's the world map.
 
 - Visit a place, post a Frame — photo, short text, your take on it
 - Pinned to the exact location on the map
@@ -185,7 +185,7 @@ A full social experience where every post is pinned to a real place. Share photo
 1. **Open app** → Map centered on current location
 2. **Immediate value** → Show 2-3 nearby Remarks pins
 3. **Gentle prompt** → "Walk toward the fountain to discover its secret"
-4. **First story** → Delight within 2 minutes of opening
+4. **First remark** → Delight within 2 minutes of opening
 
 **No lengthy onboarding.** The product teaches itself through use.
 
@@ -550,7 +550,7 @@ Two-engine search with Reciprocal Rank Fusion:
 
 ### Phase 1: Core Discovery (COMPLETE — January 2026)
 
-**Goal:** Prove the ambient storytelling concept
+**Goal:** Prove the ambient remarking concept
 
 **Features:**
 
@@ -1163,7 +1163,7 @@ Pin interactions:
 
 ### 18.1 Phase 1 - "Prove the Magic" (COMPLETE — January 2026)
 
-**Goal:** Validate that ambient storytelling creates engagement
+**Goal:** Validate that ambient remarking creates engagement
 
 **Scope:** Single city (Munich)
 
@@ -1647,13 +1647,13 @@ We offer core discovery features free to maximize adoption, with premium feature
 
 ### What is Obelisk?
 
-A next-generation intelligent map that deeply understands every place in the world. Starting with contextual discovery and ambient storytelling, building toward a full daily-driver map replacement powered by semantic understanding.
+A next-generation intelligent map that deeply understands every place in the world. Starting with contextual discovery and ambient remarking, building toward a full daily-driver map replacement powered by semantic understanding.
 
 ### Core Differentiators
 
 1. **Semantic Understanding** - Deep knowledge profiles for every place, not just names and ratings
 2. **Zero-Friction Discovery** - The map shows you the right places before you search
-3. **Ambient Storytelling** - Stories find you as you walk, powered by proximity intelligence
+3. **Ambient Remarking** - Remarks find you as you walk, powered by proximity intelligence
 4. **Audio-First** - Eyes on the world, not the screen
 5. **Intelligence-First Strategy** - Build understanding first, utility features follow
 6. **Place-First Social** - Frames turns every post into a map pin, making discovery spatial

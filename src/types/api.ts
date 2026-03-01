@@ -131,7 +131,7 @@ export interface SearchResult {
   description?: string;
   cuisine?: string;
   amenityType?: string;
-  hasStory: boolean;
+  hasRemark: boolean;
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
   placeType?: string;

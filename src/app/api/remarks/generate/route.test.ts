@@ -1,11 +1,11 @@
 import { describe, test, expect, mock } from "bun:test";
 
 const mockCheckOllamaHealth = mock(() => Promise.resolve(true));
-const mockGenerateStory = mock(() =>
+const mockGenerateRemark = mock(() =>
   Promise.resolve({
-    title: "A Munich Story",
+    title: "A Munich Remark",
     teaser: "Discover this gem",
-    content: "Full story content here.",
+    content: "Full remark content here.",
     localTip: "Visit at sunset.",
     durationSeconds: 45,
     modelId: "gemma3:4b-it-qat",
@@ -16,9 +16,9 @@ const mockInsertRemark = mock(() =>
   Promise.resolve({
     id: "remark-001",
     poiId: "poi-001",
-    title: "A Munich Story",
+    title: "A Munich Remark",
     teaser: "Discover this gem",
-    content: "Full story content here.",
+    content: "Full remark content here.",
     localTip: "Visit at sunset.",
     durationSeconds: 45,
     locale: "de-DE",
@@ -44,8 +44,8 @@ mock.module("@/lib/db/schema", () => ({
   remarks: { id: "id", poiId: "poiId" },
   categories: { id: "id", name: "name", slug: "slug", color: "color" },
 }));
-mock.module("@/lib/ai/storyGenerator", () => ({
-  generateStory: mockGenerateStory,
+mock.module("@/lib/ai/remarkGenerator", () => ({
+  generateRemark: mockGenerateRemark,
 }));
 mock.module("@/lib/ai/ollama", () => ({
   checkOllamaHealth: mockCheckOllamaHealth,
@@ -97,7 +97,7 @@ describe("POST /api/remarks/generate", () => {
     expect(body.error).toContain("AI service unavailable");
   });
 
-  test("returns generated: 0 when all POIs already have stories", async () => {
+  test("returns generated: 0 when all POIs already have remarks", async () => {
     mockCheckOllamaHealth.mockImplementationOnce(() => Promise.resolve(true));
     mockDbChain.limit.mockImplementationOnce(() => Promise.resolve([]));
 
@@ -112,6 +112,6 @@ describe("POST /api/remarks/generate", () => {
     const body = await response.json();
     expect(body.generated).toBe(0);
     expect(body.remarks).toEqual([]);
-    expect(body.message).toBe("All nearby POIs already have stories.");
+    expect(body.message).toBe("All nearby POIs already have remarks.");
   });
 });

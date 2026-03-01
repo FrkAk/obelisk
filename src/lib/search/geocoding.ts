@@ -74,7 +74,7 @@ export async function geocodeQuery(
         feature.properties.place_formatted ??
         undefined,
       placeType: feature.properties.feature_type,
-      hasStory: false,
+      hasRemark: false,
       source: "geocoding" as const,
     }));
   } catch (error) {

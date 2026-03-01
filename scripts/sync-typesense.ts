@@ -53,7 +53,7 @@ async function syncTypesense() {
       .filter((id): id is string => id !== null)
   );
 
-  log.info(`${remarkPoiIds.size} POIs have stories`);
+  log.info(`${remarkPoiIds.size} POIs have remarks`);
 
   log.info("Loading tags, cuisines, accessibility...");
 
@@ -84,7 +84,7 @@ async function syncTypesense() {
       categorySlug: category,
       profile,
       tags: tagMap.get(poi.id) ?? [],
-      hasStory: remarkPoiIds.has(poi.id),
+      hasRemark: remarkPoiIds.has(poi.id),
       cuisines: cuisineMap.get(poi.id) ?? [],
       wheelchair: accessibility?.wheelchair ?? null,
       dogFriendly: accessibility?.dogFriendly ?? null,

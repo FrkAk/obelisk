@@ -27,7 +27,7 @@ describe("geocodeQuery", () => {
 
   test("returns empty array on fetch failure", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => Promise.reject(new Error("Network error")));
+    globalThis.fetch = mock(() => Promise.reject(new Error("Network error"))) as unknown as typeof fetch;
 
     const results = await geocodeQuery("Marienplatz", 48.137, 11.576);
     expect(results).toEqual([]);
@@ -39,7 +39,7 @@ describe("geocodeQuery", () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response(null, { status: 500 }))
-    );
+    ) as unknown as typeof fetch;
 
     const results = await geocodeQuery("Marienplatz", 48.137, 11.576);
     expect(results).toEqual([]);
@@ -73,7 +73,7 @@ describe("geocodeQuery", () => {
           { status: 200 }
         )
       )
-    );
+    ) as unknown as typeof fetch;
 
     const results = await geocodeQuery("Marienplatz", 48.137, 11.576);
 
@@ -81,7 +81,7 @@ describe("geocodeQuery", () => {
     expect(results[0].id).toBe("geo-abc123");
     expect(results[0].name).toBe("Marienplatz");
     expect(results[0].source).toBe("geocoding");
-    expect(results[0].hasStory).toBe(false);
+    expect(results[0].hasRemark).toBe(false);
     expect(results[0].latitude).toBe(48.1374);
     expect(results[0].longitude).toBe(11.5755);
     expect(results[0].address).toBe("Marienplatz, 80331 München, Germany");
@@ -117,7 +117,7 @@ describe("geocodeQuery", () => {
           { status: 200 }
         )
       )
-    );
+    ) as unknown as typeof fetch;
 
     const results = await geocodeQuery("Sendlinger Tor", 48.137, 11.576);
 
@@ -134,7 +134,7 @@ describe("geocodeQuery", () => {
       return Promise.resolve(
         new Response(JSON.stringify({ features: [] }), { status: 200 })
       );
-    });
+    }) as unknown as typeof fetch;
 
     await geocodeQuery("test query", 48.137, 11.576);
 

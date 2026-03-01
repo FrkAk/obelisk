@@ -49,19 +49,19 @@ mock.module("@/lib/ai/ollama", () => ({
   checkOllamaHealth: mockCheckOllamaHealth,
 }));
 
-const mockGenerateStory = mock(() =>
+const mockGenerateRemark = mock(() =>
   Promise.resolve({
     title: "A Bavarian Tale",
-    teaser: "Discover the story",
-    content: "Full story content here.",
+    teaser: "Discover the remark",
+    content: "Full remark content here.",
     localTip: "Visit at sunset.",
     durationSeconds: 45,
     modelId: "gemma3:4b-it-qat",
     confidence: "medium",
   })
 );
-mock.module("@/lib/ai/storyGenerator", () => ({
-  generateStory: mockGenerateStory,
+mock.module("@/lib/ai/remarkGenerator", () => ({
+  generateRemark: mockGenerateRemark,
 }));
 
 const cachedRemark = makeRemarkWithPoi();
@@ -71,8 +71,8 @@ const mockInsertRemark = mock(() =>
     id: "remark-new",
     poiId: "poi-001",
     title: "A Bavarian Tale",
-    teaser: "Discover the story",
-    content: "Full story content here.",
+    teaser: "Discover the remark",
+    content: "Full remark content here.",
     localTip: "Visit at sunset.",
     durationSeconds: 45,
     createdAt: new Date("2025-01-01"),
@@ -145,7 +145,7 @@ describe("POST /api/remarks/generate-for-poi", () => {
 
     expect(response.status).toBe(200);
     expect(body.cached).toBe(true);
-    expect(body.remark.title).toBe("Test Story Title");
+    expect(body.remark.title).toBe("Test Remark Title");
   });
 
   test("returns 503 when Ollama is down", async () => {

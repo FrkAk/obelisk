@@ -205,7 +205,7 @@ export function MapContainer({
       {isLoading && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
           <div className="glass px-4 py-2 rounded-full text-sm">
-            Loading stories...
+            Loading remarks...
           </div>
         </div>
       )}

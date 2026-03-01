@@ -4,7 +4,7 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "Obelisk - Your Local Guide, Anywhere",
-  description: "Discover stories around you with Obelisk, your contextual discovery platform",
+  description: "Discover remarks around you with Obelisk, your contextual discovery platform",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

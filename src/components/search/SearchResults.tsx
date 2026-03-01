@@ -139,9 +139,9 @@ function SearchResultCard({ result, onTap }: SearchResultCardProps) {
             </GlassPill>
           )}
 
-          {result.hasStory && (
+          {result.hasRemark && (
             <GlassPill size="sm" color="#FF6B4A">
-              Story
+              Remark
             </GlassPill>
           )}
 

@@ -30,7 +30,7 @@ interface TypesensePoiDocument {
   amenityType?: string;
   cuisines?: string[];
   location: [number, number];
-  hasStory: boolean;
+  hasRemark: boolean;
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
   wheelchair?: boolean;
@@ -63,7 +63,7 @@ const poiSchema = {
     { name: "freeEntry", type: "bool" as const, facet: true as const, optional: true as const },
     { name: "openingHours", type: "string" as const, optional: true as const },
     { name: "location", type: "geopoint" as const },
-    { name: "hasStory", type: "bool" as const, facet: true as const },
+    { name: "hasRemark", type: "bool" as const, facet: true as const },
     { name: "hasOutdoorSeating", type: "bool" as const, optional: true as const },
     { name: "hasWifi", type: "bool" as const, optional: true as const },
     { name: "address", type: "string" as const, optional: true as const },
@@ -83,7 +83,7 @@ interface TypesenseSearchFilters {
   wheelchair?: boolean;
   dogFriendly?: boolean;
   freeEntry?: boolean;
-  hasStory?: boolean;
+  hasRemark?: boolean;
   hasOutdoorSeating?: boolean;
   hasWifi?: boolean;
 }
@@ -166,8 +166,8 @@ export async function searchPOIs(
   if (filters?.freeEntry) {
     filterParts.push(`freeEntry:=true`);
   }
-  if (filters?.hasStory !== undefined) {
-    filterParts.push(`hasStory:=${filters.hasStory}`);
+  if (filters?.hasRemark !== undefined) {
+    filterParts.push(`hasRemark:=${filters.hasRemark}`);
   }
   if (filters?.hasOutdoorSeating) {
     filterParts.push(`hasOutdoorSeating:=true`);

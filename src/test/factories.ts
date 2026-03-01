@@ -111,7 +111,7 @@ export function makeSearchResult(
     latitude: MUNICH_LAT,
     longitude: MUNICH_LON,
     score: 0.5,
-    hasStory: false,
+    hasRemark: false,
     source: "typesense",
     ...overrides,
   };
@@ -129,9 +129,9 @@ export function makeRemarkWithPoi(
   return {
     id: "remark-001",
     poiId: "poi-001",
-    title: "Test Story Title",
-    teaser: "A great story",
-    content: "This is a test story about a place in Munich.",
+    title: "Test Remark Title",
+    teaser: "A great remark",
+    content: "This is a test remark about a place in Munich.",
     localTip: "Visit at sunset.",
     durationSeconds: 45,
     createdAt: new Date("2025-01-01"),

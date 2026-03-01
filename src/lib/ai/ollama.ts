@@ -10,6 +10,8 @@ interface OllamaGenerateRequest {
   options?: {
     temperature?: number;
     top_p?: number;
+    top_k?: number;
+    repeat_penalty?: number;
     num_predict?: number;
   };
 }
@@ -22,7 +24,7 @@ interface OllamaGenerateResponse {
 }
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "gemma3:4b-it-qat";
+const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "qwen3:8b";
 export const SEARCH_MODEL = process.env.OLLAMA_SEARCH_MODEL || "gemma3:4b-it-qat";
 export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "embeddinggemma:300m";
 
@@ -31,7 +33,7 @@ export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "embeddinggemma:300
  *
  * Args:
  *     prompt: The prompt to send to the model.
- *     model: The model to use (defaults to OLLAMA_MODEL env or gemma3:27b).
+ *     model: The model to use (defaults to OLLAMA_MODEL env or qwen3:8b).
  *     options: Generation options (temperature, top_p, num_predict).
  *
  * Returns:
@@ -51,9 +53,11 @@ export async function generateText(
       stream: false,
       think: false,
       options: {
-        temperature: 0.7,
+        temperature: 0.8,
         top_p: 0.9,
-        num_predict: 1024,
+        top_k: 40,
+        repeat_penalty: 1.1,
+        num_predict: 640,
         ...options,
       },
     } satisfies OllamaGenerateRequest),

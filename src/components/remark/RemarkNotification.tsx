@@ -5,7 +5,7 @@ import type { Remark, Poi, CategorySlug, Category } from "@/types/api";
 import { CATEGORY_COLORS } from "@/types/api";
 import { springTransitions, notificationVariants } from "@/lib/ui/animations";
 
-interface StoryNotificationProps {
+interface RemarkNotificationProps {
   remark: Remark & { poi: Poi & { category?: Category } };
   onTap: () => void;
   onDismiss: () => void;
@@ -20,14 +20,14 @@ function darkenColor(hex: string, amount: number): string {
 }
 
 /**
- * Floating glass notification toast for new story discoveries.
+ * Floating glass notification toast for new remark discoveries.
  *
  * Args:
- *     remark: The story remark with associated POI data.
+ *     remark: The remark with associated POI data.
  *     onTap: Callback when notification is tapped.
  *     onDismiss: Callback when notification is dismissed.
  */
-export function StoryNotification({ remark, onTap, onDismiss }: StoryNotificationProps) {
+export function RemarkNotification({ remark, onTap, onDismiss }: RemarkNotificationProps) {
   const categorySlug = (remark.poi.category?.slug ?? "history") as CategorySlug;
   const categoryColor = CATEGORY_COLORS[categorySlug];
   const darkColor = darkenColor(categoryColor, 30);

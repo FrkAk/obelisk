@@ -2,7 +2,7 @@ import { mock, describe, test, expect } from "bun:test";
 
 const mockGenerateText = mock(() =>
   Promise.resolve(
-    "TITLE: Test Title\nTEASER: Test teaser\nSTORY: Test story content here.\nLOCAL_TIP: Visit early."
+    "TITLE: Test Title\nTEASER: Test teaser\nREMARK: Test remark content here.\nLOCAL_TIP: Visit early."
   )
 );
 mock.module("@/lib/ai/ollama", () => ({
@@ -16,11 +16,11 @@ mock.module("@/lib/ai/ollama", () => ({
 // so the real detectLocale returns the German locale, which is fine
 // since generateText is fully mocked anyway.
 
-import { generateStory } from "./storyGenerator";
-import type { StoryPoiContext } from "./storyGenerator";
+import { generateRemark } from "./remarkGenerator";
+import type { RemarkPoiContext } from "./remarkGenerator";
 import { makePoi, makeProfile, makeTag, makeContactInfo } from "@/test/factories";
 
-function makeCtx(overrides: Partial<StoryPoiContext> = {}): StoryPoiContext {
+function makeCtx(overrides: Partial<RemarkPoiContext> = {}): RemarkPoiContext {
   return {
     poi: makePoi(),
     categorySlug: "food",
@@ -31,7 +31,7 @@ function makeCtx(overrides: Partial<StoryPoiContext> = {}): StoryPoiContext {
   };
 }
 
-describe("generateStory", () => {
+describe("generateRemark", () => {
   test("returns null for low confidence with no keywords and no products", async () => {
     const ctx = makeCtx({
       profile: makeProfile({ keywords: [], products: [], summary: "" }),
@@ -39,11 +39,11 @@ describe("generateStory", () => {
       contactInfo: null,
       poi: makePoi({ wikipediaUrl: null }),
     });
-    const result = await generateStory(ctx);
+    const result = await generateRemark(ctx);
     expect(result).toBeNull();
   });
 
-  test("returns parsed story on successful generation", async () => {
+  test("returns parsed remark on successful generation", async () => {
     const ctx = makeCtx({
       profile: makeProfile({
         keywords: ["bavarian", "traditional", "beer"],
@@ -55,12 +55,12 @@ describe("generateStory", () => {
       poi: makePoi({ wikipediaUrl: "https://en.wikipedia.org/wiki/Test" }),
     });
 
-    const result = await generateStory(ctx);
+    const result = await generateRemark(ctx);
 
     expect(result).not.toBeNull();
     expect(result!.title).toBe("Test Title");
     expect(result!.teaser).toBe("Test teaser");
-    expect(result!.content).toBe("Test story content here.");
+    expect(result!.content).toBe("Test remark content here.");
     expect(result!.localTip).toBe("Visit early.");
     expect(result!.confidence).toMatch(/^(high|medium|low)$/);
     expect(result!.modelId).toBeDefined();

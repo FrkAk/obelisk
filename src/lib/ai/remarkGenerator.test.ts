@@ -5,12 +5,12 @@ import {
   truncateAtSentence,
   sanitizeContent,
   sanitizeTeaser,
-  parseStoryResponse,
-} from "@/lib/ai/storyGenerator";
-import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
+  parseRemarkResponse,
+} from "@/lib/ai/remarkGenerator";
+import type { RemarkPoiContext } from "@/lib/ai/remarkGenerator";
 import { makePoi, makeProfile, makeTag, makeContactInfo } from "@/test/factories";
 
-function makeCtx(overrides: Partial<StoryPoiContext> = {}): StoryPoiContext {
+function makeCtx(overrides: Partial<RemarkPoiContext> = {}): RemarkPoiContext {
   return {
     poi: makePoi(),
     categorySlug: "food",
@@ -159,15 +159,15 @@ describe("sanitizeTeaser", () => {
   });
 });
 
-describe("parseStoryResponse", () => {
+describe("parseRemarkResponse", () => {
   test("well-formed response parsed correctly", () => {
     const response = [
       "TITLE: The Cozy Corner",
       "TEASER: Schnitzel worth the queue",
-      "STORY: A classic Bavarian spot. The regulars know what to order.",
+      "REMARK: A classic Bavarian spot. The regulars know what to order.",
       "LOCAL_TIP: Come before noon for the freshest Brezn.",
     ].join("\n");
-    const parsed = parseStoryResponse(response, "food");
+    const parsed = parseRemarkResponse(response, "food");
     expect(parsed.title).toBe("The Cozy Corner");
     expect(parsed.teaser).toBe("Schnitzel worth the queue");
     expect(parsed.content).toContain("classic Bavarian");
@@ -175,26 +175,26 @@ describe("parseStoryResponse", () => {
   });
 
   test("missing sections use defaults", () => {
-    const parsed = parseStoryResponse("Just some random text", "food");
-    expect(parsed.title).toBe("A Hidden Story");
+    const parsed = parseRemarkResponse("Just some random text", "food");
+    expect(parsed.title).toBe("A Hidden Remark");
     expect(parsed.content.length).toBeGreaterThan(0);
     expect(parsed.localTip.length).toBeGreaterThan(0);
   });
 
   test("durationSeconds between 30 and 90", () => {
-    const short = parseStoryResponse("TITLE: X\nTEASER: Y\nSTORY: Short.\nLOCAL_TIP: W", "food");
+    const short = parseRemarkResponse("TITLE: X\nTEASER: Y\nREMARK: Short.\nLOCAL_TIP: W", "food");
     expect(short.durationSeconds).toBeGreaterThanOrEqual(30);
     expect(short.durationSeconds).toBeLessThanOrEqual(90);
 
-    const longStory = "TITLE: X\nTEASER: Y\nSTORY: " + Array(200).fill("word").join(" ") + "\nLOCAL_TIP: W";
-    const long = parseStoryResponse(longStory, "food");
+    const longContent = "TITLE: X\nTEASER: Y\nREMARK: " + Array(200).fill("word").join(" ") + "\nLOCAL_TIP: W";
+    const long = parseRemarkResponse(longContent, "food");
     expect(long.durationSeconds).toBeGreaterThanOrEqual(30);
     expect(long.durationSeconds).toBeLessThanOrEqual(90);
   });
 
   test("title truncated at 100 chars", () => {
-    const longTitle = "TITLE: " + "A".repeat(150) + "\nTEASER: Y\nSTORY: Z\nLOCAL_TIP: W";
-    const parsed = parseStoryResponse(longTitle, "food");
+    const longTitle = "TITLE: " + "A".repeat(150) + "\nTEASER: Y\nREMARK: Z\nLOCAL_TIP: W";
+    const parsed = parseRemarkResponse(longTitle, "food");
     expect(parsed.title.length).toBeLessThanOrEqual(100);
   });
 });

@@ -1,17 +1,17 @@
 /**
- * Generates AI stories for POIs that lack current remarks.
- * Fetches POIs without stories, builds context from profile and tags,
- * generates stories via Ollama, and inserts them as remarks.
+ * Generates AI remarks for POIs that lack current remarks.
+ * Fetches POIs without remarks, builds context from profile and tags,
+ * generates remarks via Ollama, and inserts them as remarks.
  *
- * @module generate-stories
+ * @module generate-remarks
  */
 
 import { db } from "../src/lib/db/client";
 import { pois, categories, remarks } from "../src/lib/db/schema";
 import { eq, isNull, sql } from "drizzle-orm";
 import { checkOllamaHealth } from "../src/lib/ai/ollama";
-import { generateStory } from "../src/lib/ai/storyGenerator";
-import type { StoryPoiContext } from "../src/lib/ai/storyGenerator";
+import { generateRemark } from "../src/lib/ai/remarkGenerator";
+import type { RemarkPoiContext } from "../src/lib/ai/remarkGenerator";
 import { processWithConcurrency } from "./lib/concurrency";
 import { loadTagMap, loadContactMap } from "./lib/bulk-loaders";
 import { insertRemark } from "../src/lib/db/queries/remarks";
@@ -19,22 +19,22 @@ import { createLogger, formatEta } from "../src/lib/logger";
 import { POI_SELECT_FIELDS, toPoi } from "./lib/poi-row";
 import type { Tag } from "../src/types/api";
 
-const log = createLogger("stories");
+const log = createLogger("remarks");
 
-const STORY_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
-const BATCH_LIMIT = parseInt(process.env.STORY_BATCH_LIMIT || "100", 10);
-const CONCURRENCY = parseInt(process.env.STORY_CONCURRENCY || "3", 10);
+const REMARK_MODEL = process.env.OLLAMA_MODEL || "gemma3:27b";
+const BATCH_LIMIT = parseInt(process.env.REMARK_BATCH_LIMIT || "100", 10);
+const CONCURRENCY = parseInt(process.env.REMARK_CONCURRENCY || "3", 10);
 
 /**
- * Generates and saves stories for all POIs missing current remarks.
+ * Generates and saves remarks for all POIs missing current remarks.
  */
 async function main(): Promise<void> {
   log.info("Checking Ollama availability...");
-  const isHealthy = await checkOllamaHealth(STORY_MODEL);
+  const isHealthy = await checkOllamaHealth(REMARK_MODEL);
 
   if (!isHealthy) {
-    log.error(`Ollama not available or model ${STORY_MODEL} not loaded.`);
-    log.info(`Run: ollama pull ${STORY_MODEL}`);
+    log.error(`Ollama not available or model ${REMARK_MODEL} not loaded.`);
+    log.info(`Run: ollama pull ${REMARK_MODEL}`);
     process.exit(1);
   }
 
@@ -90,7 +90,7 @@ async function main(): Promise<void> {
         const poiTagList = tagNames.map((name) => ({ name })) as Tag[];
         const contact = contactMap.get(poi.id) ?? null;
 
-        const ctx: StoryPoiContext = {
+        const ctx: RemarkPoiContext = {
           poi,
           categorySlug,
           categoryName,
@@ -99,20 +99,20 @@ async function main(): Promise<void> {
           contactInfo: contact,
         };
 
-        const story = await generateStory(ctx, STORY_MODEL);
+        const remark = await generateRemark(ctx, REMARK_MODEL);
 
-        if (!story) {
+        if (!remark) {
           skippedCount++;
           log.info(`Skipped: ${poi.name} (insufficient data)`);
           return;
         }
 
-        await insertRemark({ poiId: poi.id, locale: poi.locale, story });
+        await insertRemark({ poiId: poi.id, locale: poi.locale, remark: remark });
 
         savedCount++;
         const done = savedCount + failedCount + skippedCount;
         log.info(
-          `${formatEta(startMs, done, poisWithoutRemarks.length)} — Saved: ${poi.name} (confidence: ${story.confidence})`,
+          `${formatEta(startMs, done, poisWithoutRemarks.length)} — Saved: ${poi.name} (confidence: ${remark.confidence})`,
         );
       } catch (error) {
         failedCount++;
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
   );
 
   log.success(
-    `Generated ${savedCount} stories (${failedCount} failed, ${skippedCount} skipped)`,
+    `Generated ${savedCount} remarks (${failedCount} failed, ${skippedCount} skipped)`,
   );
   process.exit(0);
 }

@@ -3,8 +3,8 @@ import { db } from "@/lib/db/client";
 import { pois, remarks, categories } from "@/lib/db/schema";
 import { eq, isNull, and, gte, lte } from "drizzle-orm";
 import { geoBounds } from "@/lib/geo/distance";
-import { generateStory } from "@/lib/ai/storyGenerator";
-import type { StoryPoiContext } from "@/lib/ai/storyGenerator";
+import { generateRemark } from "@/lib/ai/remarkGenerator";
+import type { RemarkPoiContext } from "@/lib/ai/remarkGenerator";
 import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { insertRemark } from "@/lib/db/queries/remarks";
 import { z } from "zod";
@@ -20,13 +20,13 @@ const bodySchema = z.object({
 });
 
 /**
- * Generates stories for POIs without remarks near a location.
+ * Generates remarks for POIs without remarks near a location.
  *
  * Args:
  *     lat: Center latitude.
  *     lon: Center longitude.
  *     radius: Radius in meters to search.
- *     limit: Maximum number of stories to generate.
+ *     limit: Maximum number of remarks to generate.
  *
  * Returns:
  *     Array of generated remarks.
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         generated: 0,
         remarks: [],
-        message: "All nearby POIs already have stories.",
+        message: "All nearby POIs already have remarks.",
       });
     }
 
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     for (const poi of poisWithoutRemarks) {
       try {
         const profile = (poi.profile as import("@/types").PoiProfile | null) ?? null;
-        const storyCtx: StoryPoiContext = {
+        const remarkCtx: RemarkPoiContext = {
           poi: {
             id: poi.id,
             osmId: null,
@@ -141,9 +141,9 @@ export async function POST(request: NextRequest) {
           tags: [],
         };
 
-        const story = await generateStory(storyCtx);
+        const generated = await generateRemark(remarkCtx);
 
-        if (!story) {
+        if (!generated) {
           log.info(`Skipped "${poi.name}" — insufficient data`);
           skippedCount++;
           continue;
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
         const insertedRemark = await insertRemark({
           poiId: poi.id,
           locale: poi.locale,
-          story,
+          remark: generated,
         });
 
         generatedRemarks.push({
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
 
         await new Promise((r) => setTimeout(r, 300));
       } catch (error) {
-        log.error(`Failed to generate story for ${poi.name}:`, error);
+        log.error(`Failed to generate remark for ${poi.name}:`, error);
       }
     }
 

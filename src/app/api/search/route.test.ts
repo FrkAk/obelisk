@@ -23,7 +23,7 @@ const mockSearchPOIs = mock(() =>
       description: "A bavarian pub",
       cuisines: ["german"],
       amenityType: "restaurant",
-      hasStory: false,
+      hasRemark: false,
       hasOutdoorSeating: true,
       hasWifi: false,
     },
@@ -115,7 +115,7 @@ describe("POST /api/search", () => {
 
     expect(response.status).toBe(200);
     expect(body.results).toHaveLength(1);
-    expect(body.results[0].hasStory).toBe(true);
+    expect(body.results[0].hasRemark).toBe(true);
     expect(body.timing).toBeDefined();
   });
 

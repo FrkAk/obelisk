@@ -2,7 +2,7 @@ import { db } from "../client";
 import { remarks, pois, categories } from "../schema";
 import { eq, and, inArray, desc, sql } from "drizzle-orm";
 import type { CategorySlug } from "@/types";
-import type { GeneratedStory } from "@/lib/ai/storyGenerator";
+import type { GeneratedRemark } from "@/lib/ai/remarkGenerator";
 
 export type RemarkWithPoi = {
   id: string;
@@ -167,10 +167,10 @@ export function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
 
 /**
  * Inserts a new remark for a POI. Single source of truth for all remark creation.
- * Maps all GeneratedStory fields to the remarks table with proper truncation.
+ * Maps all GeneratedRemark fields to the remarks table with proper truncation.
  *
  * Args:
- *     params: POI ID, locale, and the generated story data.
+ *     params: POI ID, locale, and the generated remark data.
  *
  * Returns:
  *     The inserted remark row.
@@ -178,7 +178,7 @@ export function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
 export async function insertRemark(params: {
   poiId: string;
   locale: string | null;
-  story: GeneratedStory;
+  remark: GeneratedRemark;
 }) {
   const [inserted] = await db
     .insert(remarks)
@@ -187,13 +187,13 @@ export async function insertRemark(params: {
       locale: params.locale,
       version: 1,
       isCurrent: true,
-      title: params.story.title.slice(0, 100),
-      teaser: params.story.teaser.slice(0, 100),
-      content: params.story.content,
-      localTip: params.story.localTip,
-      durationSeconds: params.story.durationSeconds,
-      modelId: params.story.modelId,
-      confidence: params.story.confidence,
+      title: params.remark.title.slice(0, 100),
+      teaser: params.remark.teaser.slice(0, 100),
+      content: params.remark.content,
+      localTip: params.remark.localTip,
+      durationSeconds: params.remark.durationSeconds,
+      modelId: params.remark.modelId,
+      confidence: params.remark.confidence,
     })
     .returning();
   return inserted;
@@ -300,12 +300,12 @@ export async function getRemarkVersions(
 
 /**
  * Version-bumps a remark: sets old remark is_current=false, inserts new version.
- * Uses GeneratedStory to ensure all fields are consistently mapped.
+ * Uses GeneratedRemark to ensure all fields are consistently mapped.
  *
  * Args:
  *     oldRemarkId: The ID of the current remark to supersede.
  *     poiId: The POI's UUID.
- *     story: The full generated story data.
+ *     remark: The full generated remark data.
  *
  * Returns:
  *     The newly inserted remark row.
@@ -313,7 +313,7 @@ export async function getRemarkVersions(
 export async function versionBumpRemark(
   oldRemarkId: string,
   poiId: string,
-  story: GeneratedStory,
+  remark: GeneratedRemark,
 ) {
   const oldRemark = await db
     .select({
@@ -339,13 +339,13 @@ export async function versionBumpRemark(
       locale,
       version: currentVersion + 1,
       isCurrent: true,
-      title: story.title.slice(0, 100),
-      teaser: story.teaser.slice(0, 100),
-      content: story.content,
-      localTip: story.localTip,
-      durationSeconds: story.durationSeconds,
-      modelId: story.modelId,
-      confidence: story.confidence,
+      title: remark.title.slice(0, 100),
+      teaser: remark.teaser.slice(0, 100),
+      content: remark.content,
+      localTip: remark.localTip,
+      durationSeconds: remark.durationSeconds,
+      modelId: remark.modelId,
+      confidence: remark.confidence,
     })
     .returning();
 

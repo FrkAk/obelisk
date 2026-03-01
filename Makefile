@@ -123,7 +123,7 @@ setup:
 	\
 	printf "$(CYAN)[Phase 7]$(RESET) Generating stories...\n"; \
 	STEP_START=$$(date +%s); \
-	$(COMPOSE) exec app bun scripts/generate-stories.ts || true; \
+	$(COMPOSE) exec app bun scripts/generate-remarks.ts || true; \
 	STEP_END=$$(date +%s); \
 	ELAPSED=$$((STEP_END - STEP_START)); \
 	printf "$(GREEN)Stories done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
@@ -287,7 +287,7 @@ finish-setup:
 	@printf "$(GREEN)Finishing setup (stories + search + embeddings)...$(RESET)\n"
 	@printf "\n"
 	@printf "$(CYAN)[1/2]$(RESET) Generating stories...\n"
-	$(COMPOSE) exec app bun scripts/generate-stories.ts || true
+	$(COMPOSE) exec app bun scripts/generate-remarks.ts || true
 	@printf "\n"
 	@printf "$(CYAN)[2/2]$(RESET) Syncing search index + generating embeddings (parallel)...\n"
 	@$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \

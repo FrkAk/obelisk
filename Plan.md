@@ -41,7 +41,7 @@
 | Remark Pins | POI markers with category colors + Supercluster | 50+ POIs displayed | [x] 408 POIs, 100 stories |
 | Story Cards | Text display in bottom sheet (glassmorphism) | Avg read time > 30s | [x] Verified |
 | Geofence Triggers | Notification at 50m radius with cooldown | > 90% accuracy | [x] Implemented |
-| Story Generation | On-demand LLM story generation for POIs | Stories feel authentic | [x] Implemented |
+| Story Generation | On-demand LLM remark generation for POIs | Stories feel authentic | [x] Implemented |
 | Story Regeneration | Re-roll stories with 20s cooldown | New story generated | [x] Implemented |
 | Story Localization | Multi-language story generation | Stories in target language | [x] Implemented |
 
@@ -83,9 +83,9 @@ obelisk/
 │   │   │   ├── ClusterPin.tsx        # Supercluster markers
 │   │   │   ├── UserLocationMarker.tsx # Blue dot + accuracy ring
 │   │   │   └── LocateButton.tsx      # Center-on-user button
-│   │   ├── story/
-│   │   │   ├── StoryCard.tsx         # Full story in bottom sheet
-│   │   │   └── StoryNotification.tsx # Toast notification (50m trigger)
+│   │   ├── remark/
+│   │   │   ├── RemarkCard.tsx         # Full story in bottom sheet
+│   │   │   └── RemarkNotification.tsx # Toast notification (50m trigger)
 │   │   ├── search/
 │   │   │   ├── SearchBar.tsx         # Search input
 │   │   │   └── SearchResults.tsx     # Unified results display
@@ -116,7 +116,7 @@ obelisk/
 │   │   │       └── search.ts         # Full-text search
 │   │   ├── ai/
 │   │   │   ├── ollama.ts             # Ollama HTTP client
-│   │   │   ├── storyGenerator.ts     # LLM story generation
+│   │   │   ├── remarkGenerator.ts     # LLM remark generation
 │   │   │   └── localization.ts       # Multi-language generation
 │   │   ├── search/
 │   │   │   ├── types.ts              # Search types
@@ -136,7 +136,7 @@ obelisk/
 │
 ├── scripts/
 │   ├── seed-pois.ts                  # Seed Munich POIs from Overpass API
-│   └── generate-stories.ts           # Batch LLM story generation
+│   └── generate-remarks.ts           # Batch LLM remark generation
 │
 ├── drizzle/                          # Database migrations
 ├── docker-compose.yml                # Dev: app + postgres + ollama
@@ -180,8 +180,8 @@ obelisk/
 
 - [x] Build `GET /api/remarks` endpoint
 - [x] Build `BottomSheet` component (iOS-style)
-- [x] Build `StoryCard` component
-- [x] Build `StoryNotification` toast
+- [x] Build `RemarkCard` component
+- [x] Build `RemarkNotification` toast
 - [x] Pin click -> show story in bottom sheet
 - [x] Implement Haversine distance calculation
 - [x] Build `useGeofence` hook
@@ -239,8 +239,8 @@ obelisk/
 
 - **Contextual area awareness:** Search respects where the user is looking on the map, not just GPS. If user pans to another neighborhood, search operates in that viewport area and surroundings
 - **Intent-based parsing:** Improve LLM query parser reliability — current AI parsing via Ollama is inconsistent. Robust fallback chain, better prompt engineering. Support natural language like *"quiet café with wifi near the river"* or *"something fun to do tonight"*
-- **Responsive results UI:** Current SearchResults doesn't match StoryCard/POICard polish. Needs glassmorphic card treatment, category icons, distance badges, smooth animations
-- **POI card navigation from search:** Tapping a search result must open a navigable POI card (same flow as pin-tap). Currently broken — search results don't connect to POICard/StoryCard sheet modes
+- **Responsive results UI:** Current SearchResults doesn't match RemarkCard/POICard polish. Needs glassmorphic card treatment, category icons, distance badges, smooth animations
+- **POI card navigation from search:** Tapping a search result must open a navigable POI card (same flow as pin-tap). Currently broken — search results don't connect to POICard/RemarkCard sheet modes
 - **Uniform UX:** Search flow and pin-tap flow must converge — same card design, same actions (navigate, listen, regenerate), same bottom sheet behavior
 
 **Current state:**
@@ -264,11 +264,11 @@ obelisk/
 
 #### P2 — Settings Page
 
-**Vision:** Settings is not a separate screen — it's a card inside the bottom sheet, exactly like StoryCard and POICard. Follows Apple Maps pattern: tap your profile picture, settings card slides up in the same sheet. No page navigation, no route change, no new screen — just another sheet mode. The user never leaves the map.
+**Vision:** Settings is not a separate screen — it's a card inside the bottom sheet, exactly like RemarkCard and POICard. Follows Apple Maps pattern: tap your profile picture, settings card slides up in the same sheet. No page navigation, no route change, no new screen — just another sheet mode. The user never leaves the map.
 
 **UI/UX design (must match existing card patterns exactly):**
 
-SettingsCard reuses the exact patterns from `StoryCard.tsx` and `POICard.tsx`:
+SettingsCard reuses the exact patterns from `RemarkCard.tsx` and `POICard.tsx`:
 
 - **Header:** 40×40px `rounded-xl` icon badge with gradient background (`linear-gradient(135deg, ${color}20 0%, ${color}10 100%)` + `1px solid ${color}30` border), title at 18px `font-semibold`, subtitle with `GlassPill`
 - **Icon badge:** Gear icon in coral gradient box
@@ -357,7 +357,7 @@ SettingsCard reuses the exact patterns from `StoryCard.tsx` and `POICard.tsx`:
 - Content localization exists for AI stories — 11 locale profiles with local expressions (`localization.ts`)
 - Zero UI i18n — all text hardcoded English across ~15+ component files
 - No i18n library installed
-- Hardcoded strings in: SearchBar, SearchResults, POICard, StoryCard, StoryNotification, page.tsx, layout.tsx, manifest.json
+- Hardcoded strings in: SearchBar, SearchResults, POICard, RemarkCard, RemarkNotification, page.tsx, layout.tsx, manifest.json
 
 **Files to create/modify:**
 
@@ -592,11 +592,11 @@ interface ExploreSession {
 - `useGeofence` — with custom config (30m trigger radius for stops)
 - `/api/pois/discover` — surrounding POI scan via Overpass
 - `/api/remarks/generate-for-poi` — on-demand story generation at stops
-- `storyGenerator.ts` — LLM + persona system for story content
+- `remarkGenerator.ts` — LLM + persona system for remark content
 - `localization.ts` — multilingual route narrations
 - `BottomSheet` — route preview and active story display
 - `POIPin` / `ClusterPin` — with numbered variant for route stops
-- `StoryNotification` — for detour suggestions
+- `RemarkNotification` — for detour suggestions
 - Animation presets — `floatingEntry`, `notificationVariants`
 
 ##### Explore Mode vs Ambient Mode
@@ -659,7 +659,7 @@ interface ExploreSession {
 
 **Current state:**
 
-- "Listen" button placeholder in StoryCard (non-functional)
+- "Listen" button placeholder in RemarkCard (non-functional)
 - Piper in tech stack but not integrated
 - No audio player, no TTS pipeline, no gyroscope hooks
 - Remark schema has `audio_url` column (ready)
@@ -672,7 +672,7 @@ interface ExploreSession {
 - New: `src/lib/audio/tts.ts` — TTS generation client (Piper API)
 - New: `src/lib/geo/bearing.ts` — relative direction calculation
 - New: `src/app/api/audio/generate/route.ts` — server-side TTS endpoint
-- `src/lib/ai/storyGenerator.ts` — directional narration prompt variant
+- `src/lib/ai/remarkGenerator.ts` — directional narration prompt variant
 
 ---
 

@@ -10,7 +10,7 @@ import type { SearchStage } from "@/types/api";
 const STAGE_MESSAGES: Record<SearchStage, string> = {
   idle: "",
   parsing: "Understanding your question...",
-  searching: "Finding stories nearby...",
+  searching: "Finding remarks nearby...",
 };
 
 interface AutocompleteSuggestion {

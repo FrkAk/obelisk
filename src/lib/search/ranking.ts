@@ -64,7 +64,7 @@ export function rankResults(input: RankingInput): SearchResult[] {
         longitude: sem.longitude,
         distance: sem.distance,
         score: 0,
-        hasStory: false,
+        hasRemark: false,
         source: "semantic",
       });
     }

@@ -4,7 +4,7 @@ Contextual discovery platform -- AI-generated remarks surface as users walk thro
 
 ## Tech Stack
 
-Next.js 16 (App Router) + React 19, Tailwind CSS v4, Framer Motion v12, Drizzle ORM on PostgreSQL 15 (pgvector + pg_trgm), Typesense v30.1, Mapbox GL JS v3.18 + react-map-gl, Supercluster v8, Zod v4, TanStack Query v5. LLM: Ollama (qwen3:8b) on host GPU. Embeddings: embeddinggemma:300m (768-dim).
+Next.js 16 (App Router) + React 19, Tailwind CSS v4, Framer Motion v12, Drizzle ORM on PostgreSQL 15 (pgvector + pg_trgm), Typesense v30.1, Mapbox GL JS v3.18 + react-map-gl, Supercluster v8, Zod v4, TanStack Query v5. LLM: Ollama (qwen3.5:9b) on host GPU. Embeddings: embeddinggemma:300m (768-dim).
 
 ## Commands
 

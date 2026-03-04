@@ -53,6 +53,7 @@ async function main(): Promise<void> {
       sql`${remarks.poiId} = ${pois.id} AND ${remarks.isCurrent} = true`,
     )
     .where(isNull(remarks.id))
+    .orderBy(sql`(${pois.profile}->>'enrichedAt') IS NOT NULL DESC`)
     .limit(BATCH_LIMIT);
 
   if (poisWithoutRemarks.length === 0) {

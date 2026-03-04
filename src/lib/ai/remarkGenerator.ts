@@ -130,6 +130,16 @@ function buildDataContext(
   const osmFacts = extractOsmFacts(osmTags, categorySlug);
   if (osmFacts) sections.push(osmFacts);
 
+  if (profile?.wikipediaSummary) {
+    sections.push(`WIKIPEDIA (encyclopedic — factual and reliable):
+${profile.wikipediaSummary}`);
+  }
+
+  if (profile?.websiteText) {
+    sections.push(`WEBSITE CONTENT (from the business itself):
+${profile.websiteText}`);
+  }
+
   const profileParts: string[] = [];
   if (profile) {
     if (profile.subtype) profileParts.push(`Type: ${profile.subtype}`);
@@ -151,7 +161,7 @@ function buildDataContext(
   }
 
   if (profileParts.length > 0) {
-    sections.push(`PROFILE DATA (from enrichment — keywords/products are reliable, summary may be generic):
+    sections.push(`PROFILE DATA:
 ${profileParts.join("\n")}`);
   }
 
@@ -276,7 +286,8 @@ export function assessConfidence(ctx: RemarkPoiContext): "high" | "medium" | "lo
 
   if (ctx.tags.length > 0) score += 1;
   if (ctx.contactInfo != null) score += 1;
-  if (ctx.poi.wikipediaUrl) score += 1;
+  if (ctx.profile?.wikipediaSummary) score += 3;
+  else if (ctx.poi.wikipediaUrl) score += 1;
 
   const osmTags = ctx.poi.osmTags;
   if (osmTags) {
@@ -291,70 +302,21 @@ export function assessConfidence(ctx: RemarkPoiContext): "high" | "medium" | "lo
 }
 
 /**
- * Returns a single-sentence honesty guideline based on data confidence.
+ * Returns a grounding guideline based on the enrichment data tier.
+ * Falls back to confidence-based assessment when dataTier isn't set.
  *
- * @param confidence - Data richness confidence level.
- * @returns Honesty guideline string for the prompt.
+ * @param dataTier - Data tier from enrichment pipeline.
+ * @param confidence - Legacy confidence level as fallback.
+ * @returns Grounding guideline string for the prompt.
  */
-function buildHonestyGuidelines(confidence: "high" | "medium" | "low"): string {
-  if (confidence === "low")
-    return "HONESTY: You have almost no information — be upfront about it. Describe what's visible, not what you imagine.";
-  if (confidence === "medium")
-    return "HONESTY: You have some context but gaps — share what you know, skip what you don't.";
-  return "HONESTY: You have solid data — be enthusiastic where warranted, but only about what the data supports.";
+function buildGroundingGuideline(dataTier: string | undefined, confidence: "high" | "medium" | "low"): string {
+  const tier = dataTier ?? confidence;
+  if (tier === "rich" || tier === "high")
+    return "GROUNDING: You have detailed data. Be concise and specific — use concrete details from the sources above. Do not invent what the data doesn't provide.";
+  if (tier === "moderate" || tier === "medium")
+    return "GROUNDING: You have some data. Be concise and specific — describe what the data supports. Skip topics the data doesn't cover — do not fill gaps.";
+  return "GROUNDING: You have minimal data. Be concise — describe what's visible and the atmosphere, not what you imagine. Do not invent details.";
 }
-
-const CATEGORY_FEW_SHOT: Partial<Record<string, string>> = {
-  food: `TITLE: The Kitchen That Doesn't Rush
-TEASER: Bavarian, no shortcuts
-REMARK: Three generations of the same family have cooked here, and the Kartoffelsalat recipe hasn't changed once. The crowd is half Stammgäste who don't need menus and half newcomers trying to figure out the system. Both leave full.
-LOCAL_TIP: Weekday lunch is the move — the Tagesgericht changes daily and runs out by 1pm.`,
-
-  history: `TITLE: Names on Stone, Stories in Air
-TEASER: 1923 and still standing
-REMARK: This memorial went up three years after the war ended, when grief was still fresh and names meant faces people remembered. The courtyard swallows street noise whole — stand still for ten seconds and you'll feel the weight of it.
-LOCAL_TIP: Read the inscription slowly. It was written when every name on that stone still had a mother waiting.`,
-
-  art: `TITLE: Color Without Permission
-TEASER: Art that doesn't need a frame
-REMARK: While the big galleries charge admission, this space lets you watch Künstler at work on any given afternoon. The walls rotate monthly and favor local talent over safe names.
-LOCAL_TIP: First Thursdays are Vernissage night — free wine, the artists show up, and it's genuinely good.`,
-
-  nature: `TITLE: Where the City Lets Go
-TEASER: Ten steps from traffic to silence
-REMARK: The noise drops the moment you step past the treeline. This wetland has its own clock — herons in the morning, frogs at dusk, silence in between. Munich forgets it exists, which is exactly the point.
-LOCAL_TIP: Early morning before the joggers arrive. Bring binoculars if you have them.`,
-
-  architecture: `TITLE: The Door Nobody Notices
-TEASER: Built 1892, still stunning
-REMARK: Everyone looks at the facade, but the real craft is in the doorway — hand-carved stone that took someone months. The building survived the war mostly intact, which in this Viertel makes it almost unique.
-LOCAL_TIP: Stand across the street at eye level with the second floor. That's where the detail starts.`,
-
-  shopping: `TITLE: The Rack That Tells Stories
-TEASER: Curated, not cluttered
-REMARK: The owner picks every piece and can tell you where it came from. No algorithm, no warehouse — just taste and a quiet Laden on a side street. The vibe is unhurried and the prices are fair.
-LOCAL_TIP: Weekday mornings when new stock arrives. Ask about alterations.`,
-
-  hidden: `TITLE: Behind the Unmarked Door
-TEASER: Walk past it twice first
-REMARK: No sign, no Google listing, just a door that looks residential. Behind it is a courtyard that opens into something Munich keeps to itself. The kind of place that rewards curiosity.
-LOCAL_TIP: Look for the green door with the brass handle. The courtyard is open during daylight hours.`,
-
-  culture: `TITLE: Seats Close Enough to Feel It
-TEASER: Small stage, big energy
-REMARK: While everyone queues for the Staatstheater, this kleine Bühne puts on shows that surprise. The room holds maybe eighty people, every seat is a good one, and the crowd knows what they came for.
-LOCAL_TIP: Check their Abendkasse — last-minute tickets are half price on weeknights.`,
-
-  views: `TITLE: The Skyline You Earn
-TEASER: Alps on a clear day
-REMARK: The climb is short but the reward is the whole city laid out — Frauenkirche towers, Isar curve, and on clear days the Alps line the horizon. Most people don't know this spot exists.
-LOCAL_TIP: Late afternoon for the best light. The bench on the left side has the widest angle.`,
-
-  nightlife: `TITLE: Where the Bass Finds You
-TEASER: Low lights, good crowd
-REMARK: The door is easy to miss but the sound carries once you're close. Inside it's dark, the drinks are strong, and the DJ plays for the room, not the playlist. The crowd skews local and the energy builds slowly.
-LOCAL_TIP: Don't show up before midnight — the good sets start late. Cash only at the bar.`,
-};
 
 /**
  * Builds the full LLM prompt for remark generation using persona, data context, and locale.
@@ -371,10 +333,9 @@ function buildPrompt(
 ): string {
   const persona = getPersona(ctx.categorySlug);
   const dataContext = buildDataContext(ctx.profile, ctx.poi.osmTags, ctx.categorySlug);
-  const honesty = buildHonestyGuidelines(confidence);
+  const grounding = buildGroundingGuideline(ctx.profile?.dataTier, confidence);
   const languagePrompt = buildLanguagePrompt(locale);
   const tagNames = ctx.tags.map((t) => t.name).join(", ");
-  const fewShot = CATEGORY_FEW_SHOT[ctx.categorySlug] ?? CATEGORY_FEW_SHOT["food"]!;
 
   return `You are writing a short remark about a place in Munich. ${persona.voice}
 
@@ -385,31 +346,26 @@ Tags: ${tagNames || "none"}
 
 ${dataContext}
 
-${honesty}
+${grounding}
 
 ${languagePrompt}
 
 ${persona.perspective}
 
-WRITING CRAFT: Lead with what's surprising. Use contrast. Be specific about atmosphere — what you hear, see, smell. Write in plain text only, no markdown formatting.
+WRITING CRAFT: Lead with what's surprising. Use contrast. Be specific about atmosphere — what you hear, see, smell.
 
-GROUNDING: Only state specifics from VERIFIED FACTS. If you don't have details, write about atmosphere, not invented facts. Do not invent menu items, dates, architects, or events.
+OUTPUT RULES:
+- Fill ONLY the four fields below. Nothing else.
+- No introduction, no commentary, no sign-off, no questions to the reader.
+- Plain text only — no markdown, no bullet points, no quotation marks around field values.
+- Each field must start on its own line with the exact label shown.
+- Be concise and vivid. Use concrete details from the data. Stop when you run out of facts.
+- Do not invent menu items, dates, architects, or events.
 
-Write EXACTLY this format:
-1. TITLE: Catchy, local-feeling (3-5 words)
-2. TEASER: Original short hook (3-7 words) specific to THIS place. Not generic.
-3. REMARK: 3-4 sentences. Be vivid but grounded.
-4. LOCAL_TIP: 1-2 sentences. ${persona.tipStyle}
-
-Example of the voice and format I want:
-
-${fewShot}
-
-Now write yours for "${ctx.poi.name}":
-TITLE:
-TEASER:
-REMARK:
-LOCAL_TIP:`;
+TITLE: Catchy, local-feeling (3-5 words)
+TEASER: Original short hook (3-7 words) specific to THIS place
+REMARK: Concise, grounded, vivid
+LOCAL_TIP: 1-3 sentences max. ${persona.tipStyle}`;
 }
 
 const BANNED_TEASERS = [
@@ -603,7 +559,7 @@ export async function generateRemark(
   }
 
   const locale = await detectLocale(ctx.poi.address, ctx.poi.latitude, ctx.poi.longitude);
-  const usedModel = model ?? (process.env.OLLAMA_MODEL || "qwen3:8b");
+  const usedModel = model ?? (process.env.OLLAMA_MODEL || "qwen3.5:9b");
 
   log.info(`Generating for "${ctx.poi.name}" | confidence: ${confidence} | locale: ${locale.country}`);
 

@@ -14,10 +14,14 @@ export interface Category {
 export interface PoiProfile {
   subtype?: string;
   osmExtracted?: Record<string, string>;
+  wikipediaSummary?: string;
+  websiteText?: string;
   keywords: string[];
   products: string[];
   summary: string;
   enrichmentSource: string;
+  enrichedAt?: string;
+  dataTier?: "rich" | "moderate" | "thin";
   attributes: Record<string, unknown>;
 }
 
@@ -83,6 +87,7 @@ export interface Remark {
   modelId: string | null;
   confidence: string | null;
   createdAt: Date | null;
+  updatedAt: Date | null;
 }
 
 // ---------------------------------------------------------------------------

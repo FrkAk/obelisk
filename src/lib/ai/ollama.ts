@@ -24,8 +24,8 @@ interface OllamaGenerateResponse {
 }
 
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "qwen3:8b";
-export const SEARCH_MODEL = process.env.OLLAMA_SEARCH_MODEL || "gemma3:4b-it-qat";
+const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "qwen3.5:9b";
+export const SEARCH_MODEL = process.env.OLLAMA_SEARCH_MODEL || "qwen3.5:4b";
 export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "embeddinggemma:300m";
 
 /**
@@ -33,7 +33,7 @@ export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "embeddinggemma:300
  *
  * Args:
  *     prompt: The prompt to send to the model.
- *     model: The model to use (defaults to OLLAMA_MODEL env or qwen3:8b).
+ *     model: The model to use (defaults to OLLAMA_MODEL env or qwen3.5:9b).
  *     options: Generation options (temperature, top_p, num_predict).
  *
  * Returns:

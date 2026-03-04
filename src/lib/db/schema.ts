@@ -199,6 +199,7 @@ export const remarks = pgTable(
     modelId: varchar("model_id", { length: 100 }),
     confidence: varchar("confidence", { length: 10 }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
     uniqueIndex("idx_remarks_poi_locale_version").on(

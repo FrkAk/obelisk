@@ -1,4 +1,4 @@
-.PHONY: help setup setup-quick finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-taxonomy sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup setup-quick finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois fetch-wikipedia fetch-websites sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -15,8 +15,8 @@ endif
 
 export DATABASE_URL ?= postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
 export OLLAMA_URL ?= http://127.0.0.1:11434
-export OLLAMA_MODEL ?= gemma3:4b-it-qat
-export OLLAMA_SEARCH_MODEL ?= gemma3:4b-it-qat
+export OLLAMA_MODEL ?= qwen3.5:9b
+export OLLAMA_SEARCH_MODEL ?= qwen3.5:4b
 export OLLAMA_EMBED_MODEL ?= embeddinggemma:300m
 export TYPESENSE_API_KEY ?= obelisk_typesense_dev
 export SEED_RADIUS ?= -1
@@ -50,7 +50,9 @@ help:
 	@printf "  $(CYAN)download-datasets$(RESET)   Download external datasets (taxonomy, NSI, taginfo, wikidata)\n"
 	@printf "  $(CYAN)build-taxonomy$(RESET)      Build tag enrichment map from downloaded data\n"
 	@printf "  $(CYAN)build-brands$(RESET)        Build brand enrichment map from NSI + Wikidata\n"
-	@printf "  $(CYAN)enrich-taxonomy$(RESET)     Enrich POIs with taxonomy data + LLM summaries\n"
+	@printf "  $(CYAN)enrich-pois$(RESET)     Enrich POIs with taxonomy data + LLM summaries\n"
+	@printf "  $(CYAN)fetch-wikipedia$(RESET)     Fetch Wikipedia extracts for POIs with URLs\n"
+	@printf "  $(CYAN)fetch-websites$(RESET)      Crawl POI websites for content\n"
 	@printf "\n"
 	@printf "$(GREEN)Search Pipeline:$(RESET)\n"
 	@printf "  $(CYAN)sync-search$(RESET)         Sync POIs to Typesense\n"
@@ -113,23 +115,34 @@ setup:
 	printf "$(GREEN)Seeding done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
 	\
-	printf "$(CYAN)[Phase 6]$(RESET) Enriching POIs with taxonomy data...\n"; \
+	printf "$(CYAN)[Phase 6]$(RESET) Fetching Wikipedia + crawling websites (parallel)...\n"; \
 	STEP_START=$$(date +%s); \
-	$(COMPOSE) exec app bun scripts/enrich-taxonomy.ts; \
+	$(COMPOSE) exec -T app bun scripts/fetch-wikipedia.ts & PID_WIKI=$$!; \
+	$(COMPOSE) exec -T app bun scripts/fetch-websites.ts & PID_WEB=$$!; \
+	wait $$PID_WIKI || exit 1; \
+	wait $$PID_WEB || exit 1; \
+	STEP_END=$$(date +%s); \
+	ELAPSED=$$((STEP_END - STEP_START)); \
+	printf "$(GREEN)Data fetching done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "\n"; \
+	\
+	printf "$(CYAN)[Phase 7]$(RESET) Enriching POIs with taxonomy data...\n"; \
+	STEP_START=$$(date +%s); \
+	$(COMPOSE) exec app bun scripts/enrich-pois.ts; \
 	STEP_END=$$(date +%s); \
 	ELAPSED=$$((STEP_END - STEP_START)); \
 	printf "$(GREEN)Enrichment done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
 	\
-	printf "$(CYAN)[Phase 7]$(RESET) Generating stories...\n"; \
+	printf "$(CYAN)[Phase 8]$(RESET) Generating remarks...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec app bun scripts/generate-remarks.ts || true; \
 	STEP_END=$$(date +%s); \
 	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Stories done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "$(GREEN)Remarks done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
 	\
-	printf "$(CYAN)[Phase 8]$(RESET) Syncing search index + generating embeddings (parallel)...\n"; \
+	printf "$(CYAN)[Phase 9]$(RESET) Syncing search index + generating embeddings (parallel)...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \
 	$(COMPOSE) exec -T app bun scripts/generate-embeddings.ts & PID_EMBED=$$!; \
@@ -262,8 +275,14 @@ seed-pois:
 seed-all:
 	$(COMPOSE) exec app bun scripts/seed.ts
 
-enrich-taxonomy:
-	$(COMPOSE) exec app bun scripts/enrich-taxonomy.ts
+enrich-pois:
+	$(COMPOSE) exec app bun scripts/enrich-pois.ts
+
+fetch-wikipedia:
+	$(COMPOSE) exec app bun scripts/fetch-wikipedia.ts
+
+fetch-websites:
+	$(COMPOSE) exec app bun scripts/fetch-websites.ts
 
 sync-search:
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
@@ -297,4 +316,4 @@ finish-setup:
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
-search-setup: seed-pois enrich-taxonomy sync-search generate-embeddings
+search-setup: seed-pois fetch-wikipedia fetch-websites enrich-pois sync-search generate-embeddings

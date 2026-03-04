@@ -1,17 +1,25 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import { springTransitions } from "@/lib/ui/animations";
-import { GlassButton } from "@/components/ui/GlassButton";
-import type { SearchStage } from "@/types/api";
 
-const STAGE_MESSAGES: Record<SearchStage, string> = {
-  idle: "",
-  parsing: "Understanding your question...",
-  searching: "Finding remarks nearby...",
-};
+const PROMPT_SUGGESTIONS = [
+  "A quiet cafe near the river...",
+  "Something hidden nearby...",
+  "Where locals eat lunch...",
+  "Best view of the old town...",
+  "A place with history...",
+  "Somewhere peaceful to read...",
+  "A courtyard off the beaten path...",
+];
+
+/** Number of prompts shown at a time. */
+const PROMPTS_VISIBLE = 3;
+
+/** Rotation interval in ms. */
+const PROMPT_ROTATE_MS = 8000;
 
 interface AutocompleteSuggestion {
   name: string;
@@ -23,7 +31,6 @@ interface SearchBarProps {
   onClear?: () => void;
   onInputChange?: (value: string) => void;
   isLoading?: boolean;
-  searchStage?: SearchStage;
   placeholder?: string;
   isUsingViewport?: boolean;
   suggestions?: AutocompleteSuggestion[];
@@ -31,25 +38,25 @@ interface SearchBarProps {
 }
 
 /**
- * Floating minimal search pill with glassmorphic styling and autocomplete support.
+ * Floating minimal search pill with glassmorphic styling, autocomplete, and contextual prompt suggestions.
  *
- * Args:
- *     onSearch: Callback when search is submitted.
- *     onClear: Callback when search is cleared.
- *     onInputChange: Callback when input text changes (for autocomplete).
- *     isLoading: Whether search is in progress.
- *     searchStage: Current search stage.
- *     placeholder: Placeholder text.
- *     isUsingViewport: Whether search uses viewport instead of GPS location.
- *     suggestions: Autocomplete suggestion items to display.
- *     onSuggestionSelect: Callback when a suggestion is tapped.
+ * Shows rotating prompt pills below the bar when empty and unfocused. Tapping a prompt
+ * fills the input and submits the search.
+ *
+ * @param onSearch - Callback when search is submitted.
+ * @param onClear - Callback when search is cleared.
+ * @param onInputChange - Callback when input text changes (for autocomplete).
+ * @param isLoading - Whether search is in progress.
+ * @param placeholder - Placeholder text.
+ * @param isUsingViewport - Whether search uses viewport instead of GPS location.
+ * @param suggestions - Autocomplete suggestion items to display.
+ * @param onSuggestionSelect - Callback when a suggestion is tapped.
  */
 export function SearchBar({
   onSearch,
   onClear,
   onInputChange,
   isLoading = false,
-  searchStage = "idle",
   placeholder = "Ask Obelisk anything...",
   isUsingViewport = false,
   suggestions = [],
@@ -57,7 +64,15 @@ export function SearchBar({
 }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
+  const [promptOffset, setPromptOffset] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPromptOffset((prev) => (prev + PROMPTS_VISIBLE) % PROMPT_SUGGESTIONS.length);
+    }, PROMPT_ROTATE_MS);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -92,9 +107,26 @@ export function SearchBar({
     [onSuggestionSelect]
   );
 
+  const handlePromptTap = useCallback(
+    (prompt: string) => {
+      setQuery(prompt);
+      onSearch(prompt);
+    },
+    [onSearch]
+  );
+
   const hasInput = query.trim().length > 0;
-  const stageMessage = STAGE_MESSAGES[searchStage];
   const showSuggestions = isFocused && suggestions.length > 0 && !isLoading;
+  const showPrompts = !isFocused && !hasInput && !isLoading;
+
+  const visiblePrompts = PROMPT_SUGGESTIONS.slice(
+    promptOffset,
+    promptOffset + PROMPTS_VISIBLE
+  ).concat(
+    promptOffset + PROMPTS_VISIBLE > PROMPT_SUGGESTIONS.length
+      ? PROMPT_SUGGESTIONS.slice(0, (promptOffset + PROMPTS_VISIBLE) - PROMPT_SUGGESTIONS.length)
+      : []
+  );
 
   return (
     <div className="relative">
@@ -105,105 +137,67 @@ export function SearchBar({
             "glass-floating transition-all duration-200"
           )}
           style={{
+            borderColor: isFocused ? "var(--glass-border-strong)" : undefined,
             boxShadow: isFocused
               ? "0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)"
               : "var(--shadow-float)",
           }}
           transition={springTransitions.snappy}
         >
-          <motion.div
-            animate={{ scale: isLoading ? [1, 1.1, 1] : 1 }}
-            transition={
-              isLoading
-                ? { duration: 1, repeat: Infinity, ease: "easeInOut" }
-                : springTransitions.quick
-            }
-          >
-            {isLoading ? (
-              <svg
-                className="w-[18px] h-[18px] text-coral animate-spin"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-            ) : (
-              <svg
-                className="w-[18px] h-[18px] text-[var(--foreground-secondary)]"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-            )}
-          </motion.div>
+          {isLoading ? (
+            <div
+              className="w-2 h-2 rounded-full flex-shrink-0 animate-amber-pulse"
+              style={{ background: "var(--accent)" }}
+            />
+          ) : (
+            <svg
+              className="w-[18px] h-[18px] text-[var(--foreground-secondary)] flex-shrink-0"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          )}
 
-          <div className="flex-1 min-w-0">
-            {isLoading && stageMessage ? (
-              <motion.p
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-[14px] text-coral font-medium truncate"
-              >
-                {stageMessage}
-              </motion.p>
-            ) : (
-              <input
-                ref={inputRef}
-                type="text"
-                value={query}
-                onChange={handleChange}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setTimeout(() => setIsFocused(false), 200)}
-                placeholder={placeholder}
-                className={clsx(
-                  "w-full bg-transparent outline-none text-[15px]",
-                  "text-[var(--foreground)] placeholder:text-[var(--foreground-secondary)]"
-                )}
-                suppressHydrationWarning
-              />
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={handleChange}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+            placeholder={placeholder}
+            className={clsx(
+              "flex-1 min-w-0 bg-transparent outline-none text-[15px]",
+              "text-[var(--foreground)] placeholder:text-[var(--foreground-tertiary)]"
             )}
-          </div>
+            style={{ fontFamily: "var(--font-ui)" }}
+            suppressHydrationWarning
+          />
 
           <AnimatePresence>
             {hasInput && !isLoading && (
-              <motion.div
+              <motion.button
+                type="button"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
                 transition={springTransitions.quick}
+                onClick={handleClear}
+                className="p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors flex-shrink-0"
               >
-                <GlassButton
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClear}
-                  className="!p-1.5"
+                <svg
+                  className="w-4 h-4 text-[var(--foreground-secondary)]"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
                 >
-                  <svg
-                    className="w-4 h-4 text-[var(--foreground-secondary)]"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z" />
-                  </svg>
-                </GlassButton>
-              </motion.div>
+                  <path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z" />
+                </svg>
+              </motion.button>
             )}
           </AnimatePresence>
         </motion.div>
@@ -215,7 +209,7 @@ export function SearchBar({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={springTransitions.quick}
-              className="text-[12px] text-[var(--foreground-secondary)] text-center mt-1.5"
+              className="text-[12px] text-[var(--foreground-tertiary)] text-center mt-1.5"
             >
               Searching this area
             </motion.p>
@@ -223,6 +217,36 @@ export function SearchBar({
         </AnimatePresence>
       </form>
 
+      {/* Contextual prompt suggestions */}
+      <AnimatePresence mode="wait">
+        {showPrompts && (
+          <motion.div
+            key={promptOffset}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="flex flex-wrap gap-2 mt-2.5 justify-center"
+          >
+            {visiblePrompts.map((prompt) => (
+              <button
+                key={prompt}
+                onClick={() => handlePromptTap(prompt)}
+                className={clsx(
+                  "glass-thin rounded-full px-3 py-1.5 text-[13px]",
+                  "text-[var(--foreground-tertiary)] hover:text-[var(--foreground-secondary)]",
+                  "transition-colors duration-200 cursor-pointer"
+                )}
+                style={{ fontFamily: "var(--font-ui)" }}
+              >
+                {prompt}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Autocomplete dropdown */}
       <AnimatePresence>
         {showSuggestions && (
           <motion.div
@@ -230,43 +254,31 @@ export function SearchBar({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={springTransitions.quick}
-            className={clsx(
-              "absolute left-0 right-0 mt-1.5 rounded-xl overflow-hidden z-50",
-              "glass-floating"
-            )}
+            className="absolute left-0 right-0 mt-1.5 rounded-xl overflow-hidden z-50 glass-floating"
             style={{
               boxShadow: "0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)",
             }}
           >
-            {suggestions.map((suggestion) => (
+            {suggestions.slice(0, 5).map((suggestion, i) => (
               <button
                 key={`${suggestion.name}-${suggestion.category}`}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => handleSuggestionTap(suggestion.name)}
                 className={clsx(
-                  "w-full text-left px-4 py-2.5 flex items-center gap-3",
-                  "hover:bg-[var(--glass-bg)] transition-colors duration-150"
+                  "w-full text-left px-4 py-2.5 flex items-center justify-between",
+                  "hover:bg-[var(--glass-bg)] transition-colors duration-150",
+                  i < suggestions.slice(0, 5).length - 1 && "border-b border-[var(--glass-border)]"
                 )}
               >
-                <svg
-                  className="w-4 h-4 text-[var(--foreground-secondary)] flex-shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
+                <span
+                  className="text-[14px] text-[var(--foreground)] truncate font-medium"
+                  style={{ fontFamily: "var(--font-ui)" }}
                 >
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] text-[var(--foreground)] truncate">
-                    {suggestion.name}
-                  </p>
-                  <p className="text-[12px] text-[var(--foreground-secondary)] truncate">
-                    {suggestion.category}
-                  </p>
-                </div>
+                  {suggestion.name}
+                </span>
+                <span className="text-[12px] text-[var(--foreground-tertiary)] ml-3 flex-shrink-0">
+                  {suggestion.category}
+                </span>
               </button>
             ))}
           </motion.div>

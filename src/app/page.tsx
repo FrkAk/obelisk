@@ -6,6 +6,7 @@ import { RemarkNotification } from "@/components/remark/RemarkNotification";
 import { SearchBar } from "@/components/search/SearchBar";
 import { SearchResults } from "@/components/search/SearchResults";
 import { POICard } from "@/components/poi/POICard";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { useGeofence } from "@/hooks/useGeofence";
 import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
 import { useSearch, useAutocomplete } from "@/hooks/useSearch";
@@ -53,6 +54,9 @@ interface ViewportCenter {
   longitude: number;
 }
 
+/**
+ * Main map page orchestrating search, remarks, and POI discovery.
+ */
 export default function Home() {
   const [selectedRemark, setSelectedRemark] = useState<(Remark & { poi: PoiWithCategory }) | null>(null);
   const [selectedPoi, setSelectedPoi] = useState<ExternalPOI | null>(null);
@@ -81,14 +85,13 @@ export default function Home() {
 
   const viewportDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { remarks, isLoading, location, hasRealLocation } = useNearbyRemarks({
+  const { remarks, location, hasRealLocation } = useNearbyRemarks({
     externalLocation: viewportState.center,
   });
   const { triggeredRemark, dismissNotification } = useGeofence(remarks);
   const {
     results: searchResults,
     isLoading: isSearching,
-    searchStage,
     search,
     clear: clearSearch,
   } = useSearch({ radius: 2000 });
@@ -162,12 +165,6 @@ export default function Home() {
       }
     };
   }, [selectedRemark]);
-
-  const handlePinClick = useCallback((remark: Remark & { poi: PoiWithCategory }) => {
-    setSelectedRemark(remark);
-    setSheetMode("remark");
-    setSheetOpen(true);
-  }, []);
 
   const handleNotificationTap = useCallback(() => {
     if (triggeredRemark) {
@@ -432,13 +429,9 @@ export default function Home() {
   return (
     <main className="relative h-dvh w-full overflow-hidden">
       <MapContainer
-        remarks={remarks}
-        onPinClick={handlePinClick}
         onViewportChange={handleViewportChange}
         onViewportUpdate={handleViewportUpdate}
         onPoiClick={handlePoiClick}
-        selectedRemarkId={selectedRemark?.id}
-        isLoading={isLoading}
         userLocation={hasRealLocation ? location : null}
         flyToLocation={flyToLocation}
         searchPinLocation={searchPinLocation}
@@ -452,7 +445,6 @@ export default function Home() {
           suggestions={suggestions}
           onSuggestionSelect={handleSuggestionSelect}
           isLoading={isSearching}
-          searchStage={searchStage}
           placeholder={hasRealLocation || viewportState.center ? "Ask Obelisk anything..." : "Getting location..."}
           isUsingViewport={isUsingViewport}
         />
@@ -470,7 +462,8 @@ export default function Home() {
           >
             <button
               onClick={handleSearchThisArea}
-              className="flex items-center gap-2 px-4 py-2 glass-floating rounded-full text-[13px] font-medium text-[var(--foreground)] shadow-lg"
+              className="flex items-center gap-2 px-4 py-2 glass-floating rounded-full text-[13px] font-medium text-[var(--foreground)]"
+              style={{ fontFamily: "var(--font-ui)" }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8" />
@@ -494,8 +487,13 @@ export default function Home() {
         {(sheetMode === "remark" || sheetMode === "poi") && (
           isLookingUpPoi ? (
             <div className="py-12 flex flex-col items-center justify-center">
-              <div className="w-8 h-8 border-2 border-coral border-t-transparent rounded-full animate-spin mb-4" />
-              <p className="text-[var(--foreground-secondary)]">Looking up place...</p>
+              <LoadingState
+                phrases={[
+                  "Looking up this place...",
+                  "Finding what we know...",
+                  "Almost there...",
+                ]}
+              />
             </div>
           ) : (selectedPoi || selectedRemark) ? (
             <POICard

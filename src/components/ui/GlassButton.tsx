@@ -59,29 +59,29 @@ export function GlassButton({
 
   const variantStyles: Record<string, React.CSSProperties> = {
     primary: {
-      background: "linear-gradient(135deg, #FF7A5C 0%, #E5593B 100%)",
+      background: "var(--accent)",
       color: "white",
+      fontFamily: "var(--font-ui)",
       boxShadow: disabled
         ? "none"
-        : "0 4px 12px rgba(255, 107, 74, 0.25), 0 1px 3px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.15)",
+        : "0 2px 8px rgba(0, 0, 0, 0.1)",
     },
     secondary: {
-      background: "var(--glass-bg-thin)",
-      backdropFilter: "blur(8px)",
-      color: "#FF6B4A",
-      boxShadow: disabled
-        ? "none"
-        : "0 2px 6px rgba(0, 0, 0, 0.05), inset 0 0.5px 0 var(--glass-border-highlight)",
-      border: "1px solid var(--glass-border)",
+      background: "transparent",
+      color: "var(--accent)",
+      fontFamily: "var(--font-ui)",
+      border: "1px solid var(--accent)",
     },
     ghost: {
       background: "transparent",
       color: "var(--foreground)",
+      fontFamily: "var(--font-ui)",
     },
     minimal: {
       background: "var(--glass-bg-thin)",
       backdropFilter: "blur(8px)",
       color: "var(--foreground)",
+      fontFamily: "var(--font-ui)",
       boxShadow: disabled
         ? "none"
         : "0 1px 4px rgba(0, 0, 0, 0.04)",
@@ -102,8 +102,8 @@ export function GlassButton({
         className
       )}
       style={variantStyles[variant]}
-      whileHover={!disabled ? { scale: 1.02 } : undefined}
-      whileTap={!disabled ? { scale: 0.97 } : undefined}
+      whileHover={!disabled ? { scale: 1.005 } : undefined}
+      whileTap={!disabled ? { scale: 0.985 } : undefined}
       transition={springTransitions.quick}
       disabled={disabled}
       onClick={onClick}

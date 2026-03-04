@@ -31,10 +31,10 @@ export const SearchPin = memo(function SearchPin({
           style={{
             width: 28,
             height: 28,
-            backgroundColor: "#FF6B4A",
+            backgroundColor: "#C49A6C",
             borderRadius: "50% 50% 50% 0",
             transform: "rotate(-45deg)",
-            boxShadow: "0 4px 12px rgba(255, 107, 74, 0.4)",
+            boxShadow: "0 4px 12px rgba(196, 154, 108, 0.4)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

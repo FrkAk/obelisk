@@ -26,7 +26,7 @@ interface MapViewProps {
   flyToLocation?: { latitude: number; longitude: number; ts: number } | null;
 }
 
-const DEFAULT_LIGHT = "mapbox://styles/mapbox/streets-v12";
+const DEFAULT_LIGHT = "mapbox://styles/mapbox/light-v11";
 const DEFAULT_DARK = "mapbox://styles/mapbox/dark-v11";
 
 const MAPBOX_LIGHT = process.env.NEXT_PUBLIC_MAPBOX_STYLE_LIGHT || DEFAULT_LIGHT;
@@ -100,7 +100,7 @@ export function MapView({
       map.flyTo({
         center: [flyToLocation.longitude, flyToLocation.latitude],
         zoom: Math.max(currentZoom, 15),
-        duration: 1500,
+        duration: 1800,
       });
     }
   }, [flyToLocation]);
@@ -111,7 +111,7 @@ export function MapView({
       map.flyTo({
         center: [userLocation.longitude, userLocation.latitude],
         zoom: 14,
-        duration: 1500,
+        duration: 1800,
       });
       hasFlownToUser.current = true;
     }

@@ -1,6 +1,26 @@
 import type { Metadata, Viewport } from "next";
+import { Instrument_Serif, Sora, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+
+const instrumentSerif = Instrument_Serif({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-instrument-serif",
+  display: "swap",
+});
+
+const sora = Sora({
+  subsets: ["latin"],
+  variable: "--font-sora",
+  display: "swap",
+});
+
+const sourceSerif4 = Source_Serif_4({
+  subsets: ["latin"],
+  variable: "--font-source-serif-4",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Obelisk - Your Local Guide, Anywhere",
@@ -21,21 +41,27 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
-    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+    { media: "(prefers-color-scheme: dark)", color: "#0A0A0A" },
   ],
 };
 
+/**
+ * Root layout with Instrument Serif, Sora, and Source Serif 4 font loading.
+ *
+ * Args:
+ *     children: Page content to render.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://rsms.me/" />
-        <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
-      </head>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${instrumentSerif.variable} ${sora.variable} ${sourceSerif4.variable}`}
+    >
       <body className="min-h-screen antialiased">
         <Providers>{children}</Providers>
       </body>

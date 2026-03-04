@@ -290,21 +290,21 @@ export interface GeofenceConfig {
 // ---------------------------------------------------------------------------
 
 export const CATEGORY_COLORS: Record<CategorySlug, string> = {
-  history: "#FF6B4A",
-  food: "#FF9F9F",
-  art: "#BF5AF2",
-  nature: "#34C759",
-  architecture: "#5AC8FA",
-  hidden: "#FFD60A",
-  views: "#64D2FF",
-  culture: "#5E5CE6",
-  shopping: "#FF8A65",
-  nightlife: "#CE93D8",
-  sports: "#4CAF50",
-  health: "#EF5350",
-  transport: "#78909C",
-  education: "#FFAB40",
-  services: "#A1887F",
+  history: "#8B8680",
+  architecture: "#8B8680",
+  culture: "#8B8680",
+  education: "#8B8680",
+  food: "#A89080",
+  nightlife: "#A89080",
+  shopping: "#A89080",
+  nature: "#7A8B7A",
+  views: "#7A8B7A",
+  sports: "#7A8B7A",
+  health: "#7A8B7A",
+  art: "#C49A6C",
+  hidden: "#C49A6C",
+  transport: "#8890A0",
+  services: "#8890A0",
 };
 
 export const DEFAULT_GEOFENCE_CONFIG: GeofenceConfig = {

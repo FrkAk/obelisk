@@ -9,7 +9,7 @@ interface UserLocationMarkerProps {
   location: GeoLocation;
 }
 
-const LOCATION_BLUE = "#007AFF";
+const LOCATION_BLUE = "#3478F6";
 
 /**
  * Apple-style user location marker with subtle pulse animation.
@@ -25,18 +25,6 @@ export function UserLocationMarker({ location }: UserLocationMarkerProps) {
       anchor="center"
     >
       <div className="relative flex items-center justify-center">
-        <motion.div
-          className="absolute rounded-full"
-          style={{
-            width: 64,
-            height: 64,
-            background: `radial-gradient(circle, ${LOCATION_BLUE}12 0%, transparent 70%)`,
-          }}
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={springTransitions.smooth}
-        />
-
         <motion.div
           className="absolute rounded-full"
           style={{
@@ -65,7 +53,7 @@ export function UserLocationMarker({ location }: UserLocationMarkerProps) {
           }}
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          transition={springTransitions.bouncy}
+          transition={springTransitions.gentle}
         />
 
         <motion.div
@@ -79,7 +67,7 @@ export function UserLocationMarker({ location }: UserLocationMarkerProps) {
           }}
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          transition={{ ...springTransitions.bouncy, delay: 0.1 }}
+          transition={{ ...springTransitions.gentle, delay: 0.1 }}
         />
 
         {location.heading !== null && (
@@ -98,7 +86,7 @@ export function UserLocationMarker({ location }: UserLocationMarkerProps) {
             }}
             initial={{ opacity: 0, scale: 0 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ ...springTransitions.bouncy, delay: 0.2 }}
+            transition={{ ...springTransitions.gentle, delay: 0.2 }}
           />
         )}
       </div>

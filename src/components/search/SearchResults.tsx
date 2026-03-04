@@ -1,8 +1,6 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { GlassCard } from "@/components/ui/GlassCard";
-import { GlassPill } from "@/components/ui/GlassPill";
 import { springTransitions, searchResultVariants } from "@/lib/ui/animations";
 import type { CategorySlug, SearchResult } from "@/types/api";
 import { CATEGORY_COLORS } from "@/types/api";
@@ -14,12 +12,14 @@ interface SearchResultsProps {
 }
 
 /**
- * Displays unified search results as a sorted card list.
+ * Displays unified search results as a clean divider-separated list.
  *
- * Args:
- *     results: Pre-sorted array of unified search results.
- *     isLoading: Whether results are loading.
- *     onResultTap: Callback when any result card is tapped.
+ * Each result shows a category-colored dot, name in display serif, subtitle in UI font,
+ * and optional teaser in reading serif. No card wrappers or pill badges.
+ *
+ * @param results - Pre-sorted array of unified search results.
+ * @param isLoading - Whether results are loading.
+ * @param onResultTap - Callback when any result is tapped.
  */
 export function SearchResults({
   results,
@@ -28,7 +28,7 @@ export function SearchResults({
 }: SearchResultsProps) {
   if (isLoading) {
     return (
-      <div className="space-y-3 py-6">
+      <div className="py-6">
         <LoadingSkeleton />
         <LoadingSkeleton />
         <LoadingSkeleton />
@@ -44,11 +44,13 @@ export function SearchResults({
         animate={{ opacity: 1 }}
         transition={springTransitions.smooth}
       >
-        <div className="text-5xl mb-4">🔍</div>
-        <h3 className="text-[18px] font-semibold text-[var(--foreground)] mb-2">
+        <p
+          className="text-[17px] text-[var(--foreground)] mb-1"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
           No results found
-        </h3>
-        <p className="text-[15px] text-[var(--foreground-secondary)]">
+        </p>
+        <p className="text-[14px] text-[var(--foreground-secondary)]">
           Try a different search or expand your radius
         </p>
       </motion.div>
@@ -56,7 +58,7 @@ export function SearchResults({
   }
 
   return (
-    <div className="space-y-3">
+    <div>
       <AnimatePresence mode="popLayout">
         {results.map((result, index) => (
           <motion.div
@@ -67,9 +69,10 @@ export function SearchResults({
             animate="visible"
             exit="exit"
           >
-            <SearchResultCard
+            <SearchResultRow
               result={result}
               onTap={() => onResultTap(result)}
+              isLast={index === results.length - 1}
             />
           </motion.div>
         ))}
@@ -78,148 +81,109 @@ export function SearchResults({
   );
 }
 
-interface SearchResultCardProps {
+interface SearchResultRowProps {
   result: SearchResult;
   onTap: () => void;
+  isLast: boolean;
 }
 
 /**
- * Single search result card with category icon, metadata, and badges.
+ * Single search result row with category dot, name, subtitle, and optional teaser.
  *
- * Args:
- *     result: The unified search result to display.
- *     onTap: Callback when the card is tapped.
+ * @param result - The unified search result to display.
+ * @param onTap - Callback when the row is tapped.
+ * @param isLast - Whether this is the last result (suppresses bottom divider).
  */
-function SearchResultCard({ result, onTap }: SearchResultCardProps) {
-  const categoryInfo = getCategoryInfo(result);
-  const subtitle = result.address ?? result.category;
+function SearchResultRow({ result, onTap, isLast }: SearchResultRowProps) {
+  const categoryColor = getCategoryColor(result);
   const teaser = result.remark?.teaser ?? result.description ?? null;
+  const distanceStr = result.distance != null ? formatDistance(result.distance) : null;
+  const subtitle = [result.category, distanceStr].filter(Boolean).join(" \u00B7 ");
 
   return (
-    <GlassCard padding="md" radius="xl" onClick={onTap} interactive>
-      <div className="space-y-3">
-        <div className="flex items-start gap-3">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{
-              background: categoryInfo.color
-                ? `linear-gradient(135deg, ${categoryInfo.color}30, ${categoryInfo.color}15)`
-                : "var(--glass-bg)",
-            }}
-          >
-            <span className="text-lg">{categoryInfo.icon}</span>
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <h4 className="text-[17px] font-semibold text-[var(--foreground)] leading-tight mb-0.5 truncate">
-              {result.name}
-            </h4>
-            <p className="text-[14px] text-[var(--foreground-secondary)] truncate">
-              {subtitle}
-            </p>
-          </div>
-        </div>
-
-        {teaser && (
-          <p className="text-[14px] text-[var(--foreground-secondary)] line-clamp-2 leading-relaxed">
-            {teaser}
-          </p>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2">
-          {categoryInfo.name && (
-            <GlassPill size="sm" color={categoryInfo.color}>
-              {categoryInfo.name}
-            </GlassPill>
-          )}
-
-          {result.distance != null && (
-            <GlassPill size="sm">
-              {formatDistance(result.distance)}
-            </GlassPill>
-          )}
-
-          {result.hasRemark && (
-            <GlassPill size="sm" color="#FF6B4A">
-              Remark
-            </GlassPill>
-          )}
-
-          {result.cuisine && (
-            <GlassPill size="sm">
-              {result.cuisine}
-            </GlassPill>
-          )}
-        </div>
+    <button
+      onClick={onTap}
+      className="w-full text-left py-3.5 px-1 cursor-pointer hover:bg-[var(--glass-bg-thin)] transition-colors duration-150"
+      style={{
+        borderBottom: isLast ? "none" : "1px solid var(--glass-border)",
+      }}
+    >
+      <div className="flex items-center gap-2.5 mb-0.5">
+        <div
+          className="w-2 h-2 rounded-full flex-shrink-0"
+          style={{ background: categoryColor }}
+        />
+        <h4
+          className="text-[var(--foreground)] leading-tight truncate"
+          style={{ fontFamily: "var(--font-display)", fontSize: "17px" }}
+        >
+          {result.name}
+        </h4>
       </div>
-    </GlassCard>
+
+      {subtitle && (
+        <p
+          className="text-[13px] text-[var(--foreground-secondary)] ml-[18px]"
+          style={{ fontFamily: "var(--font-ui)" }}
+        >
+          {subtitle}
+        </p>
+      )}
+
+      {teaser && (
+        <p
+          className="text-[14px] text-[var(--foreground-secondary)] line-clamp-2 leading-relaxed mt-1 ml-[18px]"
+          style={{ fontFamily: "var(--font-reading)" }}
+        >
+          {teaser}
+        </p>
+      )}
+    </button>
   );
 }
 
+/**
+ * Shimmer loading skeleton for a single search result row.
+ */
 function LoadingSkeleton() {
   return (
-    <GlassCard padding="md" radius="xl" variant="thin">
-      <div className="space-y-3 animate-pulse">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[var(--glass-bg)]" />
-          <div className="flex-1 space-y-2">
-            <div className="h-5 w-48 bg-[var(--glass-bg)] rounded" />
-            <div className="h-4 w-32 bg-[var(--glass-bg)] rounded" />
-          </div>
-        </div>
-        <div className="h-4 w-full bg-[var(--glass-bg)] rounded" />
-        <div className="h-4 w-3/4 bg-[var(--glass-bg)] rounded" />
+    <div className="py-3.5 px-1 border-b border-[var(--glass-border)]">
+      <div className="flex items-center gap-2.5 mb-1.5">
+        <div className="w-2 h-2 rounded-full shimmer" />
+        <div className="h-5 w-40 rounded shimmer" />
       </div>
-    </GlassCard>
+      <div className="ml-[18px] space-y-1.5">
+        <div className="h-3.5 w-28 rounded shimmer" />
+        <div className="h-3.5 w-full rounded shimmer" />
+      </div>
+    </div>
   );
 }
 
-interface CategoryInfo {
-  name: string;
-  icon: string;
-  color: string;
-}
-
-function getCategoryInfo(result: SearchResult): CategoryInfo {
-  if (result.source === "geocoding") {
-    return { name: result.placeType ?? "location", icon: "📌", color: "#5AC8FA" };
-  }
+/**
+ * Resolves the category dot color for a search result.
+ *
+ * @param result - The search result.
+ * @returns Hex color string for the category dot.
+ */
+function getCategoryColor(result: SearchResult): string {
+  if (result.source === "geocoding") return "#8890A0";
 
   const slug = result.category as CategorySlug;
   const color = CATEGORY_COLORS[slug];
-  if (color) {
-    return { name: slug, icon: getCategoryIcon(slug), color };
-  }
+  if (color) return color;
 
-  if (result.remark?.poi?.category) {
-    const cat = result.remark.poi.category;
-    return { name: cat.name, icon: cat.icon, color: cat.color };
-  }
+  if (result.remark?.poi?.category?.color) return result.remark.poi.category.color;
 
-  return { name: "", icon: "📍", color: "" };
+  return "#8890A0";
 }
 
-function getCategoryIcon(slug: CategorySlug): string {
-  const icons: Record<CategorySlug, string> = {
-    history: "🏛️",
-    food: "🍴",
-    art: "🎨",
-    nature: "🌿",
-    architecture: "🏗️",
-    hidden: "💎",
-    views: "🌄",
-    culture: "🎭",
-    shopping: "🛍️",
-    nightlife: "🌙",
-    sports: "⚽",
-    health: "🏥",
-    transport: "🚇",
-    education: "🎓",
-    services: "🏢",
-  };
-  return icons[slug] ?? "📍";
-}
-
+/**
+ * Formats a distance in meters to a human-readable string.
+ *
+ * @param meters - Distance in meters.
+ * @returns Formatted distance string (e.g. "240m" or "1.2km").
+ */
 function formatDistance(meters: number): string {
   if (meters < 1000) return `${Math.round(meters)}m`;
   return `${(meters / 1000).toFixed(1)}km`;

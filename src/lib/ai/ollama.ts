@@ -156,11 +156,10 @@ export async function checkOllamaHealth(
 
     const data = await response.json();
     const models = data.models || [];
-    const modelNames = models.map((m: { name: string }) => m.name);
-    const modelPrefix = model.split(":")[0];
-    const found = models.some((m: { name: string }) => m.name.startsWith(modelPrefix));
+    const modelNames: string[] = models.map((m: { name: string }) => m.name);
+    const found = modelNames.some((n) => n === model || n === `${model}:latest`);
 
-    log.info(`Health check — found: ${found ? modelNames.find((n: string) => n.startsWith(modelPrefix)) : "none"} (looking for: ${modelPrefix})`);
+    log.info(`Health check — ${found ? "found" : "missing"}: ${model}`);
 
     return found;
   } catch (error) {

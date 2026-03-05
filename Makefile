@@ -1,4 +1,4 @@
-.PHONY: help setup setup-quick finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup setup-quick finish-setup run run-local run-public run-flutter stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -36,6 +36,7 @@ help:
 	@printf "  $(CYAN)run$(RESET)            Start on localhost:3000\n"
 	@printf "  $(CYAN)run-local$(RESET)      Start exposed to local network (same WiFi)\n"
 	@printf "  $(CYAN)run-public$(RESET)     Start with Cloudflare Tunnel (obelisk.obeliskark.com)\n"
+	@printf "  $(CYAN)run-flutter$(RESET)    Start backend (LAN) + Flutter app on connected device\n"
 	@printf "  $(CYAN)stop$(RESET)       Stop services (keeps data)\n"
 	@printf "  $(CYAN)logs$(RESET)       View database logs\n"
 	@printf "  $(CYAN)rebuild$(RESET)    Clean rebuild (deps + next cache)\n"
@@ -238,6 +239,19 @@ run-public:
 	@printf "  Logs:    /tmp/cloudflared.log\n"
 	@printf "\n"
 	@printf "Run '$(CYAN)make stop$(RESET)' to stop everything\n"
+
+run-flutter:
+	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
+	printf "$(GREEN)Starting backend + Flutter app...$(RESET)\n"; \
+	printf "\n"; \
+	printf "  API:     http://$$LOCAL_IP:3000\n"; \
+	printf "  Flutter: building and deploying to device...\n"; \
+	printf "\n"
+	@$(COMPOSE) -f docker-compose.yml -f docker-compose.local.yml up -d
+	@printf "Waiting for backend...\n"
+	@until curl -sf http://localhost:3000 >/dev/null 2>&1; do sleep 1; done
+	@printf "$(GREEN)Backend ready$(RESET)\n\n"
+	cd flutter && flutter run
 
 stop:
 	@printf "Stopping services...\n"

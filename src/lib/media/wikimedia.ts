@@ -1,5 +1,15 @@
 const THUMB_WIDTH = 800;
 const TIMEOUT_MS = 10_000;
+const REQUEST_DELAY_MS = 200;
+
+/**
+ * Sleeps for the given number of milliseconds.
+ *
+ * @param ms - Duration to sleep.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -20,6 +30,7 @@ export async function commonsFileToThumb(
     `&prop=imageinfo&iiprop=url&iiurlwidth=${THUMB_WIDTH}&format=json`;
 
   try {
+    await sleep(REQUEST_DELAY_MS);
     const res = await fetch(url, {
       headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -58,6 +69,7 @@ export async function commonsCategoryToThumb(
     `&cmtype=file&cmlimit=1&format=json`;
 
   try {
+    await sleep(REQUEST_DELAY_MS);
     const res = await fetch(listUrl, {
       headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -111,6 +123,7 @@ export async function wikidataToThumb(
     `&ids=${encodeURIComponent(wikidataId)}&props=claims&format=json`;
 
   try {
+    await sleep(REQUEST_DELAY_MS);
     const res = await fetch(url, {
       headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(TIMEOUT_MS),

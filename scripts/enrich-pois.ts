@@ -11,7 +11,7 @@ import type { PoiProfile } from "../src/types/api";
 const log = createLogger("enrich-taxonomy");
 
 const BATCH_SIZE = parseInt(process.env.ENRICH_BATCH_SIZE || "50", 10);
-const CONCURRENCY = parseInt(process.env.ENRICH_CONCURRENCY || "8", 10);
+const CONCURRENCY = parseInt(process.env.ENRICH_CONCURRENCY || "3", 10);
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3.5:9b";
 const FORCE = process.argv.includes("--force");
 

@@ -1,4 +1,4 @@
-const DEFAULT_BBOX_OFFSET = 0.0003;
+const DEFAULT_BBOX_OFFSET = 0.0005;
 
 interface MapillaryImage {
   id: string;

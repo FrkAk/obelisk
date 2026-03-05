@@ -80,6 +80,7 @@ export default function Home() {
   const [appError, setAppError] = useState<string | null>(null);
 
   const lastSearchQueryRef = useRef<string | null>(null);
+  const poiClickSeqRef = useRef(0);
   const regenerateCooldownsRef = useRef<Map<string, number>>(new Map());
   const cooldownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -219,6 +220,7 @@ export default function Home() {
 
   const handlePoiClick = useCallback(
     async (poi: { name: string; latitude: number; longitude: number; category?: string }) => {
+      const seq = ++poiClickSeqRef.current;
       setIsLookingUpPoi(true);
       setSheetMode("poi");
       setSheetOpen(true);
@@ -234,6 +236,8 @@ export default function Home() {
             category: poi.category,
           }),
         });
+
+        if (seq !== poiClickSeqRef.current) return;
 
         if (!response.ok) {
           setAppError("Couldn't load this place. Try again.");
@@ -253,11 +257,12 @@ export default function Home() {
           setSelectedRemark(null);
         }
       } catch {
+        if (seq !== poiClickSeqRef.current) return;
         setAppError("Couldn't load this place. Try again.");
         setSheetOpen(false);
         setSheetMode(null);
       } finally {
-        setIsLookingUpPoi(false);
+        if (seq === poiClickSeqRef.current) setIsLookingUpPoi(false);
       }
     },
     []
@@ -345,7 +350,8 @@ export default function Home() {
   const handleGenerateRemarkForPoi = useCallback(async () => {
     if (!selectedPoi) return;
 
-    setGeneratingPoiId(selectedPoi.id);
+    const poiId = selectedPoi.id;
+    setGeneratingPoiId(poiId);
 
     try {
       const response = await fetch("/api/remarks/generate-for-poi", {
@@ -366,11 +372,16 @@ export default function Home() {
       }
 
       const data = await response.json();
-      setSelectedRemark(data.remark);
+      setSelectedPoi((current: ExternalPOI | null) => {
+        if (current?.id === poiId) {
+          setSelectedRemark(data.remark);
+        }
+        return current;
+      });
     } catch {
       setAppError("Couldn't generate a remark right now.");
     } finally {
-      setGeneratingPoiId(null);
+      setGeneratingPoiId((current: string | null) => current === poiId ? null : current);
     }
   }, [selectedPoi]);
 

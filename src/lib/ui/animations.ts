@@ -125,5 +125,5 @@ export const fullscreenVariants: Variants = {
 export const sheetCornerRadius = {
   floating: 28,
   mid: 20,
-  full: 0,
+  full: 12,
 } as const;

@@ -1,8 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useDragControls, type PanInfo } from "framer-motion";
 import { springTransitions, overlayVariants, sheetCornerRadius } from "@/lib/ui/animations";
+
+const SheetSnapContext = createContext<number>(1);
+
+/**
+ * Returns the current snap index of the enclosing BottomSheet.
+ * Defaults to 1 (expanded) when used outside a sheet.
+ *
+ * @returns Current snap index.
+ */
+export function useSheetSnap(): number {
+  return useContext(SheetSnapContext);
+}
 
 interface BottomSheetProps {
   isOpen: boolean;
@@ -38,10 +50,14 @@ export function BottomSheet({
   const [containerHeight, setContainerHeight] = useState(0);
   const [currentSnap, setCurrentSnap] = useState(initialSnap);
   const [isDragging, setIsDragging] = useState(false);
+  const [isChevron, setIsChevron] = useState(false);
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
 
   if (isOpen && !prevIsOpen) {
     setCurrentSnap(initialSnap);
+    if (initialSnap < snapPoints.length - 1) {
+      setIsChevron(true);
+    }
   }
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen);
@@ -55,6 +71,22 @@ export function BottomSheet({
     window.addEventListener("resize", updateHeight);
     return () => window.removeEventListener("resize", updateHeight);
   }, []);
+
+  useEffect(() => {
+    if (!isChevron) return;
+    const timer = setTimeout(() => setIsChevron(false), 800);
+    return () => clearTimeout(timer);
+  }, [isChevron]);
+
+  /**
+   * Sets snap index and triggers chevron hint if not at max snap.
+   *
+   * @param index - The snap index to transition to.
+   */
+  const snapTo = (index: number) => {
+    setCurrentSnap(index);
+    if (index < snapPoints.length - 1) setIsChevron(true);
+  };
 
   /**
    * Determines the next snap point based on drag velocity and offset.
@@ -72,10 +104,10 @@ export function BottomSheet({
       if (currentSnap === 0) {
         onClose();
       } else {
-        setCurrentSnap(Math.max(0, currentSnap - 1));
+        snapTo(Math.max(0, currentSnap - 1));
       }
     } else if (velocity < -500 || (offset < -100 && velocity < 0)) {
-      setCurrentSnap(Math.min(snapPoints.length - 1, currentSnap + 1));
+      snapTo(Math.min(snapPoints.length - 1, currentSnap + 1));
     } else {
       const newY = currentY + offset;
       const newSnapIndex = snapPoints.reduce((prev, curr, index) => {
@@ -83,7 +115,7 @@ export function BottomSheet({
         const currDiff = Math.abs(containerHeight * (1 - curr) - newY);
         return currDiff < prevDiff ? index : prev;
       }, 0);
-      setCurrentSnap(newSnapIndex);
+      snapTo(newSnapIndex);
     }
   };
 
@@ -145,22 +177,42 @@ export function BottomSheet({
               onPointerDown={(e) => dragControls.start(e)}
             >
               <motion.div
-                className="w-8 h-1 rounded-full"
-                style={{
-                  background: "linear-gradient(180deg, rgba(120, 120, 128, 0.4) 0%, rgba(120, 120, 128, 0.3) 100%)",
-                }}
-                whileHover={{ scaleX: 1.1 }}
+                className="flex items-center"
+                whileHover={{ scaleX: 1.15 }}
                 whileTap={{ scaleX: 0.95 }}
                 transition={springTransitions.snappy}
-              />
+              >
+                <motion.div
+                  className="w-4 h-[3px] rounded-l-full"
+                  style={{
+                    background: "linear-gradient(180deg, rgba(120, 120, 128, 0.4) 0%, rgba(120, 120, 128, 0.3) 100%)",
+                    originX: 1,
+                    originY: 0.5,
+                  }}
+                  animate={{ rotate: isChevron ? 12 : 0 }}
+                  transition={springTransitions.smooth}
+                />
+                <motion.div
+                  className="w-4 h-[3px] rounded-r-full"
+                  style={{
+                    background: "linear-gradient(180deg, rgba(120, 120, 128, 0.4) 0%, rgba(120, 120, 128, 0.3) 100%)",
+                    originX: 0,
+                    originY: 0.5,
+                  }}
+                  animate={{ rotate: isChevron ? -12 : 0 }}
+                  transition={springTransitions.smooth}
+                />
+              </motion.div>
             </div>
 
-            <div
-              className="overflow-y-auto px-4 pb-safe overscroll-contain"
-              style={{ height: "calc(100% - 32px)" }}
-            >
-              {children}
-            </div>
+            <SheetSnapContext.Provider value={currentSnap}>
+              <div
+                className="overflow-y-auto px-4 pb-safe overscroll-contain"
+                style={{ height: "calc(100% - 32px)" }}
+              >
+                {children}
+              </div>
+            </SheetSnapContext.Provider>
           </motion.div>
         </>
       )}

@@ -26,6 +26,7 @@ const safeMarkdownComponents = {
   },
 };
 import { LoadingState } from "@/components/ui/LoadingState";
+import { useSheetSnap } from "@/components/layout/BottomSheet";
 import { springTransitions } from "@/lib/ui/animations";
 import { OBELISK_ICON_PATH } from "@/lib/ui/constants";
 import { formatDistance } from "@/lib/geo/distance";
@@ -121,6 +122,8 @@ export function POICard({
   cooldownRemaining = 0,
   autoGenerate = true,
 }: POICardProps) {
+  const snapIndex = useSheetSnap();
+  const isPeek = snapIndex === 0;
   const categoryColor = CATEGORY_COLORS[poi.category as CategorySlug] || CATEGORY_COLORS.history;
   const hasRemark = !!remark;
   const subcategories = getSubcategories(poi);
@@ -187,49 +190,60 @@ export function POICard({
       animate={{ opacity: 1, y: 0 }}
       transition={springTransitions.smooth}
     >
-      {/* Back button */}
-      {onBack && (
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1 text-[13px] mb-3"
-          style={{ color: "var(--foreground-secondary)", fontFamily: "var(--font-ui)" }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-          Results
-        </button>
-      )}
+      {/* Collapsible header group — hidden at peek */}
+      <div
+        style={{
+          maxHeight: isPeek ? 0 : 120,
+          opacity: isPeek ? 0 : 1,
+          overflow: "hidden",
+          transition: "max-height 0.35s ease, opacity 0.3s ease",
+        }}
+      >
+        {/* Back button */}
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1 text-[13px] mb-3"
+            style={{ color: "var(--foreground-secondary)", fontFamily: "var(--font-ui)" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            Results
+          </button>
+        )}
 
-      {/* POI header — name first */}
-      <div className="px-1 space-y-1">
-        <h2
-          className="leading-tight"
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: "var(--font-size-title2)",
-            color: "var(--foreground)",
-          }}
-        >
-          {poi.name}
-        </h2>
-        <div className="flex items-center gap-1.5" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--font-size-footnote)", color: "var(--foreground-secondary)" }}>
-          <span
-            className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: categoryColor }}
-          />
-          <span>{categoryDisplay}</span>
-          {poi.distance != null && poi.distance > 0 && (
-            <>
-              <span style={{ color: "var(--foreground-tertiary)" }}>·</span>
-              <span>{formatDistance(poi.distance)} away</span>
-            </>
-          )}
+        {/* POI header — name first */}
+        <div className="px-1 space-y-1">
+          <h2
+            className="leading-tight"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "var(--font-size-title2)",
+              color: "var(--foreground)",
+            }}
+          >
+            {poi.name}
+          </h2>
+          <div className="flex items-center gap-1.5" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--font-size-footnote)", color: "var(--foreground-secondary)" }}>
+            <span
+              className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: categoryColor }}
+            />
+            <span>{categoryDisplay}</span>
+            {poi.distance != null && poi.distance > 0 && (
+              <>
+                <span style={{ color: "var(--foreground-tertiary)" }}>·</span>
+                <span>{formatDistance(poi.distance)} away</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Photo carousel */}
-      <MediaCarousel
+      {/* Photo carousel with hero overlay at peek */}
+      <div className="relative">
+        <MediaCarousel
         images={poi.images ?? []}
         mapillaryId={poi.mapillaryId}
         mapillaryBearing={poi.mapillaryBearing}
@@ -238,6 +252,47 @@ export function POICard({
         poiId={poi.id.startsWith("db-") ? poi.id.slice(3) : undefined}
       />
 
+        {/* Hero overlay — visible at peek */}
+        <motion.div
+          className="absolute bottom-0 left-0 right-0 z-10 rounded-b-xl pointer-events-none px-4 pb-3 pt-12"
+          style={{
+            background: "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.1) 70%, transparent 100%)",
+          }}
+          initial={false}
+          animate={{ opacity: isPeek ? 1 : 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <h2
+            className="leading-tight"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "var(--font-size-title2)",
+              color: "#fff",
+              textShadow: "0 1px 4px rgba(0,0,0,0.3)",
+            }}
+          >
+            {poi.name}
+          </h2>
+          <span
+            className="text-[13px]"
+            style={{
+              fontFamily: "var(--font-ui)",
+              color: "rgba(255,255,255,0.7)",
+            }}
+          >
+            {categoryDisplay}
+            {poi.distance != null && poi.distance > 0 && ` · ${formatDistance(poi.distance)} away`}
+          </span>
+        </motion.div>
+      </div>
+
+      {/* Actions + tabs — fade in on expand */}
+      <div
+        style={{
+          opacity: isPeek ? 0 : 1,
+          transition: "opacity 0.3s ease 0.1s",
+        }}
+      >
       {/* Quick actions: Navigate, Echoes, Share */}
       {/* TODO: implement Echoes — audio stories from the community */}
       <div className="flex items-center gap-2 px-1 pt-3">
@@ -334,6 +389,7 @@ export function POICard({
             {activeTab === "details" && <DetailsTab poi={poi} />}
           </motion.div>
         </AnimatePresence>
+      </div>
       </div>
     </motion.article>
   );

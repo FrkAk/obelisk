@@ -135,9 +135,16 @@ export function useAutocomplete() {
             params.set("lon", location.longitude.toString());
           }
           const response = await fetch(`/api/search/autocomplete?${params}`);
+          if (!response.ok) {
+            console.error(`[autocomplete] HTTP ${response.status}`);
+            setSuggestions([]);
+            return;
+          }
           const data = await response.json();
           setSuggestions(data.suggestions || []);
-        } catch {
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          console.error("[autocomplete]", error);
           setSuggestions([]);
         }
       }, 150);

@@ -5,7 +5,10 @@ import type { SearchLocation } from "@/types/api";
 const log = createLogger("typesense");
 
 const TYPESENSE_URL = process.env.TYPESENSE_URL || "http://localhost:8108";
-const TYPESENSE_API_KEY = process.env.TYPESENSE_API_KEY || "obelisk_typesense_dev";
+const TYPESENSE_API_KEY = process.env.TYPESENSE_API_KEY;
+if (!TYPESENSE_API_KEY) {
+  throw new Error("TYPESENSE_API_KEY environment variable is required");
+}
 
 const url = new URL(TYPESENSE_URL);
 

@@ -6,6 +6,8 @@ import { RemarkNotification } from "@/components/remark/RemarkNotification";
 import { SearchBar } from "@/components/search/SearchBar";
 import { SearchResults } from "@/components/search/SearchResults";
 import { POICard } from "@/components/poi/POICard";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorToast } from "@/components/ui/ErrorToast";
 import { useGeofence } from "@/hooks/useGeofence";
 import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
 import { useSearch, useAutocomplete } from "@/hooks/useSearch";
@@ -53,6 +55,9 @@ interface ViewportCenter {
   longitude: number;
 }
 
+/**
+ * Main map page orchestrating search, remarks, and POI discovery.
+ */
 export default function Home() {
   const [selectedRemark, setSelectedRemark] = useState<(Remark & { poi: PoiWithCategory }) | null>(null);
   const [selectedPoi, setSelectedPoi] = useState<ExternalPOI | null>(null);
@@ -72,6 +77,7 @@ export default function Home() {
   const [previousSheetMode, setPreviousSheetMode] = useState<SheetMode>(null);
   const [flyToLocation, setFlyToLocation] = useState<{ latitude: number; longitude: number; ts: number } | null>(null);
   const [searchPinLocation, setSearchPinLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [appError, setAppError] = useState<string | null>(null);
 
   const lastSearchQueryRef = useRef<string | null>(null);
   const regenerateCooldownsRef = useRef<Map<string, number>>(new Map());
@@ -81,14 +87,14 @@ export default function Home() {
 
   const viewportDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { remarks, isLoading, location, hasRealLocation } = useNearbyRemarks({
+  const { remarks, location, hasRealLocation } = useNearbyRemarks({
     externalLocation: viewportState.center,
   });
   const { triggeredRemark, dismissNotification } = useGeofence(remarks);
   const {
     results: searchResults,
     isLoading: isSearching,
-    searchStage,
+    error: searchError,
     search,
     clear: clearSearch,
   } = useSearch({ radius: 2000 });
@@ -98,6 +104,10 @@ export default function Home() {
     fetchSuggestions,
     clear: clearAutocomplete,
   } = useAutocomplete();
+
+  useEffect(() => {
+    if (searchError) setAppError("Search isn't working right now.");
+  }, [searchError]);
 
   const autocompleteLocation = useMemo(
     () => viewportState.center ?? (location ? { latitude: location.latitude, longitude: location.longitude } : undefined),
@@ -163,12 +173,6 @@ export default function Home() {
     };
   }, [selectedRemark]);
 
-  const handlePinClick = useCallback((remark: Remark & { poi: PoiWithCategory }) => {
-    setSelectedRemark(remark);
-    setSheetMode("remark");
-    setSheetOpen(true);
-  }, []);
-
   const handleNotificationTap = useCallback(() => {
     if (triggeredRemark) {
       setSelectedRemark(triggeredRemark);
@@ -232,7 +236,7 @@ export default function Home() {
         });
 
         if (!response.ok) {
-          console.error("POI lookup failed");
+          setAppError("Couldn't load this place. Try again.");
           setSheetOpen(false);
           setSheetMode(null);
           return;
@@ -248,8 +252,8 @@ export default function Home() {
           setSelectedPoi(data.poi);
           setSelectedRemark(null);
         }
-      } catch (error) {
-        console.error("Error looking up POI:", error);
+      } catch {
+        setAppError("Couldn't load this place. Try again.");
         setSheetOpen(false);
         setSheetMode(null);
       } finally {
@@ -351,15 +355,20 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error("Failed to generate remark:", error);
+        if (response.status === 503) {
+          setAppError("Our storyteller is resting. Try again in a moment.");
+        } else if (response.status === 429) {
+          setAppError("Too many requests. Please slow down.");
+        } else {
+          setAppError("Couldn't generate a remark right now.");
+        }
         return;
       }
 
       const data = await response.json();
       setSelectedRemark(data.remark);
-    } catch (error) {
-      console.error("Error generating remark:", error);
+    } catch {
+      setAppError("Couldn't generate a remark right now.");
     } finally {
       setGeneratingPoiId(null);
     }
@@ -412,8 +421,13 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error("Failed to regenerate remark:", error);
+        if (response.status === 503) {
+          setAppError("Our storyteller is resting. Try again in a moment.");
+        } else if (response.status === 429) {
+          setAppError("Too many requests. Please slow down.");
+        } else {
+          setAppError("Couldn't refresh this remark.");
+        }
         return;
       }
 
@@ -422,8 +436,8 @@ export default function Home() {
 
       regenerateCooldownsRef.current.set(poiId, Date.now());
       setCooldownRemaining(REGENERATE_COOLDOWN_MS / 1000);
-    } catch (error) {
-      console.error("Error regenerating remark:", error);
+    } catch {
+      setAppError("Couldn't refresh this remark.");
     } finally {
       setIsRegenerating(false);
     }
@@ -432,13 +446,10 @@ export default function Home() {
   return (
     <main className="relative h-dvh w-full overflow-hidden">
       <MapContainer
-        remarks={remarks}
-        onPinClick={handlePinClick}
         onViewportChange={handleViewportChange}
         onViewportUpdate={handleViewportUpdate}
         onPoiClick={handlePoiClick}
-        selectedRemarkId={selectedRemark?.id}
-        isLoading={isLoading}
+        onMapClick={sheetOpen ? handleSheetClose : undefined}
         userLocation={hasRealLocation ? location : null}
         flyToLocation={flyToLocation}
         searchPinLocation={searchPinLocation}
@@ -452,7 +463,6 @@ export default function Home() {
           suggestions={suggestions}
           onSuggestionSelect={handleSuggestionSelect}
           isLoading={isSearching}
-          searchStage={searchStage}
           placeholder={hasRealLocation || viewportState.center ? "Ask Obelisk anything..." : "Getting location..."}
           isUsingViewport={isUsingViewport}
         />
@@ -470,13 +480,14 @@ export default function Home() {
           >
             <button
               onClick={handleSearchThisArea}
-              className="flex items-center gap-2 px-4 py-2 glass-floating rounded-full text-[13px] font-medium text-[var(--foreground)] shadow-lg"
+              className="flex items-center gap-2 px-4 py-2 glass-floating rounded-full text-[13px] font-medium text-[var(--foreground)]"
+              style={{ fontFamily: "var(--font-ui)" }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8" />
                 <path d="M21 21l-4.35-4.35" />
               </svg>
-              Search this area
+              Look around here
             </button>
           </motion.div>
         )}
@@ -490,12 +501,19 @@ export default function Home() {
         />
       )}
 
+      <ErrorToast message={appError} onClose={() => setAppError(null)} />
+
       <BottomSheet isOpen={sheetOpen} onClose={handleSheetClose}>
         {(sheetMode === "remark" || sheetMode === "poi") && (
           isLookingUpPoi ? (
             <div className="py-12 flex flex-col items-center justify-center">
-              <div className="w-8 h-8 border-2 border-coral border-t-transparent rounded-full animate-spin mb-4" />
-              <p className="text-[var(--foreground-secondary)]">Looking up place...</p>
+              <LoadingState
+                phrases={[
+                  "Looking up this place...",
+                  "Finding what we know...",
+                  "Almost there...",
+                ]}
+              />
             </div>
           ) : (selectedPoi || selectedRemark) ? (
             <POICard

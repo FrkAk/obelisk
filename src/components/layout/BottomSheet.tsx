@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useDragControls, type PanInfo } from "framer-motion";
-import { clsx } from "clsx";
-import { springTransitions, overlayVariants } from "@/lib/ui/animations";
+import { springTransitions, overlayVariants, sheetCornerRadius } from "@/lib/ui/animations";
 
 interface BottomSheetProps {
   isOpen: boolean;
@@ -15,15 +14,17 @@ interface BottomSheetProps {
 
 const DEFAULT_SNAP_POINTS = [0.35, 0.55, 0.85];
 
+const BOTTOM_GAPS = [12, 4, 0];
+const CORNER_RADII = [sheetCornerRadius.floating, sheetCornerRadius.mid, sheetCornerRadius.full];
+
 /**
- * Apple Maps-style bottom sheet with liquid glass and spring physics.
+ * iOS 26 Apple Maps-style floating bottom sheet with progressive corner morphing.
  *
- * Args:
- *     isOpen: Whether the sheet is visible.
- *     onClose: Callback when sheet should close.
- *     children: Content to render inside the sheet.
- *     snapPoints: Array of height percentages (0-1) for snap positions.
- *     initialSnap: Index of the initial snap point.
+ * @param isOpen - Whether the sheet is visible.
+ * @param onClose - Callback when sheet should close.
+ * @param children - Content to render inside the sheet.
+ * @param snapPoints - Array of height percentages (0-1) for snap positions.
+ * @param initialSnap - Index of the initial snap point.
  */
 export function BottomSheet({
   isOpen,
@@ -55,10 +56,12 @@ export function BottomSheet({
     return () => window.removeEventListener("resize", updateHeight);
   }, []);
 
-  const handleDragStart = () => {
-    setIsDragging(true);
-  };
-
+  /**
+   * Determines the next snap point based on drag velocity and offset.
+   *
+   * @param _event - The pointer event (unused).
+   * @param info - Drag info with velocity and offset.
+   */
   const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     setIsDragging(false);
     const velocity = info.velocity.y;
@@ -86,6 +89,8 @@ export function BottomSheet({
 
   const sheetHeight = containerHeight * snapPoints[currentSnap];
   const elevationLevel = currentSnap / (snapPoints.length - 1);
+  const bottomGap = BOTTOM_GAPS[currentSnap] ?? 0;
+  const cornerRadius = CORNER_RADII[currentSnap] ?? 0;
 
   return (
     <AnimatePresence>
@@ -105,32 +110,42 @@ export function BottomSheet({
 
           <motion.div
             ref={containerRef}
-            className={clsx(
-              "fixed bottom-0 left-0 right-0 z-50",
-              "glass-liquid rounded-t-[28px] overflow-hidden"
-            )}
-            style={{
-              boxShadow: isDragging
-                ? "0 -12px 40px rgba(0, 0, 0, 0.15), 0 -4px 12px rgba(0, 0, 0, 0.08)"
-                : `0 -${6 + elevationLevel * 6}px ${20 + elevationLevel * 20}px rgba(0, 0, 0, ${0.08 + elevationLevel * 0.06})`,
+            className="fixed z-50 glass-liquid overflow-hidden max-w-[540px] mx-auto"
+            initial={{
+              y: containerHeight,
+              bottom: BOTTOM_GAPS[0],
+              left: BOTTOM_GAPS[0],
+              right: BOTTOM_GAPS[0],
+              borderRadius: CORNER_RADII[0],
             }}
-            initial={{ y: containerHeight }}
-            animate={{ height: sheetHeight, y: 0 }}
+            animate={{
+              height: sheetHeight,
+              y: 0,
+              bottom: bottomGap,
+              left: bottomGap,
+              right: bottomGap,
+              borderRadius: cornerRadius,
+            }}
             exit={{ y: containerHeight }}
-            transition={springTransitions.smooth}
+            transition={springTransitions.liquid}
             drag="y"
             dragControls={dragControls}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={0.05}
-            onDragStart={handleDragStart}
+            onDragStart={() => setIsDragging(true)}
             onDragEnd={handleDragEnd}
+            style={{
+              boxShadow: isDragging
+                ? "0 -12px 40px rgba(0, 0, 0, 0.15), 0 -4px 12px rgba(0, 0, 0, 0.08)"
+                : "var(--shadow-sheet-current)",
+            }}
           >
             <div
               className="flex justify-center pt-2.5 pb-2 cursor-grab active:cursor-grabbing"
               onPointerDown={(e) => dragControls.start(e)}
             >
               <motion.div
-                className="w-10 h-[5px] rounded-full"
+                className="w-8 h-1 rounded-full"
                 style={{
                   background: "linear-gradient(180deg, rgba(120, 120, 128, 0.4) 0%, rgba(120, 120, 128, 0.3) 100%)",
                 }}
@@ -142,7 +157,7 @@ export function BottomSheet({
 
             <div
               className="overflow-y-auto px-4 pb-safe overscroll-contain"
-              style={{ height: `calc(100% - 32px)` }}
+              style={{ height: "calc(100% - 32px)" }}
             >
               {children}
             </div>

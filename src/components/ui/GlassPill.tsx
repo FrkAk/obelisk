@@ -16,18 +16,18 @@ interface GlassPillProps {
 }
 
 const sizeClasses = {
-  sm: "px-2.5 py-1 text-[12px] gap-1",
-  md: "px-3 py-1.5 text-[13px] gap-1.5",
-  lg: "px-4 py-2 text-[15px] gap-2",
+  sm: "px-2 py-0.5 text-[12px] gap-1",
+  md: "px-2.5 py-1 text-[13px] gap-1.5",
+  lg: "px-3.5 py-1.5 text-[15px] gap-2",
 };
 
 /**
- * Glassmorphic pill/chip component with optional gradient color accent.
+ * Glassmorphic pill/chip with optional accent color.
  *
  * Args:
  *     children: Content to display inside the pill.
  *     icon: Optional icon element to show before content.
- *     color: Accent color for text or active background gradient.
+ *     color: Accent color for text when inactive.
  *     active: Whether pill is in active/selected state.
  *     onClick: Optional click handler (makes pill a button).
  *     size: Size variant (sm, md, lg).
@@ -49,6 +49,17 @@ export function GlassPill({
     className
   );
 
+  const activeStyle: React.CSSProperties = {
+    background: "var(--accent-subtle)",
+    color: "var(--accent)",
+  };
+
+  const inactiveStyle: React.CSSProperties | undefined = color && !active
+    ? { color }
+    : undefined;
+
+  const style = active ? activeStyle : inactiveStyle;
+
   const contentElement = (
     <>
       {icon && <span className="flex-shrink-0">{icon}</span>}
@@ -61,22 +72,11 @@ export function GlassPill({
       <motion.button
         className={clsx(
           baseStyles,
-          active
-            ? "text-white"
-            : "glass-thin hover:bg-black/5 dark:hover:bg-white/5"
+          !active && "glass-thin hover:bg-black/5 dark:hover:bg-white/5"
         )}
-        style={
-          active && color
-            ? {
-                background: `linear-gradient(135deg, ${color}, ${adjustColor(color, -20)})`,
-                boxShadow: `0 2px 8px ${color}40`,
-              }
-            : color && !active
-              ? { color }
-              : undefined
-        }
+        style={style}
         onClick={onClick}
-        whileTap={{ scale: 0.96 }}
+        whileTap={{ scale: 0.985 }}
         transition={springTransitions.quick}
       >
         {contentElement}
@@ -88,30 +88,11 @@ export function GlassPill({
     <span
       className={clsx(
         baseStyles,
-        active
-          ? "text-white"
-          : "glass-thin"
+        !active && "glass-thin"
       )}
-      style={
-        active && color
-          ? {
-              background: `linear-gradient(135deg, ${color}, ${adjustColor(color, -20)})`,
-              boxShadow: `0 2px 8px ${color}40`,
-            }
-          : color && !active
-            ? { color }
-            : undefined
-      }
+      style={style}
     >
       {contentElement}
     </span>
   );
-}
-
-function adjustColor(hex: string, amount: number): string {
-  const num = parseInt(hex.replace("#", ""), 16);
-  const r = Math.min(255, Math.max(0, (num >> 16) + amount));
-  const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00ff) + amount));
-  const b = Math.min(255, Math.max(0, (num & 0x0000ff) + amount));
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }

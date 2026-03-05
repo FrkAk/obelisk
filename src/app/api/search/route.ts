@@ -8,6 +8,7 @@ import { getRandomRemark } from "@/lib/db/queries/search";
 import { rankResults } from "@/lib/search/ranking";
 import { haversineDistance } from "@/lib/geo/distance";
 import { createLogger } from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import type { SearchResult, SearchResponse } from "@/types/api";
 
 const log = createLogger("search");
@@ -64,10 +65,20 @@ function typesenseHitToSearchResult(
 }
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  if (!checkRateLimit(ip, 30, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": "60" } }
+    );
+  }
+
   const startTime = Date.now();
 
   try {
-    const body = await request.json();
+    let body: unknown;
+    try { body = await request.json(); }
+    catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
     const parseResult = requestSchema.safeParse(body);
 
     if (!parseResult.success) {
@@ -112,16 +123,21 @@ export async function POST(request: NextRequest) {
           source: "typesense",
         };
 
+        const isProd = process.env.NODE_ENV === "production";
         const response: SearchResponse = {
           results: [result],
-          intent,
-          timing: {
-            parseMs,
-            typesenseMs: 0,
-            semanticMs: 0,
-            geocodingMs: 0,
-            totalMs: Date.now() - startTime,
-          },
+          ...(isProd ? {} : { intent }),
+          ...(isProd
+            ? {}
+            : {
+                timing: {
+                  parseMs,
+                  typesenseMs: 0,
+                  semanticMs: 0,
+                  geocodingMs: 0,
+                  totalMs: Date.now() - startTime,
+                },
+              }),
         };
 
         return NextResponse.json(response);
@@ -299,16 +315,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const isProduction = process.env.NODE_ENV === "production";
     const response: SearchResponse = {
       results: finalResults,
-      intent,
-      timing: {
-        parseMs,
-        typesenseMs,
-        semanticMs,
-        geocodingMs,
-        totalMs,
-      },
+      ...(isProduction ? {} : { intent }),
+      ...(isProduction
+        ? {}
+        : {
+            timing: {
+              parseMs,
+              typesenseMs,
+              semanticMs,
+              geocodingMs,
+              totalMs,
+            },
+          }),
     };
 
     return NextResponse.json(response);

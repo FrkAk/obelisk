@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchAutocomplete } from "@/lib/search/typesense";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 const log = createLogger("autocomplete");
 
@@ -21,6 +22,14 @@ const querySchema = z.object({
  *     JSON response with an array of autocomplete suggestions.
  */
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request);
+  if (!checkRateLimit(ip, 60, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": "60" } }
+    );
+  }
+
   const searchParams = request.nextUrl.searchParams;
   const parseResult = querySchema.safeParse({
     q: searchParams.get("q"),

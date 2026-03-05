@@ -19,7 +19,7 @@ const requestSchema = z.object({
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
   }),
-  radius: z.number().min(100).max(50000).default(5000),
+  radius: z.number().min(100).max(10000).default(5000),
   limit: z.number().min(1).max(50).default(20),
 });
 

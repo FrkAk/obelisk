@@ -384,7 +384,6 @@ export async function seedPois(location: LocationConfig): Promise<void> {
         osmType: el.type === "way" ? "way" : el.type === "relation" ? "relation" : "node",
         osmTags,
         wikipediaUrl,
-        imageUrl: osmTags.image ?? null,
         profile,
       })
       .onConflictDoUpdate({
@@ -399,7 +398,6 @@ export async function seedPois(location: LocationConfig): Promise<void> {
           osmType: sql`EXCLUDED.osm_type`,
           osmTags: sql`EXCLUDED.osm_tags`,
           wikipediaUrl: sql`EXCLUDED.wikipedia_url`,
-          imageUrl: sql`EXCLUDED.image_url`,
           profile: sql`EXCLUDED.profile`,
           updatedAt: sql`now()`,
         },

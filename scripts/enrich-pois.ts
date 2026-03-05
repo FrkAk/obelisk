@@ -124,8 +124,8 @@ type DataTier = "rich" | "moderate" | "thin";
  * @param hasWebsite - Whether website text has been crawled.
  * @returns Data tier controlling prompt length instruction.
  */
-function assessDataTier(factsCount: number, hasKeywords: boolean, hasWikipedia: boolean, hasWebsite: boolean): DataTier {
-  if (hasWikipedia || hasWebsite || factsCount >= 5) return "rich";
+function assessDataTier(factsCount: number, hasKeywords: boolean, hasWikipedia: boolean, hasWebsite: boolean, hasVisualDescription: boolean = false): DataTier {
+  if (hasWikipedia || hasWebsite || hasVisualDescription || factsCount >= 5) return "rich";
   if (factsCount >= 2 || hasKeywords) return "moderate";
   return "thin";
 }
@@ -185,6 +185,12 @@ function buildSummaryPrompt(
     lines.push("");
   }
 
+  if (profile.visualDescription) {
+    lines.push("VISUAL DESCRIPTION (from street-level photos):");
+    lines.push(profile.visualDescription);
+    lines.push("");
+  }
+
   if (osmFacts.length > 0) {
     lines.push("VERIFIED FACTS:");
     for (const fact of osmFacts) {
@@ -226,6 +232,57 @@ function buildSummaryPrompt(
   lines.push("No questions, no marketing language, no superlatives.");
 
   return lines.join("\n");
+}
+
+/**
+ * Downloads an image URL and returns its base64-encoded content.
+ *
+ * @param url - Image URL to download.
+ * @returns Base64 string, or null on failure.
+ */
+async function downloadToBase64(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    return Buffer.from(buf).toString("base64");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Generates a visual description of a POI from available thumbnail images.
+ * Uses the vision model to describe facade, signage, architecture, and surroundings.
+ *
+ * @param name - POI name for prompt context.
+ * @param profile - Current POI profile with image URLs.
+ * @returns Visual description string, or null if no images available or generation fails.
+ */
+async function generateVisualDescription(
+  name: string,
+  profile: PoiProfile,
+): Promise<string | null> {
+  const imageUrls: string[] = [];
+  if (profile.mapillaryThumbUrl) imageUrls.push(profile.mapillaryThumbUrl);
+  if (profile.wikiImageUrl) imageUrls.push(profile.wikiImageUrl);
+  if (imageUrls.length === 0) return null;
+
+  const images: string[] = [];
+  for (const url of imageUrls) {
+    const b64 = await downloadToBase64(url);
+    if (b64) images.push(b64);
+  }
+  if (images.length === 0) return null;
+
+  const prompt = `Describe what you see in these photos of ${name}. Focus on facade, signage, outdoor features, architecture, surroundings. 2-4 sentences.`;
+  try {
+    return await generateText(prompt, OLLAMA_MODEL, { temperature: 0.3, num_predict: 256 }, images);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    log.warn(`${name}: vision description failed — ${msg}`);
+    return null;
+  }
 }
 
 interface EnrichResult {
@@ -338,7 +395,7 @@ async function main() {
       }
 
       const osmFacts = extractOsmFacts(osmTags);
-      const dataTier = assessDataTier(osmFacts.length, mergedKeywords.length > 0, !!existingProfile.wikipediaSummary, !!existingProfile.websiteText);
+      const dataTier = assessDataTier(osmFacts.length, mergedKeywords.length > 0, !!existingProfile.wikipediaSummary, !!existingProfile.websiteText, !!existingProfile.visualDescription);
 
       const updatedProfile: PoiProfile = {
         ...existingProfile,
@@ -351,6 +408,13 @@ async function main() {
           ...(brandInfo ? { brand: brandInfo.name, priceTier: brandInfo.priceTier } : {}),
         },
       };
+
+      if (FORCE || !updatedProfile.visualDescription) {
+        const visualDesc = await generateVisualDescription(poi.name, updatedProfile);
+        if (visualDesc) {
+          updatedProfile.visualDescription = visualDesc.trim();
+        }
+      }
 
       try {
         const prompt = buildSummaryPrompt(poi.name, categorySlug, updatedProfile, poi.address, brandInfo, osmFacts, dataTier);

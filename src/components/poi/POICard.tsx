@@ -3,11 +3,33 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
+import { isValidHttpUrl } from "@/lib/url";
+
+/** Allowed markdown elements for LLM-generated content. No images, scripts, or HTML blocks. */
+const SAFE_MARKDOWN_ELEMENTS = ["p", "strong", "em", "br", "a", "ul", "ol", "li"] as const;
+
+/**
+ * Shared ReactMarkdown component overrides for safe LLM content rendering.
+ * Links are validated and open in a new tab with noopener.
+ */
+const safeMarkdownComponents = {
+  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-3 last:mb-0">{children}</p>,
+  strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold">{children}</strong>,
+  em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
+    if (!href || !isValidHttpUrl(href)) return <span>{children}</span>;
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
+        {children}
+      </a>
+    );
+  },
+};
 import { LoadingState } from "@/components/ui/LoadingState";
 import { springTransitions } from "@/lib/ui/animations";
 import { OBELISK_ICON_PATH } from "@/lib/ui/constants";
 import { formatDistance } from "@/lib/geo/distance";
-import { isValidHttpUrl } from "@/lib/url";
+import { MediaCarousel } from "@/components/poi/MediaCarousel";
 import { CATEGORY_COLORS } from "@/types/api";
 import type { ExternalPOI, Remark, Poi, CategorySlug, Category } from "@/types/api";
 
@@ -207,34 +229,14 @@ export function POICard({
       </div>
 
       {/* Photo carousel */}
-      {/* TODO: support multiple images when POI data model expands (imageUrls: string[]) */}
-      <div
-        className="relative w-full overflow-hidden rounded-xl mt-3"
-        style={{ aspectRatio: "3 / 2" }}
-      >
-        <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide w-full h-full">
-          {poi.imageUrl && isValidHttpUrl(poi.imageUrl) ? (
-            <img
-              src={poi.imageUrl}
-              alt={poi.name}
-              className="w-full h-full object-cover flex-shrink-0 snap-start"
-            />
-          ) : (
-            <div
-              className="w-full h-full flex flex-col items-center justify-center gap-2 flex-shrink-0 snap-start"
-              style={{
-                background: "linear-gradient(135deg, var(--surface) 0%, var(--elevated) 100%)",
-              }}
-            >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--foreground-tertiary)" }}>
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <path d="M21 15l-5-5L5 21" />
-              </svg>
-            </div>
-          )}
-        </div>
-      </div>
+      <MediaCarousel
+        images={poi.images ?? []}
+        mapillaryId={poi.mapillaryId}
+        mapillaryBearing={poi.mapillaryBearing}
+        mapillaryIsPano={poi.mapillaryIsPano}
+        poiName={poi.name}
+        poiId={poi.id.startsWith("db-") ? poi.id.slice(3) : undefined}
+      />
 
       {/* Quick actions: Navigate, Echoes, Share */}
       {/* TODO: implement Echoes — audio stories from the community */}
@@ -525,11 +527,8 @@ function RemarkTab({ remark, isGenerating, isRegenerating, hasRemark, onRegenera
           }}
         >
           <ReactMarkdown
-            components={{
-              p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-              em: ({ children }) => <em className="italic">{children}</em>,
-            }}
+            allowedElements={[...SAFE_MARKDOWN_ELEMENTS]}
+            components={safeMarkdownComponents}
           >
             {remark.content}
           </ReactMarkdown>
@@ -575,8 +574,10 @@ function RemarkTab({ remark, isGenerating, isRegenerating, hasRemark, onRegenera
               }}
             >
               <ReactMarkdown
+                allowedElements={[...SAFE_MARKDOWN_ELEMENTS]}
                 components={{
-                  p: ({ children }) => <p className="mb-0">{children}</p>,
+                  ...safeMarkdownComponents,
+                  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-0">{children}</p>,
                 }}
               >
                 {remark.localTip}

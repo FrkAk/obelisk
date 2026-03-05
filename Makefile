@@ -1,4 +1,4 @@
-.PHONY: help setup setup-quick finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois fetch-wikipedia fetch-websites sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup setup-quick finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -129,12 +129,14 @@ setup:
 	fi; \
 	\
 	if [ $(FROM) -le 6 ]; then \
-	printf "$(CYAN)[Phase 6]$(RESET) Fetching Wikipedia + crawling websites (parallel)...\n"; \
+	printf "$(CYAN)[Phase 6]$(RESET) Fetching Wikipedia + websites + Mapillary (parallel)...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec -T app bun scripts/fetch-wikipedia.ts & PID_WIKI=$$!; \
 	$(COMPOSE) exec -T app bun scripts/fetch-websites.ts & PID_WEB=$$!; \
+	$(COMPOSE) exec -T app bun scripts/fetch-mapillary.ts & PID_MAP=$$!; \
 	wait $$PID_WIKI || exit 1; \
 	wait $$PID_WEB || exit 1; \
+	wait $$PID_MAP || exit 1; \
 	STEP_END=$$(date +%s); \
 	ELAPSED=$$((STEP_END - STEP_START)); \
 	printf "$(GREEN)Data fetching done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
@@ -305,6 +307,9 @@ fetch-wikipedia:
 fetch-websites:
 	$(COMPOSE) exec app bun scripts/fetch-websites.ts
 
+fetch-mapillary:
+	$(COMPOSE) exec app bun scripts/fetch-mapillary.ts
+
 sync-search:
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
 
@@ -337,4 +342,4 @@ finish-setup:
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
-search-setup: seed-pois fetch-wikipedia fetch-websites enrich-pois sync-search generate-embeddings
+search-setup: seed-pois fetch-wikipedia fetch-websites fetch-mapillary enrich-pois sync-search generate-embeddings

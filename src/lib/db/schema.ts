@@ -75,7 +75,9 @@ export const pois = pgTable(
     osmType: varchar("osm_type", { length: 10 }),
     osmTags: jsonb("osm_tags").$type<Record<string, string>>(),
     wikipediaUrl: text("wikipedia_url"),
-    imageUrl: text("image_url"),
+    mapillaryId: varchar("mapillary_id", { length: 30 }),
+    mapillaryBearing: doublePrecision("mapillary_bearing"),
+    mapillaryIsPano: boolean("mapillary_is_pano"),
     profile: jsonb("profile").default({}).$type<import("@/types/api").PoiProfile>(),
     embedding: vector("embedding"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -213,6 +215,25 @@ export const remarks = pgTable(
 );
 
 // ===========================================================================
+// 6. POI Images
+// ===========================================================================
+
+export const poiImages = pgTable(
+  "poi_images",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    poiId: uuid("poi_id")
+      .references(() => pois.id, { onDelete: "cascade" })
+      .notNull(),
+    url: text("url").notNull(),
+    source: varchar("source", { length: 30 }).notNull(),
+    sortOrder: smallint("sort_order").default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [index("idx_poi_images_poi").on(table.poiId)],
+);
+
+// ===========================================================================
 // Relations
 // ===========================================================================
 
@@ -250,6 +271,7 @@ export const poisRelations = relations(pois, ({ one, many }) => ({
   poiTags: many(poiTags),
   poiCuisines: many(poiCuisines),
   remarks: many(remarks),
+  poiImages: many(poiImages),
 }));
 
 export const contactInfoRelations = relations(contactInfo, ({ one }) => ({
@@ -308,6 +330,13 @@ export const poiCuisinesRelations = relations(poiCuisines, ({ one }) => ({
 export const remarksRelations = relations(remarks, ({ one }) => ({
   poi: one(pois, {
     fields: [remarks.poiId],
+    references: [pois.id],
+  }),
+}));
+
+export const poiImagesRelations = relations(poiImages, ({ one }) => ({
+  poi: one(pois, {
+    fields: [poiImages.poiId],
     references: [pois.id],
   }),
 }));

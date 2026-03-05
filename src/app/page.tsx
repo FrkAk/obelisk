@@ -31,7 +31,7 @@ type SheetMode = "remark" | "search" | "poi" | null;
 function remarkPoiToExternalPOI(poi: PoiWithCategory): ExternalPOI {
   const tags = (poi.osmTags ?? {}) as Record<string, string>;
   return {
-    id: poi.id,
+    id: `db-${poi.id}`,
     osmId: poi.osmId ?? 0,
     osmType: "node",
     name: poi.name,
@@ -45,7 +45,10 @@ function remarkPoiToExternalPOI(poi: PoiWithCategory): ExternalPOI {
     cuisine: tags.cuisine ?? undefined,
     hasWifi: tags.internet_access === "wlan" || tags.internet_access === "yes",
     hasOutdoorSeating: tags.outdoor_seating === "yes",
-    imageUrl: poi.imageUrl ?? undefined,
+    images: [],
+    mapillaryId: poi.mapillaryId ?? undefined,
+    mapillaryBearing: poi.mapillaryBearing ?? undefined,
+    mapillaryIsPano: poi.mapillaryIsPano ?? undefined,
     source: "overpass",
   };
 }
@@ -248,12 +251,11 @@ export default function Home() {
 
         const data = await response.json();
 
+        setSelectedPoi(data.poi);
         if (data.remark) {
           setSelectedRemark(data.remark);
-          setSelectedPoi(null);
           setSheetMode("remark");
         } else {
-          setSelectedPoi(data.poi);
           setSelectedRemark(null);
         }
       } catch {

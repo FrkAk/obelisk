@@ -297,3 +297,10 @@ body {
   background-size: 200% 100%;
   animation: shimmer 2s infinite;
 }
+
+/* ─── Scrollbar Hide ─── */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ─── MapillaryJS Overrides ─── */
+.mapillary-viewer .mapillary-interactive { border-radius: inherit; }

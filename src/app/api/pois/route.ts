@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getNearbyPois } from "@/lib/db/queries/pois";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 const log = createLogger("pois");
 
@@ -12,6 +13,14 @@ const querySchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request);
+  if (!checkRateLimit(ip, 60, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": "60" } }
+    );
+  }
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const parseResult = querySchema.safeParse({

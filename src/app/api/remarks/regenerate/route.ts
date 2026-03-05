@@ -103,8 +103,9 @@ export async function POST(request: NextRequest) {
         osmTags: existingRemark.poi.osmTags,
         profile,
         wikipediaUrl: existingRemark.poi.wikipediaUrl,
-        imageUrl: existingRemark.poi.imageUrl,
-        embedding: null,
+        mapillaryId: existingRemark.poi.mapillaryId,
+        mapillaryBearing: existingRemark.poi.mapillaryBearing,
+        mapillaryIsPano: existingRemark.poi.mapillaryIsPano,
         createdAt: existingRemark.poi.createdAt,
         updatedAt: null,
       },
@@ -132,6 +133,7 @@ export async function POST(request: NextRequest) {
       generated,
     );
 
+    const isProduction = process.env.NODE_ENV === "production";
     const remarkWithPoi = {
       id: newRemark.id,
       poiId: existingRemark.poi.id,
@@ -144,8 +146,7 @@ export async function POST(request: NextRequest) {
       locale: newRemark.locale,
       version: newRemark.version,
       isCurrent: newRemark.isCurrent,
-      modelId: newRemark.modelId,
-      confidence: newRemark.confidence,
+      ...(!isProduction && { modelId: newRemark.modelId, confidence: newRemark.confidence }),
       poi: existingRemark.poi,
     };
 

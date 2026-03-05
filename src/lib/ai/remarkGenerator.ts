@@ -140,6 +140,11 @@ ${profile.wikipediaSummary}`);
 ${profile.websiteText}`);
   }
 
+  if (profile?.visualDescription) {
+    sections.push(`VISUAL DESCRIPTION (from street-level photos):
+${profile.visualDescription}`);
+  }
+
   const profileParts: string[] = [];
   if (profile) {
     if (profile.subtype) profileParts.push(`Type: ${profile.subtype}`);
@@ -286,6 +291,7 @@ export function assessConfidence(ctx: RemarkPoiContext): "high" | "medium" | "lo
 
   if (ctx.tags.length > 0) score += 1;
   if (ctx.contactInfo != null) score += 1;
+  if (ctx.profile?.visualDescription) score += 2;
   if (ctx.profile?.wikipediaSummary) score += 3;
   else if (ctx.poi.wikipediaUrl) score += 1;
 

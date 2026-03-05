@@ -64,6 +64,10 @@ mock.module("@/lib/ai/ollama", () => ({
 mock.module("drizzle-orm", () => ({
   eq: (...args: unknown[]) => args,
 }));
+mock.module("@/lib/rateLimit", () => ({
+  checkRateLimit: () => true,
+  getClientIp: () => "127.0.0.1",
+}));
 mock.module("@/lib/logger", () => ({
   createLogger: () => ({
     info: () => {},

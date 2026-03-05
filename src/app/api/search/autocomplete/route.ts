@@ -7,7 +7,7 @@ import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 const log = createLogger("autocomplete");
 
 const querySchema = z.object({
-  q: z.string().min(2),
+  q: z.string().min(2).max(200),
   lat: z.coerce.number().min(-90).max(90).default(0),
   lon: z.coerce.number().min(-180).max(180).default(0),
 });

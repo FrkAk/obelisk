@@ -45,9 +45,10 @@ export async function getNearbyPois(
       longitude: pois.longitude,
       address: pois.address,
       wikipediaUrl: pois.wikipediaUrl,
-      imageUrl: pois.imageUrl,
+      mapillaryId: pois.mapillaryId,
+      mapillaryBearing: pois.mapillaryBearing,
+      mapillaryIsPano: pois.mapillaryIsPano,
       osmTags: pois.osmTags,
-      profile: pois.profile,
       createdAt: pois.createdAt,
       category: {
         id: categories.id,

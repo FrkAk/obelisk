@@ -18,6 +18,7 @@
     "framer-motion": "12.27.5",
     "linkedom": "^0.18.12",
     "mapbox-gl": "3.18.0",
+    "mapillary-js": "^4.1.2",
     "next": "16.1.6",
     "osm-read": "^0.7.0",
     "postgres": "3.4.8",

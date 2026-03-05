@@ -5,6 +5,7 @@ const log = createLogger("ollama");
 interface OllamaGenerateRequest {
   model: string;
   prompt: string;
+  images?: string[];
   stream?: boolean;
   think?: boolean;
   options?: {
@@ -35,6 +36,7 @@ export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "embeddinggemma:300
  *     prompt: The prompt to send to the model.
  *     model: The model to use (defaults to OLLAMA_MODEL env or qwen3.5:9b).
  *     options: Generation options (temperature, top_p, num_predict).
+ *     images: Optional base64-encoded images for vision models.
  *
  * Returns:
  *     The generated text.
@@ -42,25 +44,32 @@ export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "embeddinggemma:300
 export async function generateText(
   prompt: string,
   model: string = DEFAULT_MODEL,
-  options?: OllamaGenerateRequest["options"]
+  options?: OllamaGenerateRequest["options"],
+  images?: string[],
 ): Promise<string> {
+  const body: OllamaGenerateRequest = {
+    model,
+    prompt,
+    stream: false,
+    think: false,
+    options: {
+      temperature: 0.8,
+      top_p: 0.9,
+      top_k: 40,
+      repeat_penalty: 1.1,
+      num_predict: 640,
+      ...options,
+    },
+  };
+  if (images && images.length > 0) {
+    body.images = images;
+  }
+
   const response = await fetch(`${OLLAMA_URL}/api/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: false,
-      think: false,
-      options: {
-        temperature: 0.8,
-        top_p: 0.9,
-        top_k: 40,
-        repeat_penalty: 1.1,
-        num_predict: 640,
-        ...options,
-      },
-    } satisfies OllamaGenerateRequest),
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(60_000),
   });
 
   if (!response.ok) {
@@ -114,6 +123,7 @@ export async function chatExtract<T>(
           ...options,
         },
       }),
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!response.ok) {
@@ -151,7 +161,9 @@ export async function checkOllamaHealth(
   model: string = DEFAULT_MODEL
 ): Promise<boolean> {
   try {
-    const response = await fetch(`${OLLAMA_URL}/api/tags`);
+    const response = await fetch(`${OLLAMA_URL}/api/tags`, {
+      signal: AbortSignal.timeout(5_000),
+    });
     if (!response.ok) return false;
 
     const data = await response.json();

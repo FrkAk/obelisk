@@ -54,7 +54,7 @@ export async function geocodeQuery(
   const url = `https://api.mapbox.com/search/geocode/v6/forward?${params}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
     if (!response.ok) {
       log.warn(`Mapbox geocoding failed: ${response.status}`);
       return [];

@@ -21,7 +21,7 @@ const selectChain = {
 
 mock.module("@/lib/db/client", () => ({ db: { select: mock(() => selectChain) } }));
 mock.module("@/lib/db/schema", () => ({
-  pois: { id: "id", name: "name", categoryId: "categoryId", latitude: "latitude", longitude: "longitude", address: "address", wikipediaUrl: "wikipediaUrl", imageUrl: "imageUrl", osmTags: "osmTags", osmId: "osmId", createdAt: "createdAt" },
+  pois: { id: "id", name: "name", categoryId: "categoryId", latitude: "latitude", longitude: "longitude", address: "address", wikipediaUrl: "wikipediaUrl", mapillaryId: "mapillaryId", mapillaryBearing: "mapillaryBearing", mapillaryIsPano: "mapillaryIsPano", osmTags: "osmTags", osmId: "osmId", createdAt: "createdAt" },
   remarks: { id: "id", poiId: "poiId", isCurrent: "isCurrent" },
   categories: { id: "id", name: "name", slug: "slug" },
 }));
@@ -80,7 +80,9 @@ describe("POST /api/poi/lookup", () => {
       longitude: 11.576,
       address: "Platzl 9",
       wikipediaUrl: null,
-      imageUrl: null,
+      mapillaryId: null,
+      mapillaryBearing: null,
+      mapillaryIsPano: null,
       osmTags: null,
       createdAt: new Date("2025-01-01"),
       categoryName: "Food & Drink",

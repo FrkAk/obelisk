@@ -1,8 +1,9 @@
 import { db } from "../src/lib/db/client";
-import { pois } from "../src/lib/db/schema";
-import { eq, sql, isNotNull } from "drizzle-orm";
+import { pois, poiImages } from "../src/lib/db/schema";
+import { eq, sql, or, isNotNull } from "drizzle-orm";
 import { processWithConcurrency } from "./lib/concurrency";
 import { createLogger, formatEta } from "../src/lib/logger";
+import { resolveWikiImage } from "../src/lib/media/wikimedia";
 import type { PoiProfile } from "../src/types/api";
 
 const log = createLogger("fetch-wikipedia");
@@ -89,33 +90,60 @@ interface PoiRow {
   id: string;
   name: string;
   wikipediaUrl: string | null;
+  osmTags: Record<string, string> | null;
   profile: PoiProfile | null;
 }
 
 /**
- * Fetches Wikipedia extracts for all POIs with wikipedia_url and stores
- * them in profile.wikipediaSummary. Nulls embedding to trigger re-generation.
+ * Fetches Wikipedia extracts and wiki images for POIs. Stores extracts in
+ * profile.wikipediaSummary, images in poi_images + profile.wikiImageUrl.
+ * Nulls embedding to trigger re-generation.
  */
 async function main() {
-  log.info(`Starting Wikipedia fetch (force=${FORCE})...`);
+  log.info(`Starting Wikipedia + wiki image fetch (force=${FORCE})...`);
 
   const allPois: PoiRow[] = await db
     .select({
       id: pois.id,
       name: pois.name,
       wikipediaUrl: pois.wikipediaUrl,
+      osmTags: pois.osmTags,
       profile: pois.profile,
     })
     .from(pois)
-    .where(isNotNull(pois.wikipediaUrl));
+    .where(
+      or(
+        isNotNull(pois.wikipediaUrl),
+        sql`osm_tags->>'wikidata' IS NOT NULL`,
+        sql`osm_tags->>'wikimedia_commons' IS NOT NULL`,
+      ),
+    );
 
   const toFetch = FORCE
     ? allPois
-    : allPois.filter((p) => !p.profile?.wikipediaSummary);
+    : allPois.filter(
+        (p) => !p.profile?.wikipediaSummary || !p.profile?.wikiImageUrl,
+      );
 
-  log.info(`Found ${allPois.length} POIs with Wikipedia URLs, ${toFetch.length} need fetching`);
+  log.info(`Found ${allPois.length} POIs with wiki data, ${toFetch.length} need fetching`);
 
-  let fetched = 0;
+  if (FORCE) {
+    const poiIds = toFetch.map((p) => p.id);
+    if (poiIds.length > 0) {
+      for (let i = 0; i < poiIds.length; i += 500) {
+        const chunk = poiIds.slice(i, i + 500);
+        await db
+          .delete(poiImages)
+          .where(
+            sql`poi_id IN (${sql.join(chunk.map((id) => sql`${id}`), sql`, `)}) AND source IN ('commons', 'wikidata')`,
+          );
+      }
+      log.info(`Cleared existing wiki images for ${poiIds.length} POIs`);
+    }
+  }
+
+  let fetchedWiki = 0;
+  let fetchedImage = 0;
   let failed = 0;
   let skipped = 0;
   const startMs = Date.now();
@@ -124,17 +152,6 @@ async function main() {
     const batch = toFetch.slice(i, i + BATCH_SIZE);
 
     const results = await processWithConcurrency(batch, CONCURRENCY, async (poi) => {
-      const parsed = poi.wikipediaUrl ? parseWikipediaUrl(poi.wikipediaUrl) : null;
-      if (!parsed) {
-        log.warn(`${poi.name}: unparseable URL "${poi.wikipediaUrl}"`);
-        return { status: "skipped" as const, poiId: poi.id };
-      }
-
-      const extract = await fetchExtract(parsed.lang, parsed.title);
-      if (!extract) {
-        return { status: "failed" as const, poiId: poi.id };
-      }
-
       const profile: PoiProfile = poi.profile ?? {
         keywords: [],
         products: [],
@@ -143,17 +160,69 @@ async function main() {
         attributes: {},
       };
 
+      let wikiUpdated = false;
+      let imageUpdated = false;
+
+      if (poi.wikipediaUrl && (FORCE || !profile.wikipediaSummary)) {
+        const parsed = parseWikipediaUrl(poi.wikipediaUrl);
+        if (parsed) {
+          const extract = await fetchExtract(parsed.lang, parsed.title);
+          if (extract) {
+            profile.wikipediaSummary = extract;
+            wikiUpdated = true;
+          }
+        } else {
+          log.warn(`${poi.name}: unparseable URL "${poi.wikipediaUrl}"`);
+        }
+      }
+
+      const osmTags = poi.osmTags ?? {};
+      if (FORCE || !profile.wikiImageUrl) {
+        const image = await resolveWikiImage(osmTags);
+        if (image) {
+          profile.wikiImageUrl = image.url;
+          imageUpdated = true;
+
+          const existing = await db
+            .select({ id: poiImages.id })
+            .from(poiImages)
+            .where(
+              sql`poi_id = ${poi.id} AND source = ${image.source}`,
+            )
+            .limit(1);
+
+          if (existing.length === 0) {
+            await db.insert(poiImages).values({
+              poiId: poi.id,
+              url: image.url,
+              source: image.source,
+              sortOrder: 0,
+            });
+          }
+        }
+      }
+
+      if (!wikiUpdated && !imageUpdated) {
+        return { status: "skipped" as const, poiId: poi.id };
+      }
+
       return {
         status: "fetched" as const,
         poiId: poi.id,
-        profile: { ...profile, wikipediaSummary: extract },
+        profile,
+        wikiUpdated,
+        imageUpdated,
       };
     });
 
-    const toUpdate = results.filter((r) => r.status === "fetched" && r.profile != null) as Array<{
+    const toUpdate = results.filter(
+      (r) => r.status === "fetched" && r.profile != null,
+    ) as Array<{
       status: "fetched";
       poiId: string;
       profile: PoiProfile;
+      wikiUpdated: boolean;
+      imageUpdated: boolean;
     }>;
 
     if (toUpdate.length > 0) {
@@ -172,18 +241,23 @@ async function main() {
     }
 
     for (const r of results) {
-      if (r.status === "fetched") fetched++;
-      else if (r.status === "failed") failed++;
-      else skipped++;
+      if (r.status === "fetched") {
+        if (r.wikiUpdated) fetchedWiki++;
+        if (r.imageUpdated) fetchedImage++;
+      } else if (r.status === "skipped") {
+        skipped++;
+      } else {
+        failed++;
+      }
     }
 
     const done = Math.min(i + BATCH_SIZE, toFetch.length);
-    log.info(`${formatEta(startMs, done, toFetch.length)} — ${toUpdate.length} fetched this batch`);
+    log.info(`${formatEta(startMs, done, toFetch.length)} — ${toUpdate.length} updated this batch`);
   }
 
   log.info("");
-  log.info("--- Wikipedia Fetch Summary ---");
-  log.info(`Total: ${toFetch.length} | Fetched: ${fetched} | Failed: ${failed} | Skipped: ${skipped}`);
+  log.info("--- Wikipedia + Image Fetch Summary ---");
+  log.info(`Total: ${toFetch.length} | Wiki: ${fetchedWiki} | Images: ${fetchedImage} | Failed: ${failed} | Skipped: ${skipped}`);
 
   process.exit(0);
 }

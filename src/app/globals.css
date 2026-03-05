@@ -6,6 +6,8 @@
   --color-accent-dark: #D4AA7C;
   --color-accent-subtle-light: rgba(196, 154, 108, 0.12);
   --color-accent-subtle-dark: rgba(212, 170, 124, 0.12);
+  --color-error: #E5484D;
+  --color-error-dark: #E54D4D;
   --color-location: #3478F6;
   --color-location-dark: #5E9EFF;
 
@@ -112,6 +114,7 @@
   --accent: var(--color-accent);
   --accent-subtle: var(--color-accent-subtle-light);
   --location-color: var(--color-location);
+  --color-error: #E5484D;
   --shadow: var(--shadow-md);
   --shadow-float-current: var(--shadow-float);
   --shadow-sheet-current: var(--shadow-sheet);
@@ -135,6 +138,7 @@
     --accent: var(--color-accent-dark);
     --accent-subtle: var(--color-accent-subtle-dark);
     --location-color: var(--color-location-dark);
+    --color-error: #E54D4D;
     --shadow: var(--shadow-md);
     --shadow-float-current: var(--shadow-float-dark);
     --shadow-sheet-current: var(--shadow-sheet-dark);
@@ -149,6 +153,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-ui);
+  font-weight: 300;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

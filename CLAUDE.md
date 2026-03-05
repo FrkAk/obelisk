@@ -22,7 +22,7 @@ Next.js 16 (App Router) + React 19, Tailwind CSS v4, Framer Motion v12, Drizzle 
 
 ## Environment
 
-Copy `.env.example.local` to `.env.local`. Required: `NEXT_PUBLIC_MAPBOX_TOKEN`. Defaults exist for everything else in the Makefile. `SEED_RADIUS` defaults to 2000m. Ollama runs on host at `http://localhost:11434`, not in Docker.
+Copy `.env.example` to `.env`. Required: `NEXT_PUBLIC_MAPBOX_TOKEN`. Defaults exist for everything else in the Makefile. `SEED_RADIUS` defaults to 2000m. Ollama runs on host at `http://localhost:11434`, not in Docker.
 
 ## Project Structure
 

@@ -5,6 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { springTransitions } from "@/lib/ui/animations";
+import { OBELISK_ICON_PATH } from "@/lib/ui/constants";
+import { formatDistance } from "@/lib/geo/distance";
+import { isValidHttpUrl } from "@/lib/url";
 import { CATEGORY_COLORS } from "@/types/api";
 import type { ExternalPOI, Remark, Poi, CategorySlug, Category } from "@/types/api";
 
@@ -29,15 +32,35 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 /**
- * Formats a distance in meters to a human-readable string.
+ * Extracts specific subcategory labels from POI data beyond the broad category.
+ * Uses cuisine, extraTags (shop, amenity, tourism, leisure) to surface richer info.
  *
- * @param meters - Distance in meters.
- * @returns Formatted distance string, or empty string if no value.
+ * @param poi - The POI to extract subcategories from.
+ * @returns Array of capitalized subcategory labels, or empty array.
  */
-function formatDistance(meters?: number): string {
-  if (!meters) return "";
-  if (meters < 1000) return `${Math.round(meters)}m away`;
-  return `${(meters / 1000).toFixed(1)}km away`;
+function getSubcategories(poi: ExternalPOI): string[] {
+  const labels: string[] = [];
+  const tags = poi.extraTags ?? {};
+
+  if (poi.cuisine) {
+    poi.cuisine.split(/[;,]/).forEach((c) => {
+      const trimmed = c.trim();
+      if (trimmed) labels.push(trimmed.charAt(0).toUpperCase() + trimmed.slice(1));
+    });
+  }
+
+  const specificKeys = ["shop", "amenity", "tourism", "leisure"] as const;
+  for (const key of specificKeys) {
+    const val = tags[key];
+    if (val && val !== "yes") {
+      const label = val.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      if (!labels.some((l) => l.toLowerCase() === label.toLowerCase())) {
+        labels.push(label);
+      }
+    }
+  }
+
+  return labels.slice(0, 3);
 }
 
 /**
@@ -51,8 +74,7 @@ function formatPhone(phone: string): string {
 }
 
 /**
- * Unified POI card with photo carousel placeholder, horizontal swipe tabs,
- * and Obelisk-first remark experience.
+ * Unified POI card: name-first layout with photo, action bar, and swipe tabs.
  *
  * @param poi - External POI data.
  * @param remark - Optional existing Obelisk remark.
@@ -79,6 +101,9 @@ export function POICard({
 }: POICardProps) {
   const categoryColor = CATEGORY_COLORS[poi.category as CategorySlug] || CATEGORY_COLORS.history;
   const hasRemark = !!remark;
+  const subcategories = getSubcategories(poi);
+  const broadCategory = poi.category.charAt(0).toUpperCase() + poi.category.slice(1);
+  const categoryDisplay = subcategories.length > 0 ? subcategories.join(" · ") : broadCategory;
 
   const hasTriggeredRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("remark");
@@ -135,7 +160,7 @@ export function POICard({
 
   return (
     <motion.article
-      className="space-y-0"
+      className="space-y-0 max-w-[520px] mx-auto"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={springTransitions.smooth}
@@ -154,32 +179,8 @@ export function POICard({
         </button>
       )}
 
-      {/* Photo carousel placeholder */}
-      <div className="relative w-full overflow-hidden rounded-xl" style={{ aspectRatio: "3 / 2" }}>
-        {poi.imageUrl ? (
-          <img
-            src={poi.imageUrl}
-            alt={poi.name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div
-            className="w-full h-full flex flex-col items-center justify-center gap-2"
-            style={{
-              background: "linear-gradient(135deg, var(--surface) 0%, var(--elevated) 100%)",
-            }}
-          >
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--foreground-tertiary)" }}>
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <path d="M21 15l-5-5L5 21" />
-            </svg>
-          </div>
-        )}
-      </div>
-
-      {/* POI header */}
-      <div className="px-1 pt-3 space-y-1">
+      {/* POI header — name first */}
+      <div className="px-1 space-y-1">
         <h2
           className="leading-tight"
           style={{
@@ -195,21 +196,52 @@ export function POICard({
             className="inline-block w-2 h-2 rounded-full flex-shrink-0"
             style={{ backgroundColor: categoryColor }}
           />
-          <span>{poi.category.charAt(0).toUpperCase() + poi.category.slice(1)}</span>
-          {poi.distance && (
+          <span>{categoryDisplay}</span>
+          {poi.distance != null && poi.distance > 0 && (
             <>
               <span style={{ color: "var(--foreground-tertiary)" }}>·</span>
-              <span>{formatDistance(poi.distance)}</span>
+              <span>{formatDistance(poi.distance)} away</span>
             </>
           )}
         </div>
       </div>
 
-      {/* Quick actions */}
+      {/* Photo carousel */}
+      {/* TODO: support multiple images when POI data model expands (imageUrls: string[]) */}
+      <div
+        className="relative w-full overflow-hidden rounded-xl mt-3"
+        style={{ aspectRatio: "3 / 2" }}
+      >
+        <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide w-full h-full">
+          {poi.imageUrl && isValidHttpUrl(poi.imageUrl) ? (
+            <img
+              src={poi.imageUrl}
+              alt={poi.name}
+              className="w-full h-full object-cover flex-shrink-0 snap-start"
+            />
+          ) : (
+            <div
+              className="w-full h-full flex flex-col items-center justify-center gap-2 flex-shrink-0 snap-start"
+              style={{
+                background: "linear-gradient(135deg, var(--surface) 0%, var(--elevated) 100%)",
+              }}
+            >
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--foreground-tertiary)" }}>
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="M21 15l-5-5L5 21" />
+              </svg>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Quick actions: Navigate, Echoes, Share */}
+      {/* TODO: implement Echoes — audio stories from the community */}
       <div className="flex items-center gap-2 px-1 pt-3">
         {onNavigate && (
           <motion.button
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-floating text-[13px] font-medium"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-floating text-[13px]"
             style={{ fontFamily: "var(--font-ui)" }}
             onClick={onNavigate}
             whileTap={{ scale: 0.95 }}
@@ -223,7 +255,7 @@ export function POICard({
         )}
 
         <motion.button
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-floating text-[13px] font-medium opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-floating text-[13px] opacity-50"
           style={{ fontFamily: "var(--font-ui)" }}
           title="Coming soon"
           whileTap={{ scale: 0.95 }}
@@ -232,20 +264,10 @@ export function POICard({
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h2v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-3v8h2c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z" />
           </svg>
-          Echo
+          Echoes
         </motion.button>
 
-        <motion.button
-          className="flex items-center justify-center w-8 h-8 rounded-full glass-floating text-[13px]"
-          whileTap={{ scale: 0.95 }}
-          transition={springTransitions.quick}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: "var(--foreground-secondary)" }}>
-            <circle cx="12" cy="5" r="2" />
-            <circle cx="12" cy="12" r="2" />
-            <circle cx="12" cy="19" r="2" />
-          </svg>
-        </motion.button>
+        <ShareButton poiId={poi.id} />
       </div>
 
       {/* Tab bar */}
@@ -258,7 +280,7 @@ export function POICard({
             style={{
               fontFamily: "var(--font-ui)",
               fontSize: "var(--font-size-footnote)",
-              fontWeight: 500,
+              fontWeight: activeTab === tab.id ? 500 : 400,
               color: activeTab === tab.id ? "var(--foreground)" : "var(--foreground-secondary)",
             }}
           >
@@ -311,21 +333,111 @@ export function POICard({
           </motion.div>
         </AnimatePresence>
       </div>
-
-      {/* Dot indicators */}
-      <div className="flex items-center justify-center gap-1.5 pt-2 pb-1">
-        {TABS.map((tab) => (
-          <div
-            key={tab.id}
-            className="w-1.5 h-1.5 rounded-full transition-colors duration-200"
-            style={{
-              backgroundColor: activeTab === tab.id ? "var(--accent)" : "var(--foreground-tertiary)",
-              opacity: activeTab === tab.id ? 1 : 0.4,
-            }}
-          />
-        ))}
-      </div>
     </motion.article>
+  );
+}
+
+/* ─── Shared Action Buttons ─── */
+
+/**
+ * Share button that uses Web Share API or copies link to clipboard.
+ *
+ * @param poiId - The POI ID to construct the share URL.
+ */
+function ShareButton({ poiId }: { poiId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  // TODO: implement share endpoint that returns remark-enriched POI page
+  const handleShare = async () => {
+    const url = `https://obelisk.obeliskark.com/poi/${poiId}`;
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({ url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch {
+      try {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        /* clipboard also unavailable */
+      }
+    }
+  };
+
+  return (
+    <div className="relative">
+      <motion.button
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-floating text-[13px]"
+        style={{ fontFamily: "var(--font-ui)" }}
+        onClick={handleShare}
+        whileTap={{ scale: 0.95 }}
+        transition={springTransitions.quick}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z" />
+        </svg>
+        Share
+      </motion.button>
+      <AnimatePresence>
+        {copied && (
+          <motion.span
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="absolute left-0 top-full mt-1 text-[11px] whitespace-nowrap"
+            style={{ color: "var(--foreground-tertiary)", fontFamily: "var(--font-ui)" }}
+          >
+            Link copied
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Report button with "Coming soon" tooltip on tap. Shown inside Details tab.
+ */
+function ReportButton() {
+  // TODO: implement report flow — flag inappropriate content
+  const [showComingSoon, setShowComingSoon] = useState(false);
+
+  return (
+    <div className="relative pt-4 border-t border-[var(--glass-border)] flex justify-end">
+      <motion.button
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full glass-floating text-[12px]"
+        style={{ fontFamily: "var(--font-ui)", color: "var(--foreground-tertiary)" }}
+        onClick={() => {
+          setShowComingSoon(true);
+          setTimeout(() => setShowComingSoon(false), 2000);
+        }}
+        whileTap={{ scale: 0.95 }}
+        transition={springTransitions.quick}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z" />
+        </svg>
+        Report
+      </motion.button>
+      <AnimatePresence>
+        {showComingSoon && (
+          <motion.span
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="absolute left-0 top-full mt-1 text-[11px] whitespace-nowrap"
+            style={{ color: "var(--foreground-tertiary)", fontFamily: "var(--font-ui)" }}
+          >
+            Coming soon
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -351,20 +463,60 @@ interface RemarkTabProps {
  * @param cooldownRemaining - Seconds until regeneration is available.
  */
 function RemarkTab({ remark, isGenerating, isRegenerating, hasRemark, onRegenerate, cooldownRemaining }: RemarkTabProps) {
-  if ((isGenerating || isRegenerating) && !hasRemark) {
-    return <LoadingState />;
-  }
+  const reveal = {
+    initial: { opacity: 0, y: 8 },
+    animate: { opacity: 1, y: 0 },
+  };
 
-  if (hasRemark && remark) {
-    return (
-      <div className="space-y-4">
-        {isRegenerating && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl" style={{ background: "var(--glass-bg-thin)" }}>
-            <LoadingState />
-          </div>
+  return (
+    <AnimatePresence mode="wait">
+      {(isGenerating || isRegenerating) && (
+        <motion.div
+          key="loading"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <LoadingState />
+        </motion.div>
+      )}
+
+      {!isGenerating && !isRegenerating && hasRemark && remark && (
+        <motion.div
+          key={`remark-${remark.id}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+          className="space-y-5"
+        >
+        {remark.title && (
+          <motion.div
+            {...reveal}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="flex items-center gap-2"
+          >
+            <div
+              className="w-0.5 self-stretch rounded-full flex-shrink-0"
+              style={{ background: "var(--accent)" }}
+            />
+            <h3
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "var(--font-size-title3)",
+                color: "var(--foreground)",
+                lineHeight: 1.3,
+              }}
+            >
+              {remark.title}
+            </h3>
+          </motion.div>
         )}
 
-        <div
+        <motion.div
+          {...reveal}
+          transition={{ duration: 0.8, ease: "easeOut", delay: 0.4 }}
           style={{
             fontFamily: "var(--font-reading)",
             fontSize: "var(--font-size-body)",
@@ -381,58 +533,68 @@ function RemarkTab({ remark, isGenerating, isRegenerating, hasRemark, onRegenera
           >
             {remark.content}
           </ReactMarkdown>
-        </div>
+        </motion.div>
 
         {remark.localTip && (
-          <div
-            className="rounded-xl overflow-hidden pl-3"
+          <motion.div
+            {...reveal}
+            transition={{ duration: 0.6, ease: "easeOut", delay: 0.9 }}
+            className="pl-4 py-3"
             style={{
               borderLeft: "3px solid var(--accent)",
-              background: "var(--surface)",
             }}
           >
-            <div className="py-2.5 pr-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="text-sm">💡</span>
-                <span
-                  className="font-semibold"
-                  style={{
-                    fontSize: "var(--font-size-caption1)",
-                    color: "var(--accent)",
-                    fontFamily: "var(--font-ui)",
-                  }}
-                >
-                  Local Tip
-                </span>
-              </div>
-              <div
+            <div className="flex items-center gap-2 mb-2">
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
                 style={{
-                  fontSize: "var(--font-size-footnote)",
-                  color: "var(--foreground-secondary)",
-                  lineHeight: 1.5,
+                  width: 16,
+                  height: 20,
+                  color: "var(--accent)",
+                }}
+              >
+                <path d={OBELISK_ICON_PATH} />
+              </svg>
+              <span
+                style={{
+                  fontSize: "var(--font-size-subhead)",
+                  color: "var(--accent)",
                   fontFamily: "var(--font-reading)",
                 }}
               >
-                <ReactMarkdown
-                  components={{
-                    p: ({ children }) => <p className="mb-0">{children}</p>,
-                  }}
-                >
-                  {remark.localTip}
-                </ReactMarkdown>
-              </div>
+                From a local
+              </span>
             </div>
-          </div>
+            <div
+              style={{
+                fontSize: "var(--font-size-subhead)",
+                color: "var(--foreground-secondary)",
+                lineHeight: 1.6,
+                fontFamily: "var(--font-reading)",
+              }}
+            >
+              <ReactMarkdown
+                components={{
+                  p: ({ children }) => <p className="mb-0">{children}</p>,
+                }}
+              >
+                {remark.localTip}
+              </ReactMarkdown>
+            </div>
+          </motion.div>
         )}
 
         {onRegenerate && (
           <motion.button
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full glass-floating text-[12px] font-medium disabled:opacity-40"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, delay: 1.3 }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full glass-floating text-[12px] disabled:opacity-40"
             style={{ fontFamily: "var(--font-ui)" }}
             onClick={onRegenerate}
             disabled={isRegenerating || cooldownRemaining > 0}
             whileTap={{ scale: 0.95 }}
-            transition={springTransitions.quick}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ color: "var(--foreground-secondary)" }}>
               <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
@@ -440,16 +602,23 @@ function RemarkTab({ remark, isGenerating, isRegenerating, hasRemark, onRegenera
             {cooldownRemaining > 0 ? `${cooldownRemaining}s` : "Regenerate"}
           </motion.button>
         )}
-      </div>
-    );
-  }
+        </motion.div>
+      )}
 
-  return (
-    <div className="text-center py-8">
-      <p style={{ color: "var(--foreground-secondary)", fontSize: "var(--font-size-subhead)" }}>
-        No remark yet for this place
-      </p>
-    </div>
+      {!isGenerating && !isRegenerating && !hasRemark && (
+        <motion.div
+          key="empty"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="text-center py-8"
+        >
+          <p style={{ color: "var(--foreground-secondary)", fontSize: "var(--font-size-subhead)" }}>
+            No remark yet for this place
+          </p>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -474,7 +643,7 @@ function CapsulesTab({ showCreate, onShowCreate }: CapsulesTabProps) {
           {(["Text", "Voice", "Photo", "Video"] as const).map((format) => (
             <span
               key={format}
-              className="px-2.5 py-1 rounded-full text-[12px] font-medium"
+              className="px-2.5 py-1 rounded-full text-[12px]"
               style={{
                 fontFamily: "var(--font-ui)",
                 background: format === "Text" ? "var(--accent-subtle)" : "var(--surface)",
@@ -500,7 +669,7 @@ function CapsulesTab({ showCreate, onShowCreate }: CapsulesTabProps) {
 
         <div className="relative">
           <motion.button
-            className="px-4 py-2 rounded-full text-[13px] font-medium"
+            className="px-4 py-2 rounded-full text-[13px]"
             style={{
               fontFamily: "var(--font-ui)",
               background: "var(--accent)",
@@ -543,7 +712,7 @@ function CapsulesTab({ showCreate, onShowCreate }: CapsulesTabProps) {
         No capsules here yet
       </p>
       <motion.button
-        className="px-3.5 py-1.5 rounded-full text-[13px] font-medium"
+        className="px-3.5 py-1.5 rounded-full text-[13px]"
         style={{
           fontFamily: "var(--font-ui)",
           background: "var(--accent-subtle)",
@@ -559,7 +728,7 @@ function CapsulesTab({ showCreate, onShowCreate }: CapsulesTabProps) {
 }
 
 /**
- * Details tab showing address, hours, phone, website, and amenities.
+ * Details tab showing address, hours, phone, website, amenities, and report button.
  *
  * @param poi - The POI data to display details for.
  */
@@ -600,7 +769,7 @@ function DetailsTab({ poi }: { poi: ExternalPOI }) {
     });
   }
 
-  if (poi.website) {
+  if (poi.website && isValidHttpUrl(poi.website)) {
     const displayUrl = poi.website.replace(/^https?:\/\//, "").replace(/\/$/, "");
     details.push({
       icon: (
@@ -654,7 +823,7 @@ function DetailsTab({ poi }: { poi: ExternalPOI }) {
       {amenities.length > 0 && (
         <div className="pt-2">
           <p
-            className="font-medium mb-2"
+            className="mb-2"
             style={{
               fontFamily: "var(--font-ui)",
               fontSize: "var(--font-size-caption1)",
@@ -691,6 +860,8 @@ function DetailsTab({ poi }: { poi: ExternalPOI }) {
           </p>
         </div>
       )}
+
+      <ReportButton />
     </div>
   );
 }

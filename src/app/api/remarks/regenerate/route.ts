@@ -9,6 +9,7 @@ import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { loadTags, loadContactInfo } from "@/lib/db/queries/pois";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import type { PoiProfile } from "@/types";
 
 const log = createLogger("regenerate");
@@ -28,8 +29,18 @@ const bodySchema = z.object({
  *     The newly generated remark with version bumped.
  */
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  if (!checkRateLimit(ip, 5, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": "60" } }
+    );
+  }
+
   try {
-    const body = await request.json();
+    let body: unknown;
+    try { body = await request.json(); }
+    catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
     const parseResult = bodySchema.safeParse(body);
 
     if (!parseResult.success) {

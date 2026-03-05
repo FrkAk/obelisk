@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { Marker } from "react-map-gl/mapbox";
 import { motion } from "framer-motion";
+import { springTransitions } from "@/lib/ui/animations";
 
 interface SearchPinProps {
   latitude: number;
@@ -25,16 +26,16 @@ export const SearchPin = memo(function SearchPin({
         initial={{ y: -40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: -20, opacity: 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+        transition={springTransitions.pinDrop}
       >
         <div
           style={{
             width: 28,
             height: 28,
-            backgroundColor: "#C49A6C",
+            backgroundColor: "var(--accent)",
             borderRadius: "50% 50% 50% 0",
             transform: "rotate(-45deg)",
-            boxShadow: "0 4px 12px rgba(196, 154, 108, 0.4)",
+            boxShadow: "0 4px 12px color-mix(in srgb, var(--accent) 40%, transparent)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

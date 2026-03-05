@@ -73,7 +73,8 @@ export async function getNearbyPois(
         gte(pois.longitude, minLon),
         lte(pois.longitude, maxLon)
       )
-    );
+    )
+    .limit(200);
 }
 
 /**

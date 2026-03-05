@@ -20,6 +20,7 @@ interface MapViewProps {
   onMoveEnd?: (center: { latitude: number; longitude: number }) => void;
   onViewStateChange?: (state: { zoom: number; bounds: MapBounds }) => void;
   onPoiClick?: (poi: PoiClickData) => void;
+  onMapClick?: () => void;
   initialCenter?: { latitude: number; longitude: number };
   initialZoom?: number;
   userLocation?: { latitude: number; longitude: number } | null;
@@ -47,6 +48,7 @@ export function MapView({
   onMoveEnd,
   onViewStateChange,
   onPoiClick,
+  onMapClick,
   initialCenter = MUNICH_CENTER,
   initialZoom = 14,
   userLocation,
@@ -145,7 +147,7 @@ export function MapView({
   const handleMapClick = useCallback(
     (event: MapMouseEvent) => {
       const map = mapRef.current?.getMap();
-      if (!onPoiClick || !map) return;
+      if (!map) return;
 
       const features = map.queryRenderedFeatures(event.point);
 
@@ -164,17 +166,20 @@ export function MapView({
         const props = poiFeature.properties;
         const geometry = poiFeature.geometry;
 
-        if (geometry.type === "Point" && props?.name) {
+        if (geometry.type === "Point" && props?.name && onPoiClick) {
           onPoiClick({
             name: props.name || props.name_en || "Unknown",
             latitude: geometry.coordinates[1],
             longitude: geometry.coordinates[0],
             category: props.class || props.type || props.maki,
           });
+          return;
         }
       }
+
+      onMapClick?.();
     },
-    [onPoiClick]
+    [onPoiClick, onMapClick]
   );
 
   const handleMouseEnter = useCallback(() => {

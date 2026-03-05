@@ -4,12 +4,11 @@ import { Marker } from "react-map-gl/mapbox";
 import { motion } from "framer-motion";
 import type { GeoLocation } from "@/types/api";
 import { springTransitions } from "@/lib/ui/animations";
+import { LOCATION_BLUE } from "@/lib/ui/constants";
 
 interface UserLocationMarkerProps {
   location: GeoLocation;
 }
-
-const LOCATION_BLUE = "#3478F6";
 
 /**
  * Apple-style user location marker with subtle pulse animation.

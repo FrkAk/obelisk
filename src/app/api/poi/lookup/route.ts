@@ -12,6 +12,7 @@ import {
   mapRowToRemarkWithPoi,
 } from "@/lib/db/queries/remarks";
 import { createLogger } from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 const log = createLogger("poi-lookup");
 
@@ -37,8 +38,18 @@ const bodySchema = z.object({
  *     POI data with optional existing remark.
  */
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  if (!checkRateLimit(ip, 20, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": "60" } }
+    );
+  }
+
   try {
-    const body = await request.json();
+    let body: unknown;
+    try { body = await request.json(); }
+    catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
     const parseResult = bodySchema.safeParse(body);
 
     if (!parseResult.success) {
@@ -190,10 +201,16 @@ async function lookupFromNominatim(
       signal: AbortSignal.timeout(5000),
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      log.warn(`Nominatim returned ${response.status} for "${name}"`);
+      return null;
+    }
 
     const results = await response.json();
-    if (!results || results.length === 0) return null;
+    if (!results || results.length === 0) {
+      log.warn(`Nominatim returned no results for "${name}" near (${latitude}, ${longitude})`);
+      return null;
+    }
 
     const best = results[0];
     const extraTags = best.extratags || {};
@@ -295,15 +312,15 @@ function createSyntheticPoi(
   longitude: number,
   category?: string
 ): ExternalPOI {
-  const syntheticId = Math.floor(Math.random() * 1000000000);
+  const syntheticId = crypto.randomUUID();
   return {
     id: `synthetic-${syntheticId}`,
-    osmId: syntheticId,
+    osmId: 0,
     osmType: "node",
     name,
     category: category ? getCategorySlug(category) : "hidden",
     latitude,
     longitude,
-    source: "nominatim",
+    source: "synthetic",
   };
 }

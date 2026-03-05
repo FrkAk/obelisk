@@ -3,14 +3,17 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
+import { OBELISK_ICON_PATH } from "@/lib/ui/constants";
 
 const DEFAULT_PHRASES = [
-  "Discovering what makes this place special\u2026",
-  "Gathering local stories\u2026",
+  "Just a moment\u2026",
+  "Looking into this place\u2026",
+  "Gathering stories from the neighborhood\u2026",
+  "Piecing together what makes it special\u2026",
   "Crafting your remark\u2026",
 ];
 
-const ROTATE_INTERVAL_MS = 3000;
+const ROTATE_INTERVAL_MS = 4000;
 
 interface LoadingStateProps {
   phrases?: string[];
@@ -18,11 +21,10 @@ interface LoadingStateProps {
 }
 
 /**
- * Rotating contextual loading phrases with crossfade and amber pulse dot.
+ * Branded loading state with Obelisk silhouette icon, progressive phrases, and clip-path text reveal.
  *
- * Args:
- *     phrases: Array of thinking phrases to rotate through.
- *     className: Additional CSS classes.
+ * @param phrases - Array of thinking phrases to rotate through.
+ * @param className - Additional CSS classes.
  */
 export function LoadingState({
   phrases = DEFAULT_PHRASES,
@@ -39,21 +41,33 @@ export function LoadingState({
 
   return (
     <div
-      className={clsx("flex items-center gap-2", className)}
+      className={clsx("flex items-center gap-2.5", className)}
       style={{ fontFamily: "var(--font-reading)", fontStyle: "italic" }}
     >
-      <span
-        className="animate-amber-pulse inline-block h-2 w-2 rounded-full flex-shrink-0"
-        style={{ background: "var(--accent)" }}
-      />
+      <motion.svg
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className="flex-shrink-0"
+        style={{
+          width: 18,
+          height: 24,
+          color: "var(--accent)",
+          filter: "drop-shadow(0 0 4px var(--accent-subtle))",
+        }}
+        animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.6, 1, 0.6] }}
+        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+      >
+        <path d={OBELISK_ICON_PATH} />
+      </motion.svg>
+
       <AnimatePresence mode="wait">
         <motion.span
           key={index}
           className="text-tertiary"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          initial={{ clipPath: "inset(0 100% 0 0)" }}
+          animate={{ clipPath: "inset(0 0% 0 0)" }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
         >
           {phrases[index]}
         </motion.span>

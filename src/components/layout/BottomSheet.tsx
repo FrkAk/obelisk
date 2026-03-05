@@ -110,7 +110,7 @@ export function BottomSheet({
 
           <motion.div
             ref={containerRef}
-            className="fixed z-50 glass-liquid overflow-hidden"
+            className="fixed z-50 glass-liquid overflow-hidden max-w-[540px] mx-auto"
             initial={{
               y: containerHeight,
               bottom: BOTTOM_GAPS[0],

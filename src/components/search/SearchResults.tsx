@@ -2,6 +2,8 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { springTransitions, searchResultVariants } from "@/lib/ui/animations";
+import { DEFAULT_CATEGORY_COLOR } from "@/lib/ui/constants";
+import { formatDistance } from "@/lib/geo/distance";
 import type { CategorySlug, SearchResult } from "@/types/api";
 import { CATEGORY_COLORS } from "@/types/api";
 
@@ -97,7 +99,7 @@ interface SearchResultRowProps {
 function SearchResultRow({ result, onTap, isLast }: SearchResultRowProps) {
   const categoryColor = getCategoryColor(result);
   const teaser = result.remark?.teaser ?? result.description ?? null;
-  const distanceStr = result.distance != null ? formatDistance(result.distance) : null;
+  const distanceStr = result.distance != null && result.distance > 0 ? formatDistance(result.distance) : null;
   const subtitle = [result.category, distanceStr].filter(Boolean).join(" \u00B7 ");
 
   return (
@@ -115,7 +117,7 @@ function SearchResultRow({ result, onTap, isLast }: SearchResultRowProps) {
         />
         <h4
           className="text-[var(--foreground)] leading-tight truncate"
-          style={{ fontFamily: "var(--font-display)", fontSize: "17px" }}
+          style={{ fontFamily: "var(--font-display)", fontSize: "var(--font-size-body)" }}
         >
           {result.name}
         </h4>
@@ -123,8 +125,8 @@ function SearchResultRow({ result, onTap, isLast }: SearchResultRowProps) {
 
       {subtitle && (
         <p
-          className="text-[13px] text-[var(--foreground-secondary)] ml-[18px]"
-          style={{ fontFamily: "var(--font-ui)" }}
+          className="text-[var(--foreground-secondary)] ml-[18px]"
+          style={{ fontFamily: "var(--font-ui)", fontSize: "var(--font-size-footnote)" }}
         >
           {subtitle}
         </p>
@@ -132,8 +134,8 @@ function SearchResultRow({ result, onTap, isLast }: SearchResultRowProps) {
 
       {teaser && (
         <p
-          className="text-[14px] text-[var(--foreground-secondary)] line-clamp-2 leading-relaxed mt-1 ml-[18px]"
-          style={{ fontFamily: "var(--font-reading)" }}
+          className="text-[var(--foreground-secondary)] line-clamp-2 leading-relaxed mt-1 ml-[18px]"
+          style={{ fontFamily: "var(--font-reading)", fontSize: "var(--font-size-subhead)" }}
         >
           {teaser}
         </p>
@@ -167,7 +169,7 @@ function LoadingSkeleton() {
  * @returns Hex color string for the category dot.
  */
 function getCategoryColor(result: SearchResult): string {
-  if (result.source === "geocoding") return "#8890A0";
+  if (result.source === "geocoding") return DEFAULT_CATEGORY_COLOR;
 
   const slug = result.category as CategorySlug;
   const color = CATEGORY_COLORS[slug];
@@ -175,16 +177,5 @@ function getCategoryColor(result: SearchResult): string {
 
   if (result.remark?.poi?.category?.color) return result.remark.poi.category.color;
 
-  return "#8890A0";
-}
-
-/**
- * Formats a distance in meters to a human-readable string.
- *
- * @param meters - Distance in meters.
- * @returns Formatted distance string (e.g. "240m" or "1.2km").
- */
-function formatDistance(meters: number): string {
-  if (meters < 1000) return `${Math.round(meters)}m`;
-  return `${(meters / 1000).toFixed(1)}km`;
+  return DEFAULT_CATEGORY_COLOR;
 }

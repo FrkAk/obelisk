@@ -15,11 +15,8 @@ const PROMPT_SUGGESTIONS = [
   "A courtyard off the beaten path...",
 ];
 
-/** Number of prompts shown at a time. */
-const PROMPTS_VISIBLE = 3;
-
-/** Rotation interval in ms. */
-const PROMPT_ROTATE_MS = 8000;
+/** Rotation interval for placeholder text in ms. */
+const PLACEHOLDER_ROTATE_MS = 4000;
 
 interface AutocompleteSuggestion {
   name: string;
@@ -38,16 +35,16 @@ interface SearchBarProps {
 }
 
 /**
- * Floating minimal search pill with glassmorphic styling, autocomplete, and contextual prompt suggestions.
+ * Floating minimal search pill with glassmorphic styling, autocomplete, and rotating placeholder suggestions.
  *
- * Shows rotating prompt pills below the bar when empty and unfocused. Tapping a prompt
- * fills the input and submits the search.
+ * Shows animated rotating placeholder text inside the input when empty and unfocused.
+ * When focused, shows a static placeholder.
  *
  * @param onSearch - Callback when search is submitted.
  * @param onClear - Callback when search is cleared.
  * @param onInputChange - Callback when input text changes (for autocomplete).
  * @param isLoading - Whether search is in progress.
- * @param placeholder - Placeholder text.
+ * @param placeholder - Placeholder text shown when focused.
  * @param isUsingViewport - Whether search uses viewport instead of GPS location.
  * @param suggestions - Autocomplete suggestion items to display.
  * @param onSuggestionSelect - Callback when a suggestion is tapped.
@@ -64,13 +61,13 @@ export function SearchBar({
 }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-  const [promptOffset, setPromptOffset] = useState(0);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setPromptOffset((prev) => (prev + PROMPTS_VISIBLE) % PROMPT_SUGGESTIONS.length);
-    }, PROMPT_ROTATE_MS);
+      setPlaceholderIndex((prev) => (prev + 1) % PROMPT_SUGGESTIONS.length);
+    }, PLACEHOLDER_ROTATE_MS);
     return () => clearInterval(interval);
   }, []);
 
@@ -107,26 +104,9 @@ export function SearchBar({
     [onSuggestionSelect]
   );
 
-  const handlePromptTap = useCallback(
-    (prompt: string) => {
-      setQuery(prompt);
-      onSearch(prompt);
-    },
-    [onSearch]
-  );
-
   const hasInput = query.trim().length > 0;
   const showSuggestions = isFocused && suggestions.length > 0 && !isLoading;
-  const showPrompts = !isFocused && !hasInput && !isLoading;
-
-  const visiblePrompts = PROMPT_SUGGESTIONS.slice(
-    promptOffset,
-    promptOffset + PROMPTS_VISIBLE
-  ).concat(
-    promptOffset + PROMPTS_VISIBLE > PROMPT_SUGGESTIONS.length
-      ? PROMPT_SUGGESTIONS.slice(0, (promptOffset + PROMPTS_VISIBLE) - PROMPT_SUGGESTIONS.length)
-      : []
-  );
+  const showAnimatedPlaceholder = !isFocused && !hasInput;
 
   return (
     <div className="relative">
@@ -138,9 +118,7 @@ export function SearchBar({
           )}
           style={{
             borderColor: isFocused ? "var(--glass-border-strong)" : undefined,
-            boxShadow: isFocused
-              ? "0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)"
-              : "var(--shadow-float)",
+            boxShadow: "var(--shadow-float-current)",
           }}
           transition={springTransitions.snappy}
         >
@@ -163,21 +141,42 @@ export function SearchBar({
             </svg>
           )}
 
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={handleChange}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setTimeout(() => setIsFocused(false), 200)}
-            placeholder={placeholder}
-            className={clsx(
-              "flex-1 min-w-0 bg-transparent outline-none text-[15px]",
-              "text-[var(--foreground)] placeholder:text-[var(--foreground-tertiary)]"
+          <div className="relative flex-1 min-w-0">
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={handleChange}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+              placeholder={isFocused ? placeholder : ""}
+              className={clsx(
+                "w-full bg-transparent outline-none text-[15px]",
+                "text-[var(--foreground)] placeholder:text-[var(--foreground-tertiary)]"
+              )}
+              style={{ fontFamily: "var(--font-ui)" }}
+              suppressHydrationWarning
+            />
+
+            {showAnimatedPlaceholder && (
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={placeholderIndex}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.4 }}
+                  className="absolute inset-0 flex items-center pointer-events-none text-[15px]"
+                  style={{
+                    fontFamily: "var(--font-ui)",
+                    color: "var(--foreground-tertiary)",
+                  }}
+                >
+                  {PROMPT_SUGGESTIONS[placeholderIndex]}
+                </motion.span>
+              </AnimatePresence>
             )}
-            style={{ fontFamily: "var(--font-ui)" }}
-            suppressHydrationWarning
-          />
+          </div>
 
           <AnimatePresence>
             {hasInput && !isLoading && (
@@ -217,35 +216,6 @@ export function SearchBar({
         </AnimatePresence>
       </form>
 
-      {/* Contextual prompt suggestions */}
-      <AnimatePresence mode="wait">
-        {showPrompts && (
-          <motion.div
-            key={promptOffset}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
-            className="flex flex-wrap gap-2 mt-2.5 justify-center"
-          >
-            {visiblePrompts.map((prompt) => (
-              <button
-                key={prompt}
-                onClick={() => handlePromptTap(prompt)}
-                className={clsx(
-                  "glass-thin rounded-full px-3 py-1.5 text-[13px]",
-                  "text-[var(--foreground-tertiary)] hover:text-[var(--foreground-secondary)]",
-                  "transition-colors duration-200 cursor-pointer"
-                )}
-                style={{ fontFamily: "var(--font-ui)" }}
-              >
-                {prompt}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Autocomplete dropdown */}
       <AnimatePresence>
         {showSuggestions && (
@@ -256,7 +226,7 @@ export function SearchBar({
             transition={springTransitions.quick}
             className="absolute left-0 right-0 mt-1.5 rounded-xl overflow-hidden z-50 glass-floating"
             style={{
-              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)",
+              boxShadow: "var(--shadow-float-current)",
             }}
           >
             {suggestions.slice(0, 5).map((suggestion, i) => (
@@ -271,7 +241,7 @@ export function SearchBar({
                 )}
               >
                 <span
-                  className="text-[14px] text-[var(--foreground)] truncate font-medium"
+                  className="text-[14px] text-[var(--foreground)] truncate"
                   style={{ fontFamily: "var(--font-ui)" }}
                 >
                   {suggestion.name}

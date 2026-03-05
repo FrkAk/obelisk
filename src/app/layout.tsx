@@ -11,6 +11,7 @@ const instrumentSerif = Instrument_Serif({
 });
 
 const sora = Sora({
+  weight: ["300", "400", "500"],
   subsets: ["latin"],
   variable: "--font-sora",
   display: "swap",

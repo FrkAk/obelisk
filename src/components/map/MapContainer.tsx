@@ -10,6 +10,7 @@ interface MapContainerProps {
   onViewportChange?: (center: { latitude: number; longitude: number }) => void;
   onViewportUpdate?: (update: { center: { latitude: number; longitude: number }; bounds: ViewportBounds; zoom: number }) => void;
   onPoiClick?: (poi: { name: string; latitude: number; longitude: number; category?: string }) => void;
+  onMapClick?: () => void;
   userLocation?: GeoLocation | null;
   flyToLocation?: { latitude: number; longitude: number; ts: number } | null;
   searchPinLocation?: { latitude: number; longitude: number } | null;
@@ -29,6 +30,7 @@ export function MapContainer({
   onViewportChange,
   onViewportUpdate,
   onPoiClick,
+  onMapClick,
   userLocation,
   flyToLocation,
   searchPinLocation,
@@ -75,6 +77,7 @@ export function MapContainer({
         onMoveEnd={handleMoveEnd}
         onViewStateChange={handleViewStateChange}
         onPoiClick={onPoiClick}
+        onMapClick={onMapClick}
         flyToLocation={flyToLocation}
       >
         {userLocation && <UserLocationMarker location={userLocation} />}

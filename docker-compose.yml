@@ -8,12 +8,12 @@ services:
       - /app/node_modules
       - /app/.next
     env_file:
-      - .env.local
+      - .env
     environment:
-      DATABASE_URL: postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
+      DATABASE_URL: ${DATABASE_URL}
       OLLAMA_URL: http://localhost:11434
       TYPESENSE_URL: http://localhost:8108
-      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-obelisk_typesense_dev}
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -24,8 +24,8 @@ services:
     image: pgvector/pgvector:pg15
     environment:
       POSTGRES_DB: obelisk
-      POSTGRES_USER: obelisk
-      POSTGRES_PASSWORD: obelisk_dev
+      POSTGRES_USER: ${POSTGRES_USER:-obelisk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -44,7 +44,7 @@ services:
       - typesense_data:/data
     environment:
       TYPESENSE_DATA_DIR: /data
-      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-obelisk_typesense_dev}
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}
       TYPESENSE_SNAPSHOT_INTERVAL_SECONDS: "3600"
       GLOG_minloglevel: "1"
     healthcheck:

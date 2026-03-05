@@ -9,6 +9,7 @@ import { checkOllamaHealth } from "@/lib/ai/ollama";
 import { insertRemark } from "@/lib/db/queries/remarks";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 const log = createLogger("generate");
 
@@ -32,8 +33,18 @@ const bodySchema = z.object({
  *     Array of generated remarks.
  */
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  if (!checkRateLimit(ip, 3, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": "60" } }
+    );
+  }
+
   try {
-    const body = await request.json();
+    let body: unknown;
+    try { body = await request.json(); }
+    catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
     const parseResult = bodySchema.safeParse(body);
 
     if (!parseResult.success) {
@@ -93,6 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     let skippedCount = 0;
+    let errorCount = 0;
     const generatedRemarks: Array<{
       id: string;
       poiId: string;
@@ -177,12 +189,14 @@ export async function POST(request: NextRequest) {
         await new Promise((r) => setTimeout(r, 300));
       } catch (error) {
         log.error(`Failed to generate remark for ${poi.name}:`, error);
+        errorCount++;
       }
     }
 
     return NextResponse.json({
       generated: generatedRemarks.length,
       skipped: skippedCount,
+      errors: errorCount,
       remarks: generatedRemarks,
     });
   } catch (error) {

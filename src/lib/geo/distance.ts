@@ -86,6 +86,17 @@ export function geoBounds(
  * Returns:
  *     True if the point is within the radius.
  */
+/**
+ * Formats a distance in meters to a human-readable string.
+ *
+ * @param meters - Distance in meters.
+ * @returns Formatted distance string (e.g. "240m" or "1.2km").
+ */
+export function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)}m`;
+  return `${(meters / 1000).toFixed(1)}km`;
+}
+
 export function isWithinRadius(
   userLat: number,
   userLon: number,

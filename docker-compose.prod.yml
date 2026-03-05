@@ -5,3 +5,7 @@ services:
     environment:
       NODE_ENV: production
     command: ["sh", "-c", "bun run build && bun run start"]
+  postgres:
+    ports: !override []
+  typesense:
+    ports: !override []

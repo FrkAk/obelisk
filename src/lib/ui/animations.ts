@@ -57,6 +57,13 @@ export const springTransitions = {
     stiffness: 300,
     damping: 34,
   } as Transition,
+
+  /** Map pin drop animation. */
+  pinDrop: {
+    type: "spring",
+    stiffness: 300,
+    damping: 20,
+  } as Transition,
 } as const;
 
 export const overlayVariants: Variants = {

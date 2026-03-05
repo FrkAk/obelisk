@@ -146,8 +146,8 @@ export interface SearchResult {
 
 export interface SearchResponse {
   results: SearchResult[];
-  intent: ParsedIntent;
-  timing: {
+  intent?: ParsedIntent;
+  timing?: {
     parseMs: number;
     typesenseMs: number;
     semanticMs: number;
@@ -229,7 +229,7 @@ export interface ExternalPOI {
   imageUrl?: string;
   wikipediaUrl?: string;
   extraTags?: Record<string, string>;
-  source: "nominatim" | "overpass";
+  source: "nominatim" | "overpass" | "synthetic";
 }
 
 export interface ExternalResult {

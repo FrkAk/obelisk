@@ -10,6 +10,7 @@ import { z } from "zod";
 import { createLogger } from "@/lib/logger";
 import { getCategorySlug } from "@/lib/geo/categories";
 import { buildProfile } from "@/lib/poi/profile";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import type { CategorySlug, PoiProfile } from "@/types";
 import { getCurrentRemarkForPoi, insertRemark } from "@/lib/db/queries/remarks";
 
@@ -33,7 +34,7 @@ const externalPoiSchema = z.object({
   imageUrl: z.string().optional(),
   wikipediaUrl: z.string().optional(),
   extraTags: z.record(z.string(), z.string()).optional(),
-  source: z.enum(["nominatim", "overpass"]),
+  source: z.enum(["nominatim", "overpass", "synthetic"]),
 });
 
 const bodySchema = z.object({
@@ -51,8 +52,18 @@ const bodySchema = z.object({
  *     Generated remark with POI data, or cached remark if exists.
  */
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  if (!checkRateLimit(ip, 5, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": "60" } }
+    );
+  }
+
   try {
-    const body = await request.json();
+    let body: unknown;
+    try { body = await request.json(); }
+    catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
     const parseResult = bodySchema.safeParse(body);
 
     if (!parseResult.success) {
@@ -281,6 +292,7 @@ async function generateAndSaveRemark(
     remark: generated,
   });
 
+  const isProduction = process.env.NODE_ENV === "production";
   const remarkWithPoi = {
     id: insertedRemark.id,
     poiId: poi.id,
@@ -293,8 +305,7 @@ async function generateAndSaveRemark(
     locale: insertedRemark.locale,
     version: insertedRemark.version,
     isCurrent: insertedRemark.isCurrent,
-    modelId: insertedRemark.modelId,
-    confidence: insertedRemark.confidence,
+    ...(isProduction ? {} : { modelId: insertedRemark.modelId, confidence: insertedRemark.confidence }),
     poi: {
       id: poi.id,
       osmId: poi.osmId,

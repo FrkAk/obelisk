@@ -7,12 +7,14 @@ RESET := \033[0m
 
 COMPOSE := docker compose
 
-# Load .env.local if it exists
-ifneq (,$(wildcard .env.local))
-  include .env.local
+# Load .env if it exists
+ifneq (,$(wildcard .env))
+  include .env
   export
 endif
 
+# Dev defaults for Make targets (scripts run on host, not in Docker).
+# Docker services read credentials from .env file instead.
 export DATABASE_URL ?= postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
 export OLLAMA_URL ?= http://127.0.0.1:11434
 export OLLAMA_MODEL ?= qwen3.5:9b

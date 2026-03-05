@@ -17,6 +17,8 @@ interface MediaCarouselProps {
   mapillaryIsPano?: boolean;
   poiName: string;
   poiId?: string;
+  compact?: boolean;
+  categoryColor?: string;
 }
 
 /**
@@ -36,6 +38,8 @@ export function MediaCarousel({
   mapillaryIsPano,
   poiName,
   poiId,
+  compact = false,
+  categoryColor,
 }: MediaCarouselProps) {
   const [enrichedImages, setEnrichedImages] = useState<PoiImage[]>([]);
   const [enrichedMapillary, setEnrichedMapillary] = useState<{
@@ -185,12 +189,14 @@ export function MediaCarousel({
     });
   }, [fullscreenIndex]);
 
+  const aspectRatio = compact ? "2 / 1" : "3 / 2";
+
   if (totalSlides === 0) {
     if (isEnriching) {
       return (
         <div
           className="relative w-full overflow-hidden rounded-xl mt-3"
-          style={{ aspectRatio: "3 / 2" }}
+          style={{ aspectRatio, transition: "aspect-ratio 0.3s ease" }}
         >
           <div className="w-full h-full shimmer" />
         </div>
@@ -200,24 +206,26 @@ export function MediaCarousel({
     return (
       <div
         className="relative w-full overflow-hidden rounded-xl mt-3"
-        style={{ aspectRatio: "3 / 2" }}
+        style={{ aspectRatio, transition: "aspect-ratio 0.3s ease" }}
       >
         <div
-          className="w-full h-full flex flex-col items-center justify-center gap-2"
+          className="w-full h-full flex flex-col items-center justify-center"
           style={{
-            background: "linear-gradient(135deg, var(--surface) 0%, var(--elevated) 100%)",
+            background: categoryColor
+              ? `linear-gradient(135deg, ${categoryColor}18 0%, ${categoryColor}08 100%)`
+              : "linear-gradient(135deg, var(--surface) 0%, var(--elevated) 100%)",
           }}
         >
           <svg
-            width="32"
-            height="32"
+            width="24"
+            height="24"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            style={{ color: "var(--foreground-tertiary)" }}
+            style={{ color: categoryColor ?? "var(--foreground-tertiary)", opacity: 0.4 }}
           >
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
             <circle cx="8.5" cy="8.5" r="1.5" />
@@ -475,7 +483,7 @@ export function MediaCarousel({
   return (
     <div
       className="relative w-full overflow-hidden rounded-xl mt-3"
-      style={{ aspectRatio: "3 / 2" }}
+      style={{ aspectRatio, transition: "aspect-ratio 0.3s ease" }}
     >
       <div
         ref={scrollRef}

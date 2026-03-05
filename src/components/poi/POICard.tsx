@@ -126,6 +126,7 @@ export function POICard({
   const isPeek = snapIndex === 0;
   const categoryColor = CATEGORY_COLORS[poi.category as CategorySlug] || CATEGORY_COLORS.history;
   const hasRemark = !!remark;
+  const hasMedia = (poi.images ?? []).length > 0 || !!poi.mapillaryId;
   const subcategories = getSubcategories(poi);
   const broadCategory = poi.category.charAt(0).toUpperCase() + poi.category.slice(1);
   const categoryDisplay = subcategories.length > 0 ? subcategories.join(" · ") : broadCategory;
@@ -250,13 +251,17 @@ export function POICard({
         mapillaryIsPano={poi.mapillaryIsPano}
         poiName={poi.name}
         poiId={poi.id.startsWith("db-") ? poi.id.slice(3) : undefined}
+        compact={isPeek}
+        categoryColor={categoryColor}
       />
 
         {/* Hero overlay — visible at peek */}
         <motion.div
-          className="absolute bottom-0 left-0 right-0 z-10 rounded-b-xl pointer-events-none px-4 pb-3 pt-12"
+          className="absolute bottom-0 left-0 right-0 z-10 rounded-b-xl pointer-events-none px-4 pb-3 pt-10"
           style={{
-            background: "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.1) 70%, transparent 100%)",
+            background: hasMedia
+              ? "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.35) 50%, transparent 100%)"
+              : "linear-gradient(to top, rgba(0,0,0,0.15) 0%, transparent 100%)",
           }}
           initial={false}
           animate={{ opacity: isPeek ? 1 : 0 }}
@@ -267,8 +272,8 @@ export function POICard({
             style={{
               fontFamily: "var(--font-display)",
               fontSize: "var(--font-size-title2)",
-              color: "#fff",
-              textShadow: "0 1px 4px rgba(0,0,0,0.3)",
+              color: hasMedia ? "#fff" : "var(--foreground)",
+              textShadow: hasMedia ? "0 1px 4px rgba(0,0,0,0.3)" : "none",
             }}
           >
             {poi.name}
@@ -277,7 +282,7 @@ export function POICard({
             className="text-[13px]"
             style={{
               fontFamily: "var(--font-ui)",
-              color: "rgba(255,255,255,0.7)",
+              color: hasMedia ? "rgba(255,255,255,0.7)" : "var(--foreground-secondary)",
             }}
           >
             {categoryDisplay}
@@ -286,11 +291,13 @@ export function POICard({
         </motion.div>
       </div>
 
-      {/* Actions + tabs — fade in on expand */}
+      {/* Actions + tabs — collapse at peek, reveal on expand */}
       <div
         style={{
+          maxHeight: isPeek ? 0 : 1000,
           opacity: isPeek ? 0 : 1,
-          transition: "opacity 0.3s ease 0.1s",
+          overflow: "hidden",
+          transition: "max-height 0.4s ease, opacity 0.3s ease 0.1s",
         }}
       >
       {/* Quick actions: Navigate, Echoes, Share */}

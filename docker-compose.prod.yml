@@ -6,6 +6,8 @@ services:
       NODE_ENV: production
     command: ["sh", "-c", "bun run build && bun run start"]
   postgres:
-    ports: !override []
+    ports: !override
+      - "127.0.0.1:5432:5432"
   typesense:
-    ports: !override []
+    ports: !override
+      - "127.0.0.1:8108:8108"

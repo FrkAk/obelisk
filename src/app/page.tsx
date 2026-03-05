@@ -6,7 +6,6 @@ import { RemarkNotification } from "@/components/remark/RemarkNotification";
 import { SearchBar } from "@/components/search/SearchBar";
 import { SearchResults } from "@/components/search/SearchResults";
 import { POICard } from "@/components/poi/POICard";
-import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorToast } from "@/components/ui/ErrorToast";
 import { useGeofence } from "@/hooks/useGeofence";
 import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
@@ -224,6 +223,17 @@ export default function Home() {
   const handlePoiClick = useCallback(
     async (poi: { name: string; latitude: number; longitude: number; category?: string }) => {
       const seq = ++poiClickSeqRef.current;
+      setSelectedRemark(null);
+      setSelectedPoi({
+        id: `pending-${seq}`,
+        osmId: 0,
+        osmType: "node",
+        name: poi.name,
+        category: poi.category ?? "other",
+        latitude: poi.latitude,
+        longitude: poi.longitude,
+        source: "synthetic",
+      });
       setIsLookingUpPoi(true);
       setSheetMode("poi");
       setSheetOpen(true);
@@ -519,18 +529,7 @@ export default function Home() {
       <ErrorToast message={appError} onClose={() => setAppError(null)} />
 
       <BottomSheet isOpen={sheetOpen} onClose={handleSheetClose}>
-        {(sheetMode === "remark" || sheetMode === "poi") && (
-          isLookingUpPoi ? (
-            <div className="py-12 flex flex-col items-center justify-center">
-              <LoadingState
-                phrases={[
-                  "Looking up this place...",
-                  "Finding what we know...",
-                  "Almost there...",
-                ]}
-              />
-            </div>
-          ) : (selectedPoi || selectedRemark) ? (
+        {(sheetMode === "remark" || sheetMode === "poi") && (selectedPoi || selectedRemark) && (
             <POICard
               poi={selectedPoi ?? remarkPoiToExternalPOI(selectedRemark!.poi)}
               remark={selectedRemark}
@@ -540,10 +539,9 @@ export default function Home() {
               isGenerating={selectedPoi ? generatingPoiId === selectedPoi.id : false}
               isRegenerating={isRegenerating}
               cooldownRemaining={cooldownRemaining}
-              autoGenerate={!selectedRemark}
+              autoGenerate={!selectedRemark && !isLookingUpPoi}
               onBack={previousSheetMode === "search" ? handleBackToResults : undefined}
             />
-          ) : null
         )}
         {sheetMode === "search" && (
           <SearchResults

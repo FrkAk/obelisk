@@ -23,13 +23,14 @@ export OLLAMA_EMBED_MODEL ?= embeddinggemma:300m
 export TYPESENSE_API_KEY ?= obelisk_typesense_dev
 export SEED_RADIUS ?= -1
 export SEED_LOCATION ?= munich
+FROM ?= 1
 
 help:
 	@printf "\n"
-	@printf "$(CYAN)Obelisk$(RESET) - Ambient Storytelling App\n"
+	@printf "$(CYAN)Obelisk$(RESET) - Next Gen Map \n"
 	@printf "\n"
 	@printf "$(GREEN)Commands:$(RESET)\n"
-	@printf "  $(CYAN)setup$(RESET)          First-time setup (deps, db, model, seed)\n"
+	@printf "  $(CYAN)setup$(RESET)          First-time setup (deps, db, model, seed). Resume: make setup FROM=6\n"
 	@printf "  $(CYAN)setup-quick$(RESET)    Quick setup from db/dump.sql (skip seed + enrich)\n"
 	@printf "  $(CYAN)finish-setup$(RESET)   Continue setup after enrich (stories + search + embeddings)\n"
 	@printf "  $(CYAN)run$(RESET)            Start on localhost:3000\n"
@@ -68,9 +69,10 @@ help:
 
 setup:
 	@SETUP_START=$$(date +%s); \
-	printf "$(GREEN)Setting up Obelisk ($(SEED_LOCATION))...$(RESET)\n"; \
+	printf "$(GREEN)Setting up Obelisk ($(SEED_LOCATION), from phase $(FROM))...$(RESET)\n"; \
 	printf "\n"; \
 	\
+	if [ $(FROM) -le 1 ]; then \
 	printf "$(CYAN)[Phase 1]$(RESET) Building and starting services...\n"; \
 	$(COMPOSE) up -d --build; \
 	printf "Waiting for PostgreSQL...\n"; \
@@ -79,7 +81,9 @@ setup:
 	until curl -sf http://localhost:8108/health >/dev/null 2>&1; do sleep 1; done; \
 	printf "$(GREEN)Services healthy$(RESET)\n"; \
 	printf "\n"; \
+	fi; \
 	\
+	if [ $(FROM) -le 2 ]; then \
 	printf "$(CYAN)[Phase 2]$(RESET) Migrations + Ollama models + PBF download (parallel)...\n"; \
 	( \
 		$(COMPOSE) exec -T postgres psql -U obelisk -d obelisk -f /dev/stdin < drizzle/0001_enable_extensions.sql && \
@@ -96,11 +100,15 @@ setup:
 	wait $$PID_PBF || exit 1; \
 	printf "$(GREEN)Phase 2 complete$(RESET)\n"; \
 	printf "\n"; \
+	fi; \
 	\
+	if [ $(FROM) -le 3 ]; then \
 	printf "$(CYAN)[Phase 3]$(RESET) Downloading external datasets...\n"; \
 	$(COMPOSE) exec app bun scripts/download-datasets.ts; \
 	printf "\n"; \
+	fi; \
 	\
+	if [ $(FROM) -le 4 ]; then \
 	printf "$(CYAN)[Phase 4]$(RESET) Building taxonomy + brands (parallel)...\n"; \
 	$(COMPOSE) exec -T app bun scripts/build-taxonomy.ts & PID_TAX=$$!; \
 	$(COMPOSE) exec -T app bun scripts/build-brands.ts & PID_BRAND=$$!; \
@@ -108,7 +116,9 @@ setup:
 	wait $$PID_BRAND || exit 1; \
 	printf "$(GREEN)Phase 4 complete$(RESET)\n"; \
 	printf "\n"; \
+	fi; \
 	\
+	if [ $(FROM) -le 5 ]; then \
 	printf "$(CYAN)[Phase 5]$(RESET) Seeding (regions, cuisines, tags, POIs)...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec app bun scripts/seed.ts; \
@@ -116,7 +126,9 @@ setup:
 	ELAPSED=$$((STEP_END - STEP_START)); \
 	printf "$(GREEN)Seeding done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
+	fi; \
 	\
+	if [ $(FROM) -le 6 ]; then \
 	printf "$(CYAN)[Phase 6]$(RESET) Fetching Wikipedia + crawling websites (parallel)...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec -T app bun scripts/fetch-wikipedia.ts & PID_WIKI=$$!; \
@@ -127,7 +139,9 @@ setup:
 	ELAPSED=$$((STEP_END - STEP_START)); \
 	printf "$(GREEN)Data fetching done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
+	fi; \
 	\
+	if [ $(FROM) -le 7 ]; then \
 	printf "$(CYAN)[Phase 7]$(RESET) Enriching POIs with taxonomy data...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec app bun scripts/enrich-pois.ts; \
@@ -135,7 +149,9 @@ setup:
 	ELAPSED=$$((STEP_END - STEP_START)); \
 	printf "$(GREEN)Enrichment done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
+	fi; \
 	\
+	if [ $(FROM) -le 8 ]; then \
 	printf "$(CYAN)[Phase 8]$(RESET) Generating remarks...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec app bun scripts/generate-remarks.ts || true; \
@@ -143,7 +159,9 @@ setup:
 	ELAPSED=$$((STEP_END - STEP_START)); \
 	printf "$(GREEN)Remarks done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
+	fi; \
 	\
+	if [ $(FROM) -le 9 ]; then \
 	printf "$(CYAN)[Phase 9]$(RESET) Syncing search index + generating embeddings (parallel)...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \
@@ -154,6 +172,7 @@ setup:
 	ELAPSED=$$((STEP_END - STEP_START)); \
 	printf "$(GREEN)Search + embeddings done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
+	fi; \
 	\
 	SETUP_END=$$(date +%s); \
 	TOTAL=$$((SETUP_END - SETUP_START)); \

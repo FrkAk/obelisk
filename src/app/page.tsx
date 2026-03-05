@@ -361,7 +361,9 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        if (response.status === 503) {
+        if (response.status === 422) {
+          setAppError("Not enough info about this place to write a remark yet.");
+        } else if (response.status === 503) {
           setAppError("Our storyteller is resting. Try again in a moment.");
         } else if (response.status === 429) {
           setAppError("Too many requests. Please slow down.");

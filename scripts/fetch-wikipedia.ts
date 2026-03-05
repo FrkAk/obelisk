@@ -7,13 +7,15 @@ import type { PoiProfile } from "../src/types/api";
 
 const log = createLogger("fetch-wikipedia");
 
-const BATCH_SIZE = 50;
-const CONCURRENCY = 5;
+const BATCH_SIZE = 100;
+const CONCURRENCY = 10;
 const TIMEOUT_MS = 10_000;
 const MAX_EXTRACT_LENGTH = 500;
 const FORCE = process.argv.includes("--force");
+const RATE_LIMIT_COOLDOWN_MS = 5_000;
+const RATE_LIMIT_MAX_RETRIES = 3;
 
-const USER_AGENT = "Obelisk/1.0 (city discovery app; mailto:dev@obeliskark.com)";
+const USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 /**
  * Parses a Wikipedia URL into language code and article title.
@@ -28,7 +30,17 @@ function parseWikipediaUrl(url: string): { lang: string; title: string } | null 
 }
 
 /**
+ * Sleeps for the given number of milliseconds.
+ *
+ * @param ms - Duration to sleep.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * Fetches the plain-text extract from Wikipedia's REST API.
+ * Retries with backoff on HTTP 429 (rate limit) responses.
  *
  * @param lang - Wikipedia language code (e.g. "de", "en").
  * @param title - URL-encoded article title.
@@ -36,19 +48,41 @@ function parseWikipediaUrl(url: string): { lang: string; title: string } | null 
  */
 async function fetchExtract(lang: string, title: string): Promise<string | null> {
   const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${title}`;
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { extract?: string };
-    if (!data.extract) return null;
-    const text = data.extract.slice(0, MAX_EXTRACT_LENGTH);
-    return text;
-  } catch {
-    return null;
+
+  for (let attempt = 0; attempt <= RATE_LIMIT_MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": USER_AGENT },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+
+      if (res.status === 429) {
+        const retryAfter = res.headers.get("retry-after");
+        const waitMs = retryAfter
+          ? parseInt(retryAfter, 10) * 1000
+          : RATE_LIMIT_COOLDOWN_MS;
+
+        log.warn(
+          `Rate limited by Wikipedia (429). ` +
+            `Retry-After: ${retryAfter ?? "none"}, waiting ${waitMs}ms ` +
+            `(attempt ${attempt + 1}/${RATE_LIMIT_MAX_RETRIES})`
+        );
+
+        if (attempt === RATE_LIMIT_MAX_RETRIES) return null;
+        await sleep(waitMs);
+        continue;
+      }
+
+      if (!res.ok) return null;
+      const data = (await res.json()) as { extract?: string };
+      if (!data.extract) return null;
+      return data.extract.slice(0, MAX_EXTRACT_LENGTH);
+    } catch {
+      return null;
+    }
   }
+
+  return null;
 }
 
 interface PoiRow {

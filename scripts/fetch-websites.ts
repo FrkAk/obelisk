@@ -9,15 +9,16 @@ import type { PoiProfile } from "../src/types/api";
 
 const log = createLogger("fetch-websites");
 
-const BATCH_SIZE = 50;
-const CONCURRENCY = 5;
+const BATCH_SIZE = 300;
+const CONCURRENCY = 50;
 const TIMEOUT_MS = 10_000;
 const MAX_TEXT_PER_PAGE = 3000;
 const MAX_COMBINED_TEXT = 8000;
 const MAX_SUBPAGES = 3;
+const BATCH_COOLDOWN_MS = 2_000;
 const FORCE = process.argv.includes("--force");
 
-const USER_AGENT = "Obelisk/1.0 (city discovery app; mailto:dev@obeliskark.com)";
+const USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 const SKIP_EXTENSIONS = new Set([
   ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".ico",
@@ -53,6 +54,48 @@ function shouldSkipUrl(pathname: string): boolean {
  * @param url - URL to fetch.
  * @returns HTML string or null on failure.
  */
+interface FailureStats {
+  connect: number;
+  http403: number;
+  httpOther: number;
+  ssl: number;
+  timeout: number;
+  other: number;
+}
+
+/** Batch-level failure counters, reset each batch. */
+let batchFailures: FailureStats = { connect: 0, http403: 0, httpOther: 0, ssl: 0, timeout: 0, other: 0 };
+
+/**
+ * Resets batch failure counters.
+ */
+function resetBatchFailures(): void {
+  batchFailures = { connect: 0, http403: 0, httpOther: 0, ssl: 0, timeout: 0, other: 0 };
+}
+
+/**
+ * Formats batch failure stats into a compact summary string.
+ *
+ * @param stats - Failure counters for the batch.
+ * @returns Formatted string like "98 connect, 52 HTTP 403, 14 SSL".
+ */
+function formatFailures(stats: FailureStats): string {
+  const parts: string[] = [];
+  if (stats.connect) parts.push(`${stats.connect} connect`);
+  if (stats.http403) parts.push(`${stats.http403} HTTP 403`);
+  if (stats.httpOther) parts.push(`${stats.httpOther} HTTP other`);
+  if (stats.ssl) parts.push(`${stats.ssl} SSL`);
+  if (stats.timeout) parts.push(`${stats.timeout} timeout`);
+  if (stats.other) parts.push(`${stats.other} other`);
+  return parts.join(", ");
+}
+
+/**
+ * Fetches a URL and returns the HTML body text.
+ *
+ * @param url - URL to fetch.
+ * @returns HTML string or null on failure.
+ */
 async function fetchHtml(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
@@ -60,11 +103,20 @@ async function fetchHtml(url: string): Promise<string | null> {
       signal: AbortSignal.timeout(TIMEOUT_MS),
       redirect: "follow",
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (res.status === 403) batchFailures.http403++;
+      else batchFailures.httpOther++;
+      return null;
+    }
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("text/html")) return null;
     return await res.text();
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("timeout") || msg.includes("abort")) batchFailures.timeout++;
+    else if (msg.includes("Unable to connect") || msg.includes("ECONNREFUSED")) batchFailures.connect++;
+    else if (msg.includes("certificate") || msg.includes("TLS") || msg.includes("SSL")) batchFailures.ssl++;
+    else batchFailures.other++;
     return null;
   }
 }
@@ -244,7 +296,7 @@ async function crawlWebsite(websiteUrl: string): Promise<string | null> {
 
   if (texts.length === 0) return null;
 
-  const combined = texts.join("\n\n");
+  const combined = texts.join("\n\n").replace(/\u0000/g, "");
   return combined.slice(0, MAX_COMBINED_TEXT);
 }
 
@@ -310,6 +362,7 @@ async function main() {
 
   for (let i = 0; i < toFetch.length; i += BATCH_SIZE) {
     const batch = toFetch.slice(i, i + BATCH_SIZE);
+    resetBatchFailures();
 
     const results = await processWithConcurrency(batch, CONCURRENCY, async (poi) => {
       const url = normalizeUrl(poi.websiteUrl);
@@ -361,7 +414,13 @@ async function main() {
     }
 
     const done = Math.min(i + BATCH_SIZE, toFetch.length);
-    log.info(`${formatEta(startMs, done, toFetch.length)} — ${toUpdate.length} fetched this batch`);
+    const batchFailed = batch.length - toUpdate.length;
+    const failSummary = batchFailed > 0 ? ` (${formatFailures(batchFailures)})` : "";
+    log.info(`${formatEta(startMs, done, toFetch.length)} — ${toUpdate.length} fetched, ${batchFailed} failed${failSummary}`);
+
+    if (done < toFetch.length) {
+      await new Promise((resolve) => setTimeout(resolve, BATCH_COOLDOWN_MS));
+    }
   }
 
   log.info("");

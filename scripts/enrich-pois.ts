@@ -3,6 +3,7 @@ import { db } from "../src/lib/db/client";
 import { pois, categories } from "../src/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { generateText, checkOllamaHealth } from "../src/lib/ai/ollama";
+import { generateVisualDescription } from "../src/lib/media/visual";
 import { processWithConcurrency } from "./lib/concurrency";
 import { createLogger, formatEta } from "../src/lib/logger";
 import type { PoiProfile } from "../src/types/api";
@@ -234,56 +235,6 @@ function buildSummaryPrompt(
   return lines.join("\n");
 }
 
-/**
- * Downloads an image URL and returns its base64-encoded content.
- *
- * @param url - Image URL to download.
- * @returns Base64 string, or null on failure.
- */
-async function downloadToBase64(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) return null;
-    const buf = await res.arrayBuffer();
-    return Buffer.from(buf).toString("base64");
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Generates a visual description of a POI from available thumbnail images.
- * Uses the vision model to describe facade, signage, architecture, and surroundings.
- *
- * @param name - POI name for prompt context.
- * @param profile - Current POI profile with image URLs.
- * @returns Visual description string, or null if no images available or generation fails.
- */
-async function generateVisualDescription(
-  name: string,
-  profile: PoiProfile,
-): Promise<string | null> {
-  const imageUrls: string[] = [];
-  if (profile.mapillaryThumbUrl) imageUrls.push(profile.mapillaryThumbUrl);
-  if (profile.wikiImageUrl) imageUrls.push(profile.wikiImageUrl);
-  if (imageUrls.length === 0) return null;
-
-  const images: string[] = [];
-  for (const url of imageUrls) {
-    const b64 = await downloadToBase64(url);
-    if (b64) images.push(b64);
-  }
-  if (images.length === 0) return null;
-
-  const prompt = `Describe what you see in these photos of ${name}. Focus on facade, signage, outdoor features, architecture, surroundings. 2-4 sentences.`;
-  try {
-    return await generateText(prompt, OLLAMA_MODEL, { temperature: 0.3, num_predict: 256 }, images);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    log.warn(`${name}: vision description failed — ${msg}`);
-    return null;
-  }
-}
 
 interface EnrichResult {
   status: "enriched" | "failed" | "skipped";
@@ -410,7 +361,7 @@ async function main() {
       };
 
       if (FORCE || !updatedProfile.visualDescription) {
-        const visualDesc = await generateVisualDescription(poi.name, updatedProfile);
+        const visualDesc = await generateVisualDescription(poi.name, updatedProfile.mapillaryThumbUrl, updatedProfile.wikiImageUrl, OLLAMA_MODEL);
         if (visualDesc) {
           updatedProfile.visualDescription = visualDesc.trim();
         }

@@ -6,6 +6,7 @@ import { eq, sql } from "drizzle-orm";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { findBestMapillaryImage } from "@/lib/media/mapillary";
 import { resolveWikiImage } from "@/lib/media/wikimedia";
+import { generateVisualDescriptionSafe } from "@/lib/media/visual";
 import { createLogger } from "@/lib/logger";
 import type { PoiProfile, PoiImage } from "@/types/api";
 
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
     const poiRows = await db
       .select({
         id: pois.id,
+        name: pois.name,
         latitude: pois.latitude,
         longitude: pois.longitude,
         osmTags: pois.osmTags,
@@ -168,6 +170,25 @@ export async function POST(request: NextRequest) {
           .where(eq(pois.id, poiId));
 
         log.info(`Saved wiki image (${wikiResult.source}) for POI ${poiId}`);
+      }
+    }
+
+    if (!profile.visualDescription && (profile.mapillaryThumbUrl || profile.wikiImageUrl)) {
+      const visualDesc = await generateVisualDescriptionSafe(
+        poi.name,
+        profile.mapillaryThumbUrl,
+        profile.wikiImageUrl,
+      );
+      if (visualDesc) {
+        profile.visualDescription = visualDesc.trim();
+        await db
+          .update(pois)
+          .set({
+            profile: { ...profile },
+            updatedAt: sql`now()`,
+          })
+          .where(eq(pois.id, poiId));
+        log.info(`Generated visual description for POI ${poiId}`);
       }
     }
 

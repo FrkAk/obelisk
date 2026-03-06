@@ -1,4 +1,4 @@
-.PHONY: help setup setup-quick finish-setup run run-local run-public run-flutter stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois enrich-distributed enrich-worker fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup setup-quick finish-setup run run-local run-public run-flutter stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-taxonomy-only enrich-pois enrich-distributed enrich-worker fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -30,9 +30,9 @@ help:
 	@printf "$(CYAN)Obelisk$(RESET) - Next Gen Map \n"
 	@printf "\n"
 	@printf "$(GREEN)Commands:$(RESET)\n"
-	@printf "  $(CYAN)setup$(RESET)          First-time setup (deps, db, model, seed). Resume: make setup FROM=6\n"
+	@printf "  $(CYAN)setup$(RESET)          First-time setup (seed + taxonomy + search). Resume: make setup FROM=6\n"
 	@printf "  $(CYAN)setup-quick$(RESET)    Quick setup from db/dump.sql (skip seed + enrich)\n"
-	@printf "  $(CYAN)finish-setup$(RESET)   Continue setup after enrich (stories + search + embeddings)\n"
+	@printf "  $(CYAN)finish-setup$(RESET)   Sync search index + generate embeddings\n"
 	@printf "  $(CYAN)run$(RESET)            Start on localhost:3000\n"
 	@printf "  $(CYAN)run-local$(RESET)      Start exposed to local network (same WiFi)\n"
 	@printf "  $(CYAN)run-public$(RESET)     Start with Cloudflare Tunnel (obelisk.obeliskark.com)\n"
@@ -54,11 +54,12 @@ help:
 	@printf "  $(CYAN)download-datasets$(RESET)   Download external datasets (taxonomy, NSI, taginfo, wikidata)\n"
 	@printf "  $(CYAN)build-taxonomy$(RESET)      Build tag enrichment map from downloaded data\n"
 	@printf "  $(CYAN)build-brands$(RESET)        Build brand enrichment map from NSI + Wikidata\n"
-	@printf "  $(CYAN)enrich-pois$(RESET)         Enrich POIs with taxonomy data + LLM summaries\n"
+	@printf "  $(CYAN)enrich-taxonomy-only$(RESET) Fast taxonomy-only merge (no LLM, no network)\n"
+	@printf "  $(CYAN)enrich-pois$(RESET)         Full enrichment: taxonomy + LLM summaries (optional)\n"
 	@printf "  $(CYAN)enrich-distributed$(RESET)  Start coordinator + local worker (host machine)\n"
 	@printf "  $(CYAN)enrich-worker$(RESET)       Connect to coordinator as remote worker\n"
-	@printf "  $(CYAN)fetch-wikipedia$(RESET)     Fetch Wikipedia extracts for POIs with URLs\n"
-	@printf "  $(CYAN)fetch-websites$(RESET)      Crawl POI websites for content\n"
+	@printf "  $(CYAN)fetch-wikipedia$(RESET)     Fetch Wikipedia extracts (optional, pre-enrichment)\n"
+	@printf "  $(CYAN)fetch-websites$(RESET)      Crawl POI websites (optional, pre-enrichment)\n"
 	@printf "\n"
 	@printf "$(GREEN)Search Pipeline:$(RESET)\n"
 	@printf "  $(CYAN)sync-search$(RESET)         Sync POIs to Typesense\n"
@@ -132,42 +133,17 @@ setup:
 	fi; \
 	\
 	if [ $(FROM) -le 6 ]; then \
-	printf "$(CYAN)[Phase 6]$(RESET) Fetching Wikipedia + websites + Mapillary (parallel)...\n"; \
+	printf "$(CYAN)[Phase 6]$(RESET) Taxonomy-only enrichment (fast, no LLM)...\n"; \
 	STEP_START=$$(date +%s); \
-	$(COMPOSE) exec -T app bun scripts/fetch-wikipedia.ts & PID_WIKI=$$!; \
-	$(COMPOSE) exec -T app bun scripts/fetch-websites.ts & PID_WEB=$$!; \
-	$(COMPOSE) exec -T app bun scripts/fetch-mapillary.ts & PID_MAP=$$!; \
-	wait $$PID_WIKI || exit 1; \
-	wait $$PID_WEB || exit 1; \
-	wait $$PID_MAP || exit 1; \
+	$(COMPOSE) exec app bun scripts/enrich-taxonomy-only.ts; \
 	STEP_END=$$(date +%s); \
 	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Data fetching done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "$(GREEN)Taxonomy enrichment done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
 	fi; \
 	\
 	if [ $(FROM) -le 7 ]; then \
-	printf "$(CYAN)[Phase 7]$(RESET) Enriching POIs with taxonomy data...\n"; \
-	STEP_START=$$(date +%s); \
-	$(COMPOSE) exec app bun scripts/enrich-pois.ts; \
-	STEP_END=$$(date +%s); \
-	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Enrichment done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
-	printf "\n"; \
-	fi; \
-	\
-	if [ $(FROM) -le 8 ]; then \
-	printf "$(CYAN)[Phase 8]$(RESET) Generating remarks...\n"; \
-	STEP_START=$$(date +%s); \
-	$(COMPOSE) exec app bun scripts/generate-remarks.ts || true; \
-	STEP_END=$$(date +%s); \
-	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Remarks done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
-	printf "\n"; \
-	fi; \
-	\
-	if [ $(FROM) -le 9 ]; then \
-	printf "$(CYAN)[Phase 9]$(RESET) Syncing search index + generating embeddings (parallel)...\n"; \
+	printf "$(CYAN)[Phase 7]$(RESET) Syncing search index + generating embeddings (parallel)...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \
 	$(COMPOSE) exec -T app bun scripts/generate-embeddings.ts & PID_EMBED=$$!; \
@@ -258,6 +234,7 @@ run-flutter:
 stop:
 	@printf "Stopping services...\n"
 	@if [ -f /tmp/cloudflared.pid ]; then kill $$(cat /tmp/cloudflared.pid) 2>/dev/null; rm -f /tmp/cloudflared.pid; printf "Tunnel stopped\n"; fi
+	cloudflared tunnel cleanup obelisk
 	$(COMPOSE) down
 	@printf "$(GREEN)Stopped.$(RESET) Data preserved.\n"
 
@@ -313,6 +290,9 @@ seed-pois:
 
 seed-all:
 	$(COMPOSE) exec app bun scripts/seed.ts
+
+enrich-taxonomy-only:
+	$(COMPOSE) exec app bun scripts/enrich-taxonomy-only.ts
 
 enrich-pois:
 	$(COMPOSE) exec app bun scripts/enrich-pois.ts
@@ -430,12 +410,9 @@ db-restore:
 	@printf "$(GREEN)Search index synced$(RESET)\n"
 
 finish-setup:
-	@printf "$(GREEN)Finishing setup (stories + search + embeddings)...$(RESET)\n"
+	@printf "$(GREEN)Finishing setup (search + embeddings)...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[1/2]$(RESET) Generating stories...\n"
-	$(COMPOSE) exec app bun scripts/generate-remarks.ts || true
-	@printf "\n"
-	@printf "$(CYAN)[2/2]$(RESET) Syncing search index + generating embeddings (parallel)...\n"
+	@printf "$(CYAN)[1/1]$(RESET) Syncing search index + generating embeddings (parallel)...\n"
 	@$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \
 	$(COMPOSE) exec -T app bun scripts/generate-embeddings.ts & PID_EMBED=$$!; \
 	wait $$PID_SYNC || exit 1; \
@@ -443,4 +420,4 @@ finish-setup:
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
-search-setup: seed-pois fetch-wikipedia fetch-websites fetch-mapillary enrich-pois sync-search generate-embeddings
+search-setup: seed-pois enrich-taxonomy-only sync-search generate-embeddings

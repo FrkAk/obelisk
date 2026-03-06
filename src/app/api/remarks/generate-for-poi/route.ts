@@ -11,6 +11,7 @@ import { createLogger } from "@/lib/logger";
 import { getCategorySlug } from "@/lib/geo/categories";
 import { buildProfile } from "@/lib/poi/profile";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { enrichPoiOnDemand } from "@/lib/poi/on-demand-enrich";
 import type { CategorySlug, PoiProfile } from "@/types";
 import { getCurrentRemarkForPoi, insertRemark } from "@/lib/db/queries/remarks";
 
@@ -268,7 +269,13 @@ async function generateAndSaveRemark(
 
   const categoryName = poi.categoryName || "Hidden Gems";
   const categorySlug = poi.categorySlug ?? "hidden";
-  const profile = (poi.profile as PoiProfile | null) ?? null;
+  let profile = (poi.profile as PoiProfile | null) ?? null;
+
+  if (!profile?.enrichedAt) {
+    log.info(`POI "${poi.name}" not enriched, running on-demand enrichment...`);
+    const enrichedProfile = await enrichPoiOnDemand(poi.id);
+    if (enrichedProfile) profile = enrichedProfile;
+  }
 
   log.info(`Generating remark for: "${poi.name}" with category: "${categoryName}"`);
 

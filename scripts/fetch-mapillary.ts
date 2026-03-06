@@ -5,6 +5,7 @@ import { processWithConcurrency } from "./lib/concurrency";
 import { createLogger, formatEta } from "../src/lib/logger";
 import { findBestMapillaryImage } from "../src/lib/media/mapillary";
 import type { MapillaryResult } from "../src/lib/media/mapillary";
+import { createEmptyProfile } from "../src/lib/poi/enrichment";
 import type { PoiProfile } from "../src/types/api";
 
 const log = createLogger("fetch-mapillary");
@@ -127,13 +128,7 @@ async function main() {
       await db.transaction(async (tx) => {
         for (const item of toUpdate) {
           const poi = allPois.find((p) => p.id === item.poiId);
-          const profile: PoiProfile = poi?.profile ?? {
-            keywords: [],
-            products: [],
-            summary: "",
-            enrichmentSource: "seed",
-            attributes: {},
-          };
+          const profile: PoiProfile = poi?.profile ?? createEmptyProfile();
 
           await tx
             .update(pois)

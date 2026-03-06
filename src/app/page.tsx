@@ -374,7 +374,7 @@ export default function Home() {
 
       if (!response.ok) {
         if (response.status === 422) {
-          setAppError("Not enough info about this place to write a remark yet.");
+          setAppError("I couldn't find enough about this place to share a story.");
         } else if (response.status === 503) {
           setAppError("Remarks are taking a breather. Try again in a moment.");
         } else if (response.status === 429) {

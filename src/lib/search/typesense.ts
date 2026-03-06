@@ -48,6 +48,7 @@ interface TypesensePoiDocument {
   keywords?: string[];
   tags?: string[];
   description?: string;
+  osmTagValues?: string[];
 }
 
 const poiSchema = {
@@ -75,6 +76,7 @@ const poiSchema = {
     { name: "keywords", type: "string[]" as const, optional: true as const },
     { name: "tags", type: "string[]" as const, optional: true as const },
     { name: "description", type: "string" as const, optional: true as const },
+    { name: "osmTagValues", type: "string[]" as const, optional: true as const },
   ],
   default_sorting_field: "" as const,
   token_separators: ["-", "/"],
@@ -181,8 +183,8 @@ export async function searchPOIs(
 
   const searchParameters = {
     q: query,
-    query_by: "name,profileSummary,products,tags,cuisines,amenityType,keywords,openingHours",
-    query_by_weights: "5,4,3,2,2,1,1,1",
+    query_by: "name,profileSummary,description,products,tags,cuisines,amenityType,keywords,osmTagValues,openingHours",
+    query_by_weights: "5,4,4,3,2,2,1,1,1,1",
     filter_by: filterParts.length > 0 ? filterParts.join(" && ") : undefined,
     sort_by: location
       ? `location(${location.latitude},${location.longitude}):asc`

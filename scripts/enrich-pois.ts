@@ -611,7 +611,7 @@ async function runStandaloneMode(
  */
 async function main() {
   log.info("Starting taxonomy enrichment pipeline...");
-  log.info(`Config: batchSize=${BATCH_SIZE}, concurrency=${CONCURRENCY}, model=${OLLAMA_MODEL}, force=${FORCE}, coordinator=${COORDINATOR_URL || "none"}`);
+  log.info(`Config: concurrency=${CONCURRENCY}, model=${OLLAMA_MODEL}, force=${FORCE}, mode=${COORDINATOR_URL ? "pull" : "standalone"}`);
 
   const ok = await checkOllamaHealth(OLLAMA_MODEL);
   if (!ok) {

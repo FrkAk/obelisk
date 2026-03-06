@@ -34,6 +34,7 @@ let failedCount = 0;
 let nextBatchId = 1;
 let nextWorkerId = 1;
 let shuttingDown = false;
+let startedAt = 0;
 
 /**
  * Loads unenriched POI IDs from the database into the queue.
@@ -114,6 +115,8 @@ function handleBatch(url: URL): Response {
     return Response.json({ batchId: null, poiIds: [], done: false });
   }
 
+  if (startedAt === 0) startedAt = Date.now();
+
   const batchId = `b${nextBatchId++}`;
   const poiIds = queue.splice(0, BATCH_SIZE);
 
@@ -140,12 +143,25 @@ function handleStatus(): Response {
     failed: w.failed,
   }));
 
+  const done = completedCount + failedCount;
+  const remaining = totalLoaded - done;
+  const elapsedMs = startedAt > 0 ? Date.now() - startedAt : 0;
+  const elapsedS = Math.floor(elapsedMs / 1000);
+  const rate = elapsedS > 0 ? done / elapsedS : 0;
+  const etaS = rate > 0 ? Math.ceil(remaining / rate) : 0;
+  const elapsed = `${Math.floor(elapsedS / 60)}m${elapsedS % 60}s`;
+  const eta = rate > 0 ? `${Math.floor(etaS / 60)}m${etaS % 60}s` : "calculating...";
+  const poisPerMin = rate > 0 ? (rate * 60).toFixed(1) : "0";
+
   return Response.json({
     total: totalLoaded,
     queued: queue.length,
     inflight: inflight.size,
     completed: completedCount,
     failed: failedCount,
+    elapsed,
+    eta,
+    poisPerMin,
     workers: workerList,
   });
 }

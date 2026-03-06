@@ -372,7 +372,7 @@ enrich-worker:
 	@curl -sf $(ENRICH_COORDINATOR_URL)/status >/dev/null 2>&1 || { printf "$(RED)Coordinator not reachable at $(ENRICH_COORDINATOR_URL)$(RESET)\n"; exit 1; }
 	@printf "$(GREEN)All checks passed$(RESET)\n"
 	@printf "\n"
-	$(COMPOSE) run --rm --no-deps -e ENRICH_COORDINATOR_URL=$(ENRICH_COORDINATOR_URL) -e DATABASE_URL=$(DATABASE_URL) -e OLLAMA_URL=$(OLLAMA_URL) app bun scripts/enrich-pois.ts
+	$(COMPOSE) run --rm --init --no-deps -e ENRICH_COORDINATOR_URL=$(ENRICH_COORDINATOR_URL) -e DATABASE_URL=$(DATABASE_URL) -e OLLAMA_URL=$(OLLAMA_URL) app bun scripts/enrich-pois.ts
 
 fetch-wikipedia:
 	$(COMPOSE) exec app bun scripts/fetch-wikipedia.ts

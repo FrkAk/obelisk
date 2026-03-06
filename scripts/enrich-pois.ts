@@ -452,10 +452,18 @@ async function runPullMode(
 
   let totalEnriched = 0;
   let totalFailed = 0;
+  let stopping = false;
   const startMs = Date.now();
 
+  for (const sig of ["SIGINT", "SIGTERM"] as const) {
+    process.on(sig, () => {
+      log.info(`Received ${sig}, finishing current batch then exiting...`);
+      stopping = true;
+    });
+  }
+
   try {
-    while (true) {
+    while (!stopping) {
       const batchRes = await fetch(`${COORDINATOR_URL}/batch?workerId=${workerId}`);
       const batch = await batchRes.json() as { batchId: string | null; poiIds: string[]; done: boolean };
 

@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { db } from "../src/lib/db/client";
 import { pois, categories } from "../src/lib/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import { generateText, checkOllamaHealth } from "../src/lib/ai/ollama";
 import { generateVisualDescription } from "../src/lib/media/visual";
 import { processWithConcurrency } from "./lib/concurrency";
@@ -11,9 +11,16 @@ import type { PoiProfile } from "../src/types/api";
 const log = createLogger("enrich-taxonomy");
 
 const BATCH_SIZE = parseInt(process.env.ENRICH_BATCH_SIZE || "50", 10);
-const CONCURRENCY = parseInt(process.env.ENRICH_CONCURRENCY || "3", 10);
+const CONCURRENCY = parseInt(process.env.ENRICH_CONCURRENCY || "4", 10);
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3.5:9b";
 const FORCE = process.argv.includes("--force");
+const COORDINATOR_URL = process.env.ENRICH_COORDINATOR_URL || "";
+
+const NUM_PREDICT: Record<DataTier, number> = {
+  rich: 256,
+  moderate: 128,
+  thin: 64,
+};
 
 interface TagEntry {
   keywords: string[];
@@ -252,28 +259,265 @@ interface PoiRow {
 }
 
 /**
- * Runs the taxonomy enrichment pipeline: loads taxonomy maps, iterates
- * through unenriched POIs, merges keywords/products, generates LLM
- * summaries, and updates the database.
+ * Enriches a single POI: merges taxonomy data, generates visual description and LLM summary.
+ *
+ * @param poi - POI row from the database.
+ * @param tagMap - Tag enrichment map.
+ * @param brandMap - Brand enrichment map.
+ * @param categoryMap - Category ID to slug mapping.
+ * @returns Enrichment result with status and updated profile.
  */
-async function main() {
-  log.info("Starting taxonomy enrichment pipeline...");
-  log.info(`Config: batchSize=${BATCH_SIZE}, concurrency=${CONCURRENCY}, model=${OLLAMA_MODEL}, force=${FORCE}`);
+async function enrichPoi(
+  poi: PoiRow,
+  tagMap: Record<string, TagEntry>,
+  brandMap: Record<string, BrandEntry>,
+  categoryMap: Map<string, string>,
+): Promise<EnrichResult> {
+  const osmTags = poi.osmTags ?? {};
+  const existingProfile: PoiProfile = poi.profile ?? {
+    keywords: [],
+    products: [],
+    summary: "",
+    enrichmentSource: "seed",
+    attributes: {},
+  };
 
-  const ok = await checkOllamaHealth(OLLAMA_MODEL);
-  if (!ok) {
-    log.error(`Model ${OLLAMA_MODEL} not loaded. Run: ollama pull ${OLLAMA_MODEL}`);
-    process.exit(1);
+  const categorySlug = poi.categoryId ? (categoryMap.get(poi.categoryId) ?? "hidden") : "hidden";
+  const primaryTag = determinePrimaryTag(osmTags);
+
+  const mergedKeywords = [...existingProfile.keywords];
+  const mergedProducts = [...existingProfile.products];
+  let enrichmentSource = existingProfile.enrichmentSource || "seed";
+
+  if (!primaryTag) {
+    log.warn(`${poi.name}: No primary tag determined from OSM tags: ${JSON.stringify(osmTags)}`);
+  } else if (!tagMap[primaryTag]) {
+    log.warn(`${poi.name}: No taxonomy match for tag "${primaryTag}"`);
   }
 
-  log.info("Loading taxonomy data...");
-  const tagMap = loadJson<Record<string, TagEntry>>("data/tag_enrichment_map.json");
-  const brandMap = loadJson<Record<string, BrandEntry>>("data/brand_enrichment_map.json");
-  log.info(`Loaded ${Object.keys(tagMap).length} tag entries, ${Object.keys(brandMap).length} brand entries`);
+  if (primaryTag && tagMap[primaryTag]) {
+    const tagEntry = tagMap[primaryTag];
+    for (const kw of tagEntry.keywords) {
+      if (!mergedKeywords.includes(kw)) mergedKeywords.push(kw);
+    }
+    for (const prod of tagEntry.products) {
+      if (!mergedProducts.includes(prod)) mergedProducts.push(prod);
+    }
+    enrichmentSource = "taxonomy";
+  }
 
-  const allCategories = await db.select().from(categories);
-  const categoryMap = new Map(allCategories.map((c: { id: string; slug: string }) => [c.id, c.slug] as const));
+  let brandInfo: { name: string; priceTier: string } | null = null;
+  const brandWikidata = osmTags["brand:wikidata"] ?? existingProfile.osmExtracted?.brandwikidata;
+  if (brandWikidata && brandMap[brandWikidata]) {
+    const brandEntry = brandMap[brandWikidata];
+    brandInfo = { name: brandEntry.name, priceTier: brandEntry.priceTier };
+    for (const prod of brandEntry.products) {
+      if (!mergedProducts.includes(prod)) mergedProducts.push(prod);
+    }
+    enrichmentSource = "taxonomy+brand";
+  }
 
+  const osmFacts = extractOsmFacts(osmTags);
+  const dataTier = assessDataTier(osmFacts.length, mergedKeywords.length > 0, !!existingProfile.wikipediaSummary, !!existingProfile.websiteText, !!existingProfile.visualDescription);
+
+  const updatedProfile: PoiProfile = {
+    ...existingProfile,
+    keywords: mergedKeywords,
+    products: mergedProducts,
+    enrichmentSource,
+    dataTier,
+    attributes: {
+      ...existingProfile.attributes,
+      ...(brandInfo ? { brand: brandInfo.name, priceTier: brandInfo.priceTier } : {}),
+    },
+  };
+
+  if (FORCE || !updatedProfile.visualDescription) {
+    const visualDesc = await generateVisualDescription(poi.name, updatedProfile.mapillaryThumbUrl, updatedProfile.wikiImageUrl, OLLAMA_MODEL);
+    if (visualDesc) {
+      updatedProfile.visualDescription = visualDesc.trim();
+    }
+  }
+
+  try {
+    const prompt = buildSummaryPrompt(poi.name, categorySlug, updatedProfile, poi.address, brandInfo, osmFacts, dataTier);
+    const summary = await generateText(prompt, OLLAMA_MODEL, {
+      temperature: 0.3,
+      num_predict: NUM_PREDICT[dataTier],
+    });
+
+    updatedProfile.summary = summary.trim();
+    updatedProfile.enrichmentSource = enrichmentSource === "seed" ? "taxonomy+llm" : `${enrichmentSource}+llm`;
+    updatedProfile.enrichedAt = new Date().toISOString();
+
+    return { status: "enriched", poiId: poi.id, profile: updatedProfile };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    log.error(`${poi.name}: LLM failed — primaryTag=${primaryTag}, keywords=${mergedKeywords.length}, products=${mergedProducts.length} — ${msg}`);
+    return { status: "failed", poiId: poi.id };
+  }
+}
+
+/**
+ * Writes enrichment results to the database.
+ *
+ * @param results - Array of enrichment results from a batch.
+ * @returns Count of enriched, failed, and skipped.
+ */
+async function persistResults(results: EnrichResult[]): Promise<{ enriched: number; failed: number; skipped: number }> {
+  const toUpdate = results.filter(
+    (r): r is EnrichResult & { status: "enriched"; profile: PoiProfile } =>
+      r.status === "enriched" && r.profile !== undefined,
+  );
+
+  if (toUpdate.length > 0) {
+    await db.transaction(async (tx) => {
+      for (const item of toUpdate) {
+        await tx
+          .update(pois)
+          .set({
+            profile: item.profile,
+            embedding: null,
+            updatedAt: sql`now()`,
+          })
+          .where(eq(pois.id, item.poiId));
+      }
+    });
+  }
+
+  let enriched = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const r of results) {
+    if (r.status === "enriched") enriched++;
+    else if (r.status === "failed") failed++;
+    else skipped++;
+  }
+  return { enriched, failed, skipped };
+}
+
+/**
+ * Fetches POI rows by their IDs from the database.
+ *
+ * @param ids - Array of POI IDs to fetch.
+ * @returns Array of POI rows.
+ */
+async function fetchPoisByIds(ids: string[]): Promise<PoiRow[]> {
+  if (ids.length === 0) return [];
+  return db
+    .select({
+      id: pois.id,
+      name: pois.name,
+      address: pois.address,
+      categoryId: pois.categoryId,
+      osmTags: pois.osmTags,
+      profile: pois.profile,
+    })
+    .from(pois)
+    .where(inArray(pois.id, ids));
+}
+
+/**
+ * Runs enrichment in pull mode, fetching batches from the coordinator.
+ *
+ * @param tagMap - Tag enrichment map.
+ * @param brandMap - Brand enrichment map.
+ * @param categoryMap - Category ID to slug mapping.
+ */
+async function runPullMode(
+  tagMap: Record<string, TagEntry>,
+  brandMap: Record<string, BrandEntry>,
+  categoryMap: Map<string, string>,
+): Promise<void> {
+  const hostname = require("os").hostname() as string;
+  const regRes = await fetch(`${COORDINATOR_URL}/register`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: hostname }),
+  });
+  const { workerId } = await regRes.json() as { workerId: string; config: { model: string; batchSize: number } };
+  log.info(`Registered with coordinator as worker ${workerId} (${hostname})`);
+
+  const heartbeatInterval = setInterval(async () => {
+    try {
+      await fetch(`${COORDINATOR_URL}/heartbeat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workerId }),
+      });
+    } catch {
+      log.warn("Heartbeat failed");
+    }
+  }, 30_000);
+
+  let totalEnriched = 0;
+  let totalFailed = 0;
+  const startMs = Date.now();
+
+  try {
+    while (true) {
+      const batchRes = await fetch(`${COORDINATOR_URL}/batch?workerId=${workerId}`);
+      const batch = await batchRes.json() as { batchId: string | null; poiIds: string[]; done: boolean };
+
+      if (batch.done) {
+        log.info("All work complete, exiting.");
+        break;
+      }
+
+      if (!batch.batchId || batch.poiIds.length === 0) {
+        log.info("No batches available, waiting 5s...");
+        await new Promise((r) => setTimeout(r, 5000));
+        continue;
+      }
+
+      const poiRows = await fetchPoisByIds(batch.poiIds);
+      const results = await processWithConcurrency<PoiRow, EnrichResult>(
+        poiRows,
+        CONCURRENCY,
+        (poi) => enrichPoi(poi, tagMap, brandMap, categoryMap),
+      );
+
+      const stats = await persistResults(results);
+      totalEnriched += stats.enriched;
+      totalFailed += stats.failed;
+
+      await fetch(`${COORDINATOR_URL}/complete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workerId,
+          batchId: batch.batchId,
+          results: results.map((r) => ({ poiId: r.poiId, status: r.status })),
+        }),
+      });
+
+      const elapsed = ((Date.now() - startMs) / 1000).toFixed(0);
+      log.info(`Batch ${batch.batchId} done — ${stats.enriched} enriched, ${stats.failed} failed (total: ${totalEnriched} enriched, ${totalFailed} failed, ${elapsed}s elapsed)`);
+    }
+  } finally {
+    clearInterval(heartbeatInterval);
+  }
+
+  log.info("");
+  log.info("--- Enrichment Summary (pull mode) ---");
+  log.info(`Enriched: ${totalEnriched} | Failed: ${totalFailed}`);
+  process.exit(totalFailed > totalEnriched ? 1 : 0);
+}
+
+/**
+ * Runs the taxonomy enrichment pipeline in standalone mode: loads taxonomy maps,
+ * iterates through unenriched POIs, merges keywords/products, generates LLM
+ * summaries, and updates the database.
+ *
+ * @param tagMap - Tag enrichment map.
+ * @param brandMap - Brand enrichment map.
+ * @param categoryMap - Category ID to slug mapping.
+ */
+async function runStandaloneMode(
+  tagMap: Record<string, TagEntry>,
+  brandMap: Record<string, BrandEntry>,
+  categoryMap: Map<string, string>,
+): Promise<void> {
   const allPois: PoiRow[] = await db
     .select({
       id: pois.id,
@@ -300,120 +544,19 @@ async function main() {
   for (let i = 0; i < toEnrich.length; i += BATCH_SIZE) {
     const batch = toEnrich.slice(i, i + BATCH_SIZE);
 
-    const results = await processWithConcurrency<PoiRow, EnrichResult>(batch, CONCURRENCY, async (poi: PoiRow) => {
-      const osmTags = poi.osmTags ?? {};
-      const existingProfile: PoiProfile = poi.profile ?? {
-        keywords: [],
-        products: [],
-        summary: "",
-        enrichmentSource: "seed",
-        attributes: {},
-      };
-
-      const categorySlug = poi.categoryId ? (categoryMap.get(poi.categoryId) ?? "hidden") : "hidden";
-      const primaryTag = determinePrimaryTag(osmTags);
-
-      const mergedKeywords = [...existingProfile.keywords];
-      const mergedProducts = [...existingProfile.products];
-      let enrichmentSource = existingProfile.enrichmentSource || "seed";
-
-      if (!primaryTag) {
-        log.warn(`${poi.name}: No primary tag determined from OSM tags: ${JSON.stringify(osmTags)}`);
-      } else if (!tagMap[primaryTag]) {
-        log.warn(`${poi.name}: No taxonomy match for tag "${primaryTag}"`);
-      }
-
-      if (primaryTag && tagMap[primaryTag]) {
-        const tagEntry = tagMap[primaryTag];
-        for (const kw of tagEntry.keywords) {
-          if (!mergedKeywords.includes(kw)) mergedKeywords.push(kw);
-        }
-        for (const prod of tagEntry.products) {
-          if (!mergedProducts.includes(prod)) mergedProducts.push(prod);
-        }
-        enrichmentSource = "taxonomy";
-      }
-
-      let brandInfo: { name: string; priceTier: string } | null = null;
-      const brandWikidata = osmTags["brand:wikidata"] ?? existingProfile.osmExtracted?.brandwikidata;
-      if (brandWikidata && brandMap[brandWikidata]) {
-        const brandEntry = brandMap[brandWikidata];
-        brandInfo = { name: brandEntry.name, priceTier: brandEntry.priceTier };
-        for (const prod of brandEntry.products) {
-          if (!mergedProducts.includes(prod)) mergedProducts.push(prod);
-        }
-        enrichmentSource = "taxonomy+brand";
-      }
-
-      const osmFacts = extractOsmFacts(osmTags);
-      const dataTier = assessDataTier(osmFacts.length, mergedKeywords.length > 0, !!existingProfile.wikipediaSummary, !!existingProfile.websiteText, !!existingProfile.visualDescription);
-
-      const updatedProfile: PoiProfile = {
-        ...existingProfile,
-        keywords: mergedKeywords,
-        products: mergedProducts,
-        enrichmentSource,
-        dataTier,
-        attributes: {
-          ...existingProfile.attributes,
-          ...(brandInfo ? { brand: brandInfo.name, priceTier: brandInfo.priceTier } : {}),
-        },
-      };
-
-      if (FORCE || !updatedProfile.visualDescription) {
-        const visualDesc = await generateVisualDescription(poi.name, updatedProfile.mapillaryThumbUrl, updatedProfile.wikiImageUrl, OLLAMA_MODEL);
-        if (visualDesc) {
-          updatedProfile.visualDescription = visualDesc.trim();
-        }
-      }
-
-      try {
-        const prompt = buildSummaryPrompt(poi.name, categorySlug, updatedProfile, poi.address, brandInfo, osmFacts, dataTier);
-        const summary = await generateText(prompt, OLLAMA_MODEL, {
-          temperature: 0.3,
-          num_predict: 512,
-        });
-
-        updatedProfile.summary = summary.trim();
-        updatedProfile.enrichmentSource = enrichmentSource === "seed" ? "taxonomy+llm" : `${enrichmentSource}+llm`;
-        updatedProfile.enrichedAt = new Date().toISOString();
-
-        return { status: "enriched", poiId: poi.id, profile: updatedProfile };
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : "Unknown error";
-        log.error(`${poi.name}: LLM failed — primaryTag=${primaryTag}, keywords=${mergedKeywords.length}, products=${mergedProducts.length} — ${msg}`);
-        return { status: "failed", poiId: poi.id };
-      }
-    });
-
-    const toUpdate = results.filter(
-      (r): r is EnrichResult & { status: "enriched"; profile: PoiProfile } =>
-        r.status === "enriched" && r.profile !== undefined,
+    const results = await processWithConcurrency<PoiRow, EnrichResult>(
+      batch,
+      CONCURRENCY,
+      (poi) => enrichPoi(poi, tagMap, brandMap, categoryMap),
     );
 
-    if (toUpdate.length > 0) {
-      await db.transaction(async (tx) => {
-        for (const item of toUpdate) {
-          await tx
-            .update(pois)
-            .set({
-              profile: item.profile,
-              embedding: null,
-              updatedAt: sql`now()`,
-            })
-            .where(eq(pois.id, item.poiId));
-        }
-      });
-    }
-
-    for (const r of results) {
-      if (r.status === "enriched") enriched++;
-      else if (r.status === "failed") failed++;
-      else skipped++;
-    }
+    const stats = await persistResults(results);
+    enriched += stats.enriched;
+    failed += stats.failed;
+    skipped += stats.skipped;
 
     const done = Math.min(i + BATCH_SIZE, toEnrich.length);
-    log.info(`${formatEta(startMs, done, toEnrich.length)} — ${toUpdate.length} enriched, ${results.filter((r) => r.status === "failed").length} failed`);
+    log.info(`${formatEta(startMs, done, toEnrich.length)} — ${stats.enriched} enriched, ${stats.failed} failed`);
   }
 
   log.info("");
@@ -421,6 +564,35 @@ async function main() {
   log.info(`Total: ${toEnrich.length} | Enriched: ${enriched} | Failed: ${failed} | Skipped: ${skipped}`);
 
   process.exit(failed > toEnrich.length / 2 ? 1 : 0);
+}
+
+/**
+ * Entry point: checks Ollama health, loads taxonomy data, and dispatches
+ * to pull mode (coordinator) or standalone mode.
+ */
+async function main() {
+  log.info("Starting taxonomy enrichment pipeline...");
+  log.info(`Config: batchSize=${BATCH_SIZE}, concurrency=${CONCURRENCY}, model=${OLLAMA_MODEL}, force=${FORCE}, coordinator=${COORDINATOR_URL || "none"}`);
+
+  const ok = await checkOllamaHealth(OLLAMA_MODEL);
+  if (!ok) {
+    log.error(`Model ${OLLAMA_MODEL} not loaded. Run: ollama pull ${OLLAMA_MODEL}`);
+    process.exit(1);
+  }
+
+  log.info("Loading taxonomy data...");
+  const tagMap = loadJson<Record<string, TagEntry>>("data/tag_enrichment_map.json");
+  const brandMap = loadJson<Record<string, BrandEntry>>("data/brand_enrichment_map.json");
+  log.info(`Loaded ${Object.keys(tagMap).length} tag entries, ${Object.keys(brandMap).length} brand entries`);
+
+  const allCategories = await db.select().from(categories);
+  const categoryMap = new Map(allCategories.map((c: { id: string; slug: string }) => [c.id, c.slug] as const));
+
+  if (COORDINATOR_URL) {
+    await runPullMode(tagMap, brandMap, categoryMap);
+  } else {
+    await runStandaloneMode(tagMap, brandMap, categoryMap);
+  }
 }
 
 main().catch((error) => {

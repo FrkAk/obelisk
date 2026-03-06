@@ -1,6 +1,7 @@
 services:
   app:
     build: .
+    init: true
     command: ["bun", "run", "dev"]
     network_mode: "host"
     volumes:

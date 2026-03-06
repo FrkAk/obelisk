@@ -6,7 +6,7 @@ import { createLogger } from "../src/lib/logger";
 const log = createLogger("enrich-coordinator");
 
 const PORT = parseInt(process.env.COORDINATOR_PORT || "3939", 10);
-const BATCH_SIZE = parseInt(process.env.ENRICH_BATCH_SIZE || "50", 10);
+const BATCH_SIZE = parseInt(process.env.ENRICH_BATCH_SIZE || "10", 10);
 const BATCH_TIMEOUT_MS = 5 * 60 * 1000;
 const RECOVERY_INTERVAL_MS = 60 * 1000;
 const FORCE = process.argv.includes("--force");
@@ -33,6 +33,7 @@ let completedCount = 0;
 let failedCount = 0;
 let nextBatchId = 1;
 let nextWorkerId = 1;
+let shuttingDown = false;
 
 /**
  * Loads unenriched POI IDs from the database into the queue.
@@ -72,6 +73,21 @@ function recoverTimedOutBatches(): void {
 }
 
 /**
+ * Requeues all inflight batches belonging to a worker.
+ *
+ * @param workerId - Worker ID whose batches to requeue.
+ * @param currentBatchId - Optional specific batch to requeue.
+ */
+function requeueWorkerBatches(workerId: string, currentBatchId?: string): void {
+  for (const [batchId, batch] of inflight) {
+    if (batch.workerId === workerId || batchId === currentBatchId) {
+      queue.push(...batch.poiIds);
+      inflight.delete(batchId);
+    }
+  }
+}
+
+/**
  * Assigns the next batch of POI IDs to a worker.
  *
  * @param url - Request URL with workerId query param.
@@ -85,6 +101,10 @@ function handleBatch(url: URL): Response {
 
   const worker = workers.get(workerId)!;
   worker.lastSeen = Date.now();
+
+  if (shuttingDown) {
+    return Response.json({ batchId: null, poiIds: [], done: true });
+  }
 
   if (queue.length === 0 && inflight.size === 0) {
     return Response.json({ batchId: null, poiIds: [], done: true });
@@ -191,6 +211,13 @@ async function main(): Promise<void> {
         if (worker) {
           worker.lastSeen = Date.now();
         }
+        return Response.json({ ok: true, shutdown: shuttingDown });
+      }
+
+      if (method === "POST" && path === "/disconnect") {
+        const body = await req.json() as { workerId: string; batchId?: string };
+        requeueWorkerBatches(body.workerId, body.batchId);
+        log.info(`Worker ${body.workerId} disconnected, requeued inflight batches`);
         return Response.json({ ok: true });
       }
 
@@ -205,6 +232,26 @@ async function main(): Promise<void> {
   log.info(`Coordinator listening on http://0.0.0.0:${PORT}`);
 
   setInterval(recoverTimedOutBatches, RECOVERY_INTERVAL_MS);
+
+  for (const sig of ["SIGINT", "SIGTERM"] as const) {
+    process.on(sig, () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      log.info(`Received ${sig}, shutting down...`);
+      log.info(`Requeueing ${inflight.size} inflight batches`);
+      for (const [batchId, batch] of inflight) {
+        queue.push(...batch.poiIds);
+        inflight.delete(batchId);
+      }
+      log.info("");
+      log.info("--- Coordinator Summary ---");
+      log.info(`Total: ${totalLoaded} | Completed: ${completedCount} | Failed: ${failedCount} | Remaining: ${queue.length}`);
+      for (const [id, w] of workers) {
+        log.info(`  Worker ${id} (${w.name}): ${w.completed} completed, ${w.failed} failed`);
+      }
+      setTimeout(() => process.exit(0), 500);
+    });
+  }
 }
 
 main().catch((err) => {

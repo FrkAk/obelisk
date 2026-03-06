@@ -438,25 +438,51 @@ async function runPullMode(
   const { workerId } = await regRes.json() as { workerId: string; config: { model: string; batchSize: number } };
   log.info(`Registered with coordinator as worker ${workerId} (${hostname})`);
 
+  let totalEnriched = 0;
+  let totalFailed = 0;
+  let stopping = false;
+  let currentBatchId: string | null = null;
+  const startMs = Date.now();
+
+  /**
+   * Sends a disconnect message to the coordinator so inflight batches get requeued immediately.
+   */
+  async function disconnect(): Promise<void> {
+    try {
+      await fetch(`${COORDINATOR_URL}/disconnect`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workerId, batchId: currentBatchId }),
+      });
+      log.info("Disconnected from coordinator, inflight batch requeued");
+    } catch {
+      log.warn("Failed to notify coordinator of disconnect");
+    }
+  }
+
   const heartbeatInterval = setInterval(async () => {
     try {
-      await fetch(`${COORDINATOR_URL}/heartbeat`, {
+      const res = await fetch(`${COORDINATOR_URL}/heartbeat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ workerId }),
       });
+      const data = await res.json() as { ok: boolean; shutdown?: boolean };
+      if (data.shutdown) {
+        log.info("Coordinator is shutting down, finishing current batch...");
+        stopping = true;
+      }
     } catch {
       log.warn("Heartbeat failed");
     }
   }, 30_000);
 
-  let totalEnriched = 0;
-  let totalFailed = 0;
-  let stopping = false;
-  const startMs = Date.now();
-
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
-    process.on(sig, () => {
+    process.on(sig, async () => {
+      if (stopping) {
+        log.info("Force exiting...");
+        process.exit(1);
+      }
       log.info(`Received ${sig}, finishing current batch then exiting...`);
       stopping = true;
     });
@@ -478,6 +504,7 @@ async function runPullMode(
         continue;
       }
 
+      currentBatchId = batch.batchId;
       const poiRows = await fetchPoisByIds(batch.poiIds);
       const results = await processWithConcurrency<PoiRow, EnrichResult>(
         poiRows,
@@ -498,12 +525,16 @@ async function runPullMode(
           results: results.map((r) => ({ poiId: r.poiId, status: r.status })),
         }),
       });
+      currentBatchId = null;
 
       const elapsed = ((Date.now() - startMs) / 1000).toFixed(0);
       log.info(`Batch ${batch.batchId} done — ${stats.enriched} enriched, ${stats.failed} failed (total: ${totalEnriched} enriched, ${totalFailed} failed, ${elapsed}s elapsed)`);
     }
   } finally {
     clearInterval(heartbeatInterval);
+    if (stopping && currentBatchId) {
+      await disconnect();
+    }
   }
 
   log.info("");

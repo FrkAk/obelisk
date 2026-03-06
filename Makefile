@@ -355,13 +355,29 @@ enrich-distributed:
 	printf "  Monitor: curl http://$$LOCAL_IP:3939/status | jq\n"; \
 	printf "═══════════════════════════════════════════════════\n"; \
 	printf "\n"
-	@printf "$(CYAN)[3/4]$(RESET) Starting coordinator...\n"
+	@printf "$(CYAN)[3/5]$(RESET) Tuning Ollama for parallel inference...\n"
+	@CURRENT=$$(curl -sf $(OLLAMA_URL)/api/ps 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('models',[{}])[0].get('context_length',0))" 2>/dev/null || echo 0); \
+	VRAM_FREE=$$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits 2>/dev/null | head -1 || echo 0); \
+	NUM_PAR=$${OLLAMA_NUM_PARALLEL:-4}; \
+	printf "  VRAM free: $${VRAM_FREE} MiB, setting OLLAMA_NUM_PARALLEL=$$NUM_PAR\n"; \
+	if systemctl is-active --quiet ollama 2>/dev/null; then \
+		sudo systemctl set-environment OLLAMA_NUM_PARALLEL=$$NUM_PAR; \
+		sudo systemctl restart ollama; \
+		printf "  $(GREEN)Ollama restarted with OLLAMA_NUM_PARALLEL=$$NUM_PAR$(RESET)\n"; \
+		sleep 3; \
+		until curl -sf $(OLLAMA_URL)/api/tags >/dev/null 2>&1; do sleep 1; done; \
+	else \
+		printf "  $(YELLOW)Ollama not managed by systemctl. Restart manually:$(RESET)\n"; \
+		printf "  OLLAMA_NUM_PARALLEL=$$NUM_PAR ollama serve\n"; \
+	fi; \
+	printf "\n"
+	@printf "$(CYAN)[4/5]$(RESET) Starting coordinator...\n"
 	@$(COMPOSE) exec -d -T app bun scripts/enrich-coordinator.ts
 	@sleep 2
 	@printf "$(GREEN)Coordinator running on :3939$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[4/4]$(RESET) Starting local enrichment worker...\n"
-	$(COMPOSE) exec -e ENRICH_COORDINATOR_URL=http://localhost:3939 app bun scripts/enrich-pois.ts
+	@printf "$(CYAN)[5/5]$(RESET) Starting local enrichment worker...\n"
+	$(COMPOSE) exec -e ENRICH_COORDINATOR_URL=http://localhost:3939 -e ENRICH_CONCURRENCY=6 app bun scripts/enrich-pois.ts
 
 enrich-worker:
 	@printf "$(CYAN)Checking requirements...$(RESET)\n"
@@ -372,7 +388,19 @@ enrich-worker:
 	@curl -sf $(ENRICH_COORDINATOR_URL)/status >/dev/null 2>&1 || { printf "$(RED)Coordinator not reachable at $(ENRICH_COORDINATOR_URL)$(RESET)\n"; exit 1; }
 	@printf "$(GREEN)All checks passed$(RESET)\n"
 	@printf "\n"
-	$(COMPOSE) run --rm --no-deps -e ENRICH_COORDINATOR_URL=$(ENRICH_COORDINATOR_URL) -e DATABASE_URL=$(DATABASE_URL) -e OLLAMA_URL=$(OLLAMA_URL) app bun scripts/enrich-pois.ts
+	@printf "$(CYAN)Tuning Ollama for parallel inference...$(RESET)\n"
+	@NUM_PAR=$${OLLAMA_NUM_PARALLEL:-4}; \
+	if systemctl is-active --quiet ollama 2>/dev/null; then \
+		sudo systemctl set-environment OLLAMA_NUM_PARALLEL=$$NUM_PAR; \
+		sudo systemctl restart ollama; \
+		printf "$(GREEN)Ollama restarted with OLLAMA_NUM_PARALLEL=$$NUM_PAR$(RESET)\n"; \
+		sleep 3; \
+		until curl -sf $(OLLAMA_URL)/api/tags >/dev/null 2>&1; do sleep 1; done; \
+	else \
+		printf "$(YELLOW)Ollama not managed by systemctl. Restart manually with OLLAMA_NUM_PARALLEL=$$NUM_PAR$(RESET)\n"; \
+	fi
+	@printf "\n"
+	$(COMPOSE) run --rm --no-deps -e ENRICH_COORDINATOR_URL=$(ENRICH_COORDINATOR_URL) -e DATABASE_URL=$(DATABASE_URL) -e OLLAMA_URL=$(OLLAMA_URL) -e ENRICH_CONCURRENCY=6 app bun scripts/enrich-pois.ts
 
 fetch-wikipedia:
 	$(COMPOSE) exec app bun scripts/fetch-wikipedia.ts

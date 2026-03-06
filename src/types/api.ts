@@ -16,6 +16,9 @@ export interface PoiProfile {
   osmExtracted?: Record<string, string>;
   wikipediaSummary?: string;
   websiteText?: string;
+  visualDescription?: string;
+  mapillaryThumbUrl?: string;
+  wikiImageUrl?: string;
   keywords: string[];
   products: string[];
   summary: string;
@@ -23,6 +26,12 @@ export interface PoiProfile {
   enrichedAt?: string;
   dataTier?: "rich" | "moderate" | "thin";
   attributes: Record<string, unknown>;
+}
+
+export interface PoiImage {
+  id: string;
+  url: string;
+  source: string;
 }
 
 export interface Poi {
@@ -39,8 +48,9 @@ export interface Poi {
   osmTags: Record<string, string> | null;
   profile: PoiProfile | null;
   wikipediaUrl: string | null;
-  imageUrl: string | null;
-  embedding: number[] | null;
+  mapillaryId: string | null;
+  mapillaryBearing: number | null;
+  mapillaryIsPano: boolean | null;
   createdAt: Date | null;
   updatedAt: Date | null;
 }
@@ -226,7 +236,10 @@ export interface ExternalPOI {
   cuisine?: string;
   hasWifi?: boolean;
   hasOutdoorSeating?: boolean;
-  imageUrl?: string;
+  images?: PoiImage[];
+  mapillaryId?: string;
+  mapillaryBearing?: number;
+  mapillaryIsPano?: boolean;
   wikipediaUrl?: string;
   extraTags?: Record<string, string>;
   source: "nominatim" | "overpass" | "synthetic";

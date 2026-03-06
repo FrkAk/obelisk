@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { pois, remarks, categories } from "@/lib/db/schema";
+import { pois, remarks, categories, poiImages } from "@/lib/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { geoBounds } from "@/lib/geo/distance";
 import { getCategorySlug, OSM_CATEGORY_MAP } from "@/lib/geo/categories";
@@ -99,6 +99,14 @@ export async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * Searches for a POI in the database by name within a 50m bounding box.
+ *
+ * @param name - POI name to search for.
+ * @param latitude - Center latitude.
+ * @param longitude - Center longitude.
+ * @returns Matching POI with optional remark, or null if not found.
+ */
 async function findInDatabase(
   name: string,
   latitude: number,
@@ -116,7 +124,9 @@ async function findInDatabase(
       longitude: pois.longitude,
       address: pois.address,
       wikipediaUrl: pois.wikipediaUrl,
-      imageUrl: pois.imageUrl,
+      mapillaryId: pois.mapillaryId,
+      mapillaryBearing: pois.mapillaryBearing,
+      mapillaryIsPano: pois.mapillaryIsPano,
       osmTags: pois.osmTags,
       createdAt: pois.createdAt,
       categoryName: categories.name,
@@ -145,6 +155,11 @@ async function findInDatabase(
 
   if (!matchingPoi) return null;
 
+  const imageRows = await db
+    .select({ id: poiImages.id, url: poiImages.url, source: poiImages.source })
+    .from(poiImages)
+    .where(eq(poiImages.poiId, matchingPoi.id));
+
   const remarkResult = await db
     .select(remarkPoiSelect())
     .from(remarks)
@@ -168,13 +183,25 @@ async function findInDatabase(
     website: matchingPoi.osmTags?.website,
     phone: matchingPoi.osmTags?.phone,
     openingHours: matchingPoi.osmTags?.opening_hours,
-    imageUrl: matchingPoi.imageUrl ?? undefined,
+    images: imageRows.length > 0 ? imageRows : undefined,
+    mapillaryId: matchingPoi.mapillaryId ?? undefined,
+    mapillaryBearing: matchingPoi.mapillaryBearing ?? undefined,
+    mapillaryIsPano: matchingPoi.mapillaryIsPano ?? undefined,
     source: "nominatim",
   };
 
   return { poi: externalPoi, remark };
 }
 
+/**
+ * Looks up a POI via the Nominatim geocoding service.
+ *
+ * @param name - POI name to search for.
+ * @param latitude - Center latitude for bounded search.
+ * @param longitude - Center longitude for bounded search.
+ * @param categoryHint - Optional category hint from the client.
+ * @returns ExternalPOI from Nominatim, or null on failure.
+ */
 async function lookupFromNominatim(
   name: string,
   latitude: number,
@@ -306,6 +333,15 @@ function buildWikipediaUrl(osmTag: string): string | undefined {
   return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
 }
 
+/**
+ * Creates a synthetic POI when no database or Nominatim match is found.
+ *
+ * @param name - POI name.
+ * @param latitude - POI latitude.
+ * @param longitude - POI longitude.
+ * @param category - Optional category hint.
+ * @returns Synthetic ExternalPOI with a generated UUID.
+ */
 function createSyntheticPoi(
   name: string,
   latitude: number,

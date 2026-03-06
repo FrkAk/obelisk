@@ -1,4 +1,4 @@
-.PHONY: help setup setup-quick finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-pois fetch-wikipedia fetch-websites sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup setup-quick finish-setup run run-local run-public run-flutter stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-taxonomy-only enrich-pois enrich-distributed enrich-worker fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -30,12 +30,13 @@ help:
 	@printf "$(CYAN)Obelisk$(RESET) - Next Gen Map \n"
 	@printf "\n"
 	@printf "$(GREEN)Commands:$(RESET)\n"
-	@printf "  $(CYAN)setup$(RESET)          First-time setup (deps, db, model, seed). Resume: make setup FROM=6\n"
+	@printf "  $(CYAN)setup$(RESET)          First-time setup (seed + taxonomy + search). Resume: make setup FROM=6\n"
 	@printf "  $(CYAN)setup-quick$(RESET)    Quick setup from db/dump.sql (skip seed + enrich)\n"
-	@printf "  $(CYAN)finish-setup$(RESET)   Continue setup after enrich (stories + search + embeddings)\n"
+	@printf "  $(CYAN)finish-setup$(RESET)   Sync search index + generate embeddings\n"
 	@printf "  $(CYAN)run$(RESET)            Start on localhost:3000\n"
 	@printf "  $(CYAN)run-local$(RESET)      Start exposed to local network (same WiFi)\n"
 	@printf "  $(CYAN)run-public$(RESET)     Start with Cloudflare Tunnel (obelisk.obeliskark.com)\n"
+	@printf "  $(CYAN)run-flutter$(RESET)    Start backend (LAN) + Flutter app on connected device\n"
 	@printf "  $(CYAN)stop$(RESET)       Stop services (keeps data)\n"
 	@printf "  $(CYAN)logs$(RESET)       View database logs\n"
 	@printf "  $(CYAN)rebuild$(RESET)    Clean rebuild (deps + next cache)\n"
@@ -53,9 +54,12 @@ help:
 	@printf "  $(CYAN)download-datasets$(RESET)   Download external datasets (taxonomy, NSI, taginfo, wikidata)\n"
 	@printf "  $(CYAN)build-taxonomy$(RESET)      Build tag enrichment map from downloaded data\n"
 	@printf "  $(CYAN)build-brands$(RESET)        Build brand enrichment map from NSI + Wikidata\n"
-	@printf "  $(CYAN)enrich-pois$(RESET)     Enrich POIs with taxonomy data + LLM summaries\n"
-	@printf "  $(CYAN)fetch-wikipedia$(RESET)     Fetch Wikipedia extracts for POIs with URLs\n"
-	@printf "  $(CYAN)fetch-websites$(RESET)      Crawl POI websites for content\n"
+	@printf "  $(CYAN)enrich-taxonomy-only$(RESET) Fast taxonomy-only merge (no LLM, no network)\n"
+	@printf "  $(CYAN)enrich-pois$(RESET)         Full enrichment: taxonomy + LLM summaries (optional)\n"
+	@printf "  $(CYAN)enrich-distributed$(RESET)  Start coordinator + local worker (host machine)\n"
+	@printf "  $(CYAN)enrich-worker$(RESET)       Connect to coordinator as remote worker\n"
+	@printf "  $(CYAN)fetch-wikipedia$(RESET)     Fetch Wikipedia extracts (optional, pre-enrichment)\n"
+	@printf "  $(CYAN)fetch-websites$(RESET)      Crawl POI websites (optional, pre-enrichment)\n"
 	@printf "\n"
 	@printf "$(GREEN)Search Pipeline:$(RESET)\n"
 	@printf "  $(CYAN)sync-search$(RESET)         Sync POIs to Typesense\n"
@@ -129,40 +133,17 @@ setup:
 	fi; \
 	\
 	if [ $(FROM) -le 6 ]; then \
-	printf "$(CYAN)[Phase 6]$(RESET) Fetching Wikipedia + crawling websites (parallel)...\n"; \
+	printf "$(CYAN)[Phase 6]$(RESET) Taxonomy-only enrichment (fast, no LLM)...\n"; \
 	STEP_START=$$(date +%s); \
-	$(COMPOSE) exec -T app bun scripts/fetch-wikipedia.ts & PID_WIKI=$$!; \
-	$(COMPOSE) exec -T app bun scripts/fetch-websites.ts & PID_WEB=$$!; \
-	wait $$PID_WIKI || exit 1; \
-	wait $$PID_WEB || exit 1; \
+	$(COMPOSE) exec app bun scripts/enrich-taxonomy-only.ts; \
 	STEP_END=$$(date +%s); \
 	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Data fetching done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "$(GREEN)Taxonomy enrichment done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
 	printf "\n"; \
 	fi; \
 	\
 	if [ $(FROM) -le 7 ]; then \
-	printf "$(CYAN)[Phase 7]$(RESET) Enriching POIs with taxonomy data...\n"; \
-	STEP_START=$$(date +%s); \
-	$(COMPOSE) exec app bun scripts/enrich-pois.ts; \
-	STEP_END=$$(date +%s); \
-	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Enrichment done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
-	printf "\n"; \
-	fi; \
-	\
-	if [ $(FROM) -le 8 ]; then \
-	printf "$(CYAN)[Phase 8]$(RESET) Generating remarks...\n"; \
-	STEP_START=$$(date +%s); \
-	$(COMPOSE) exec app bun scripts/generate-remarks.ts || true; \
-	STEP_END=$$(date +%s); \
-	ELAPSED=$$((STEP_END - STEP_START)); \
-	printf "$(GREEN)Remarks done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
-	printf "\n"; \
-	fi; \
-	\
-	if [ $(FROM) -le 9 ]; then \
-	printf "$(CYAN)[Phase 9]$(RESET) Syncing search index + generating embeddings (parallel)...\n"; \
+	printf "$(CYAN)[Phase 7]$(RESET) Syncing search index + generating embeddings (parallel)...\n"; \
 	STEP_START=$$(date +%s); \
 	$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \
 	$(COMPOSE) exec -T app bun scripts/generate-embeddings.ts & PID_EMBED=$$!; \
@@ -237,9 +218,23 @@ run-public:
 	@printf "\n"
 	@printf "Run '$(CYAN)make stop$(RESET)' to stop everything\n"
 
+run-flutter:
+	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
+	printf "$(GREEN)Starting backend + Flutter app...$(RESET)\n"; \
+	printf "\n"; \
+	printf "  API:     http://$$LOCAL_IP:3000\n"; \
+	printf "  Flutter: building and deploying to device...\n"; \
+	printf "\n"
+	@$(COMPOSE) -f docker-compose.yml -f docker-compose.local.yml up -d
+	@printf "Waiting for backend...\n"
+	@until curl -sf http://localhost:3000 >/dev/null 2>&1; do sleep 1; done
+	@printf "$(GREEN)Backend ready$(RESET)\n\n"
+	cd flutter && flutter run
+
 stop:
 	@printf "Stopping services...\n"
 	@if [ -f /tmp/cloudflared.pid ]; then kill $$(cat /tmp/cloudflared.pid) 2>/dev/null; rm -f /tmp/cloudflared.pid; printf "Tunnel stopped\n"; fi
+	cloudflared tunnel cleanup obelisk
 	$(COMPOSE) down
 	@printf "$(GREEN)Stopped.$(RESET) Data preserved.\n"
 
@@ -296,14 +291,105 @@ seed-pois:
 seed-all:
 	$(COMPOSE) exec app bun scripts/seed.ts
 
+enrich-taxonomy-only:
+	$(COMPOSE) exec app bun scripts/enrich-taxonomy-only.ts
+
 enrich-pois:
 	$(COMPOSE) exec app bun scripts/enrich-pois.ts
+
+enrich-distributed:
+	@printf "$(GREEN)Starting distributed enrichment (host)...$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)[1/4]$(RESET) Starting services with Postgres exposed to LAN...\n"
+	@$(COMPOSE) -f docker-compose.yml -f docker-compose.enrich.yml up -d
+	@printf "Waiting for PostgreSQL...\n"
+	@until $(COMPOSE) exec -T postgres pg_isready -U obelisk -d obelisk >/dev/null 2>&1; do sleep 1; done
+	@printf "$(GREEN)PostgreSQL healthy$(RESET)\n"
+	@printf "Checking Ollama...\n"
+	@curl -sf $(OLLAMA_URL)/api/tags >/dev/null 2>&1 || { printf "$(RED)Ollama not running at $(OLLAMA_URL)$(RESET)\n"; exit 1; }
+	@printf "$(GREEN)Ollama healthy$(RESET)\n"
+	@printf "\n"
+	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
+	PG_PASS=$$(grep -oP 'POSTGRES_PASSWORD=\K.*' .env 2>/dev/null || echo 'obelisk_dev'); \
+	printf "$(CYAN)[2/4]$(RESET) Printing worker instructions...\n"; \
+	printf "\n"; \
+	printf "═══════════════════════════════════════════════════\n"; \
+	printf "DISTRIBUTED ENRICHMENT — Worker Setup Instructions\n"; \
+	printf "═══════════════════════════════════════════════════\n"; \
+	printf "On each worker machine, run:\n"; \
+	printf "\n"; \
+	printf "  1. Clone the repo:\n"; \
+	printf "     git clone <repo-url> && cd obelisk\n"; \
+	printf "\n"; \
+	printf "  2. Build the app container:\n"; \
+	printf "     docker compose build app\n"; \
+	printf "\n"; \
+	printf "  3. Pull the Ollama model:\n"; \
+	printf "     ollama pull $(OLLAMA_MODEL)\n"; \
+	printf "\n"; \
+	printf "  4. Start enrichment:\n"; \
+	printf "     DATABASE_URL=\"postgresql://obelisk:$$PG_PASS@$$LOCAL_IP:5432/obelisk\" \\\\\n"; \
+	printf "     ENRICH_COORDINATOR_URL=\"http://$$LOCAL_IP:3939\" \\\\\n"; \
+	printf "     make enrich-worker\n"; \
+	printf "\n"; \
+	printf "  Monitor: curl http://$$LOCAL_IP:3939/status | jq\n"; \
+	printf "═══════════════════════════════════════════════════\n"; \
+	printf "\n"
+	@printf "$(CYAN)[3/5]$(RESET) Tuning Ollama for parallel inference...\n"
+	@CURRENT=$$(curl -sf $(OLLAMA_URL)/api/ps 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('models',[{}])[0].get('context_length',0))" 2>/dev/null || echo 0); \
+	VRAM_FREE=$$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits 2>/dev/null | head -1 || echo 0); \
+	NUM_PAR=$${OLLAMA_NUM_PARALLEL:-4}; \
+	printf "  VRAM free: $${VRAM_FREE} MiB, setting OLLAMA_NUM_PARALLEL=$$NUM_PAR\n"; \
+	if systemctl is-active --quiet ollama 2>/dev/null; then \
+		sudo systemctl set-environment OLLAMA_NUM_PARALLEL=$$NUM_PAR; \
+		sudo systemctl restart ollama; \
+		printf "  $(GREEN)Ollama restarted with OLLAMA_NUM_PARALLEL=$$NUM_PAR$(RESET)\n"; \
+		sleep 3; \
+		until curl -sf $(OLLAMA_URL)/api/tags >/dev/null 2>&1; do sleep 1; done; \
+	else \
+		printf "  $(YELLOW)Ollama not managed by systemctl. Restart manually:$(RESET)\n"; \
+		printf "  OLLAMA_NUM_PARALLEL=$$NUM_PAR ollama serve\n"; \
+	fi; \
+	printf "\n"
+	@printf "$(CYAN)[4/5]$(RESET) Starting coordinator...\n"
+	@$(COMPOSE) exec -d -T app bun scripts/enrich-coordinator.ts
+	@sleep 2
+	@printf "$(GREEN)Coordinator running on :3939$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)[5/5]$(RESET) Starting local enrichment worker...\n"
+	$(COMPOSE) exec -e ENRICH_COORDINATOR_URL=http://localhost:3939 -e ENRICH_CONCURRENCY=6 app bun scripts/enrich-pois.ts
+
+enrich-worker:
+	@printf "$(CYAN)Checking requirements...$(RESET)\n"
+	@command -v ollama >/dev/null 2>&1 || { printf "$(RED)ollama not installed$(RESET)\n"; exit 1; }
+	@curl -sf $(OLLAMA_URL)/api/tags >/dev/null 2>&1 || { printf "$(RED)Ollama not running at $(OLLAMA_URL)$(RESET)\n"; exit 1; }
+	@ollama list 2>/dev/null | grep -q "$(OLLAMA_MODEL)" || { printf "$(RED)Model $(OLLAMA_MODEL) not found. Run: ollama pull $(OLLAMA_MODEL)$(RESET)\n"; exit 1; }
+	@test -n "$(ENRICH_COORDINATOR_URL)" || { printf "$(RED)ENRICH_COORDINATOR_URL not set$(RESET)\n"; exit 1; }
+	@curl -sf $(ENRICH_COORDINATOR_URL)/status >/dev/null 2>&1 || { printf "$(RED)Coordinator not reachable at $(ENRICH_COORDINATOR_URL)$(RESET)\n"; exit 1; }
+	@printf "$(GREEN)All checks passed$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)Tuning Ollama for parallel inference...$(RESET)\n"
+	@NUM_PAR=$${OLLAMA_NUM_PARALLEL:-4}; \
+	if systemctl is-active --quiet ollama 2>/dev/null; then \
+		sudo systemctl set-environment OLLAMA_NUM_PARALLEL=$$NUM_PAR; \
+		sudo systemctl restart ollama; \
+		printf "$(GREEN)Ollama restarted with OLLAMA_NUM_PARALLEL=$$NUM_PAR$(RESET)\n"; \
+		sleep 3; \
+		until curl -sf $(OLLAMA_URL)/api/tags >/dev/null 2>&1; do sleep 1; done; \
+	else \
+		printf "$(YELLOW)Ollama not managed by systemctl. Restart manually with OLLAMA_NUM_PARALLEL=$$NUM_PAR$(RESET)\n"; \
+	fi
+	@printf "\n"
+	$(COMPOSE) run --rm --no-deps -e ENRICH_COORDINATOR_URL=$(ENRICH_COORDINATOR_URL) -e DATABASE_URL=$(DATABASE_URL) -e OLLAMA_URL=$(OLLAMA_URL) -e ENRICH_CONCURRENCY=6 app bun scripts/enrich-pois.ts
 
 fetch-wikipedia:
 	$(COMPOSE) exec app bun scripts/fetch-wikipedia.ts
 
 fetch-websites:
 	$(COMPOSE) exec app bun scripts/fetch-websites.ts
+
+fetch-mapillary:
+	$(COMPOSE) exec app bun scripts/fetch-mapillary.ts
 
 sync-search:
 	$(COMPOSE) exec app bun scripts/sync-typesense.ts
@@ -324,12 +410,9 @@ db-restore:
 	@printf "$(GREEN)Search index synced$(RESET)\n"
 
 finish-setup:
-	@printf "$(GREEN)Finishing setup (stories + search + embeddings)...$(RESET)\n"
+	@printf "$(GREEN)Finishing setup (search + embeddings)...$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[1/2]$(RESET) Generating stories...\n"
-	$(COMPOSE) exec app bun scripts/generate-remarks.ts || true
-	@printf "\n"
-	@printf "$(CYAN)[2/2]$(RESET) Syncing search index + generating embeddings (parallel)...\n"
+	@printf "$(CYAN)[1/1]$(RESET) Syncing search index + generating embeddings (parallel)...\n"
 	@$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \
 	$(COMPOSE) exec -T app bun scripts/generate-embeddings.ts & PID_EMBED=$$!; \
 	wait $$PID_SYNC || exit 1; \
@@ -337,4 +420,4 @@ finish-setup:
 	@printf "\n"
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
-search-setup: seed-pois fetch-wikipedia fetch-websites enrich-pois sync-search generate-embeddings
+search-setup: seed-pois enrich-taxonomy-only sync-search generate-embeddings

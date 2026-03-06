@@ -3,11 +3,34 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
+import { isValidHttpUrl } from "@/lib/url";
+
+/** Allowed markdown elements for LLM-generated content. No images, scripts, or HTML blocks. */
+const SAFE_MARKDOWN_ELEMENTS = ["p", "strong", "em", "br", "a", "ul", "ol", "li"] as const;
+
+/**
+ * Shared ReactMarkdown component overrides for safe LLM content rendering.
+ * Links are validated and open in a new tab with noopener.
+ */
+const safeMarkdownComponents = {
+  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-3 last:mb-0">{children}</p>,
+  strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold">{children}</strong>,
+  em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
+    if (!href || !isValidHttpUrl(href)) return <span>{children}</span>;
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
+        {children}
+      </a>
+    );
+  },
+};
 import { LoadingState } from "@/components/ui/LoadingState";
+import { useSheetSnap } from "@/components/layout/BottomSheet";
 import { springTransitions } from "@/lib/ui/animations";
 import { OBELISK_ICON_PATH } from "@/lib/ui/constants";
 import { formatDistance } from "@/lib/geo/distance";
-import { isValidHttpUrl } from "@/lib/url";
+import { MediaCarousel } from "@/components/poi/MediaCarousel";
 import { CATEGORY_COLORS } from "@/types/api";
 import type { ExternalPOI, Remark, Poi, CategorySlug, Category } from "@/types/api";
 
@@ -99,8 +122,11 @@ export function POICard({
   cooldownRemaining = 0,
   autoGenerate = true,
 }: POICardProps) {
+  const snapIndex = useSheetSnap();
+  const isPeek = snapIndex === 0;
   const categoryColor = CATEGORY_COLORS[poi.category as CategorySlug] || CATEGORY_COLORS.history;
   const hasRemark = !!remark;
+  const hasMedia = (poi.images ?? []).length > 0 || !!poi.mapillaryId;
   const subcategories = getSubcategories(poi);
   const broadCategory = poi.category.charAt(0).toUpperCase() + poi.category.slice(1);
   const categoryDisplay = subcategories.length > 0 ? subcategories.join(" · ") : broadCategory;
@@ -165,77 +191,115 @@ export function POICard({
       animate={{ opacity: 1, y: 0 }}
       transition={springTransitions.smooth}
     >
-      {/* Back button */}
-      {onBack && (
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1 text-[13px] mb-3"
-          style={{ color: "var(--foreground-secondary)", fontFamily: "var(--font-ui)" }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-          Results
-        </button>
-      )}
-
-      {/* POI header — name first */}
-      <div className="px-1 space-y-1">
-        <h2
-          className="leading-tight"
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: "var(--font-size-title2)",
-            color: "var(--foreground)",
-          }}
-        >
-          {poi.name}
-        </h2>
-        <div className="flex items-center gap-1.5" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--font-size-footnote)", color: "var(--foreground-secondary)" }}>
-          <span
-            className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: categoryColor }}
-          />
-          <span>{categoryDisplay}</span>
-          {poi.distance != null && poi.distance > 0 && (
-            <>
-              <span style={{ color: "var(--foreground-tertiary)" }}>·</span>
-              <span>{formatDistance(poi.distance)} away</span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Photo carousel */}
-      {/* TODO: support multiple images when POI data model expands (imageUrls: string[]) */}
+      {/* Collapsible header group — hidden at peek */}
       <div
-        className="relative w-full overflow-hidden rounded-xl mt-3"
-        style={{ aspectRatio: "3 / 2" }}
+        style={{
+          maxHeight: isPeek ? 0 : 120,
+          opacity: isPeek ? 0 : 1,
+          overflow: "hidden",
+          transition: "max-height 0.35s ease, opacity 0.3s ease",
+        }}
       >
-        <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide w-full h-full">
-          {poi.imageUrl && isValidHttpUrl(poi.imageUrl) ? (
-            <img
-              src={poi.imageUrl}
-              alt={poi.name}
-              className="w-full h-full object-cover flex-shrink-0 snap-start"
+        {/* Back button */}
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1 text-[13px] mb-3"
+            style={{ color: "var(--foreground-secondary)", fontFamily: "var(--font-ui)" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            Results
+          </button>
+        )}
+
+        {/* POI header — name first */}
+        <div className="px-1 space-y-1">
+          <h2
+            className="leading-tight"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "var(--font-size-title2)",
+              color: "var(--foreground)",
+            }}
+          >
+            {poi.name}
+          </h2>
+          <div className="flex items-center gap-1.5" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--font-size-footnote)", color: "var(--foreground-secondary)" }}>
+            <span
+              className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: categoryColor }}
             />
-          ) : (
-            <div
-              className="w-full h-full flex flex-col items-center justify-center gap-2 flex-shrink-0 snap-start"
-              style={{
-                background: "linear-gradient(135deg, var(--surface) 0%, var(--elevated) 100%)",
-              }}
-            >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--foreground-tertiary)" }}>
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <path d="M21 15l-5-5L5 21" />
-              </svg>
-            </div>
-          )}
+            <span>{categoryDisplay}</span>
+            {poi.distance != null && poi.distance > 0 && (
+              <>
+                <span style={{ color: "var(--foreground-tertiary)" }}>·</span>
+                <span>{formatDistance(poi.distance)} away</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
+      {/* Photo carousel with hero overlay at peek */}
+      <div className="relative">
+        <MediaCarousel
+        images={poi.images ?? []}
+        mapillaryId={poi.mapillaryId}
+        mapillaryBearing={poi.mapillaryBearing}
+        mapillaryIsPano={poi.mapillaryIsPano}
+        poiName={poi.name}
+        poiId={poi.id.startsWith("db-") ? poi.id.slice(3) : undefined}
+        compact={isPeek}
+        categoryColor={categoryColor}
+      />
+
+        {/* Hero overlay — visible at peek */}
+        <motion.div
+          className="absolute bottom-0 left-0 right-0 z-10 rounded-b-xl pointer-events-none px-4 pb-3 pt-10"
+          style={{
+            background: hasMedia
+              ? "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.35) 50%, transparent 100%)"
+              : "linear-gradient(to top, rgba(0,0,0,0.15) 0%, transparent 100%)",
+          }}
+          initial={false}
+          animate={{ opacity: isPeek ? 1 : 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <h2
+            className="leading-tight"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "var(--font-size-title2)",
+              color: hasMedia ? "#fff" : "var(--foreground)",
+              textShadow: hasMedia ? "0 1px 4px rgba(0,0,0,0.3)" : "none",
+            }}
+          >
+            {poi.name}
+          </h2>
+          <span
+            className="text-[13px]"
+            style={{
+              fontFamily: "var(--font-ui)",
+              color: hasMedia ? "rgba(255,255,255,0.7)" : "var(--foreground-secondary)",
+            }}
+          >
+            {categoryDisplay}
+            {poi.distance != null && poi.distance > 0 && ` · ${formatDistance(poi.distance)} away`}
+          </span>
+        </motion.div>
+      </div>
+
+      {/* Actions + tabs — collapse at peek, reveal on expand */}
+      <div
+        style={{
+          maxHeight: isPeek ? 0 : 1000,
+          opacity: isPeek ? 0 : 1,
+          overflow: "hidden",
+          transition: "max-height 0.4s ease, opacity 0.3s ease 0.1s",
+        }}
+      >
       {/* Quick actions: Navigate, Echoes, Share */}
       {/* TODO: implement Echoes — audio stories from the community */}
       <div className="flex items-center gap-2 px-1 pt-3">
@@ -332,6 +396,7 @@ export function POICard({
             {activeTab === "details" && <DetailsTab poi={poi} />}
           </motion.div>
         </AnimatePresence>
+      </div>
       </div>
     </motion.article>
   );
@@ -525,11 +590,8 @@ function RemarkTab({ remark, isGenerating, isRegenerating, hasRemark, onRegenera
           }}
         >
           <ReactMarkdown
-            components={{
-              p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-              em: ({ children }) => <em className="italic">{children}</em>,
-            }}
+            allowedElements={[...SAFE_MARKDOWN_ELEMENTS]}
+            components={safeMarkdownComponents}
           >
             {remark.content}
           </ReactMarkdown>
@@ -575,8 +637,10 @@ function RemarkTab({ remark, isGenerating, isRegenerating, hasRemark, onRegenera
               }}
             >
               <ReactMarkdown
+                allowedElements={[...SAFE_MARKDOWN_ELEMENTS]}
                 components={{
-                  p: ({ children }) => <p className="mb-0">{children}</p>,
+                  ...safeMarkdownComponents,
+                  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-0">{children}</p>,
                 }}
               >
                 {remark.localTip}

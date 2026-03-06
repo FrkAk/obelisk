@@ -1,3 +1,7 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("localization");
+
 export interface LocaleInfo {
   language: string;
   country: string;
@@ -157,7 +161,8 @@ async function reverseGeocodeCountry(
     if (!countryName) return null;
 
     return LOCALE_REGISTRY[countryName.toLowerCase()] ?? null;
-  } catch {
+  } catch (error) {
+    log.warn("Reverse geocoding failed:", error);
     return null;
   }
 }

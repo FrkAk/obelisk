@@ -28,7 +28,9 @@ export type RemarkWithPoi = {
     address: string | null;
     locale: string;
     wikipediaUrl: string | null;
-    imageUrl: string | null;
+    mapillaryId: string | null;
+    mapillaryBearing: number | null;
+    mapillaryIsPano: boolean | null;
     osmTags: Record<string, string> | null;
     createdAt: Date;
     category?: {
@@ -71,7 +73,9 @@ export function remarkPoiSelect() {
     poiAddress: pois.address,
     poiLocale: pois.locale,
     poiWikipediaUrl: pois.wikipediaUrl,
-    poiImageUrl: pois.imageUrl,
+    poiMapillaryId: pois.mapillaryId,
+    poiMapillaryBearing: pois.mapillaryBearing,
+    poiMapillaryIsPano: pois.mapillaryIsPano,
     poiOsmTags: pois.osmTags,
     poiCreatedAt: pois.createdAt,
     categoryId: categories.id,
@@ -105,7 +109,9 @@ export interface RemarkPoiRow {
   poiAddress: string | null;
   poiLocale: string;
   poiWikipediaUrl: string | null;
-  poiImageUrl: string | null;
+  poiMapillaryId: string | null;
+  poiMapillaryBearing: number | null;
+  poiMapillaryIsPano: boolean | null;
   poiOsmTags: Record<string, string> | null;
   poiCreatedAt: Date | null;
   categoryId: string | null;
@@ -149,7 +155,9 @@ export function mapRowToRemarkWithPoi(row: RemarkPoiRow): RemarkWithPoi {
       address: row.poiAddress,
       locale: row.poiLocale,
       wikipediaUrl: row.poiWikipediaUrl,
-      imageUrl: row.poiImageUrl,
+      mapillaryId: row.poiMapillaryId,
+      mapillaryBearing: row.poiMapillaryBearing,
+      mapillaryIsPano: row.poiMapillaryIsPano,
       osmTags: row.poiOsmTags,
       createdAt: row.poiCreatedAt ?? new Date(),
       category: row.categoryId

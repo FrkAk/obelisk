@@ -24,7 +24,9 @@ interface RemarkPoiRow {
   poiAddress: string | null;
   poiLocale: string;
   poiWikipediaUrl: string | null;
-  poiImageUrl: string | null;
+  poiMapillaryId: string | null;
+  poiMapillaryBearing: number | null;
+  poiMapillaryIsPano: boolean | null;
   poiOsmTags: Record<string, string> | null;
   poiCreatedAt: Date | null;
   categoryId: string | null;
@@ -59,7 +61,9 @@ function mapRowToRemarkWithPoi(row: RemarkPoiRow) {
       address: row.poiAddress,
       locale: row.poiLocale,
       wikipediaUrl: row.poiWikipediaUrl,
-      imageUrl: row.poiImageUrl,
+      mapillaryId: row.poiMapillaryId,
+      mapillaryBearing: row.poiMapillaryBearing,
+      mapillaryIsPano: row.poiMapillaryIsPano,
       osmTags: row.poiOsmTags,
       createdAt: row.poiCreatedAt ?? new Date(),
       category: row.categoryId
@@ -99,7 +103,9 @@ function makeRow(overrides: Partial<RemarkPoiRow> = {}): RemarkPoiRow {
     poiAddress: "Marienplatz 1, München",
     poiLocale: "de-DE",
     poiWikipediaUrl: null,
-    poiImageUrl: null,
+    poiMapillaryId: null,
+    poiMapillaryBearing: null,
+    poiMapillaryIsPano: null,
     poiOsmTags: null,
     poiCreatedAt: new Date("2025-01-01"),
     categoryId: "cat-food",

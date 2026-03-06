@@ -26,7 +26,9 @@ export const POI_SELECT_FIELDS = {
   osmTags: pois.osmTags,
   profile: pois.profile,
   wikipediaUrl: pois.wikipediaUrl,
-  imageUrl: pois.imageUrl,
+  mapillaryId: pois.mapillaryId,
+  mapillaryBearing: pois.mapillaryBearing,
+  mapillaryIsPano: pois.mapillaryIsPano,
   embedding: pois.embedding,
   createdAt: pois.createdAt,
   updatedAt: pois.updatedAt,
@@ -47,9 +49,13 @@ export type PoiRow = {
             ? number | null
             : K extends "latitude" | "longitude"
               ? number
-              : K extends "createdAt" | "updatedAt"
-                ? Date | null
-                : string | null;
+              : K extends "mapillaryBearing"
+                ? number | null
+              : K extends "mapillaryIsPano"
+                ? boolean | null
+                : K extends "createdAt" | "updatedAt"
+                  ? Date | null
+                  : string | null;
 };
 
 /**
@@ -73,8 +79,9 @@ export function toPoi(row: PoiRow): Poi {
     osmTags: row.osmTags,
     profile: row.profile as PoiProfile | null,
     wikipediaUrl: row.wikipediaUrl,
-    imageUrl: row.imageUrl,
-    embedding: row.embedding,
+    mapillaryId: row.mapillaryId,
+    mapillaryBearing: row.mapillaryBearing,
+    mapillaryIsPano: row.mapillaryIsPano,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

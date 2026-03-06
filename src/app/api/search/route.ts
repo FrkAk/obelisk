@@ -19,7 +19,7 @@ const requestSchema = z.object({
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
   }),
-  radius: z.number().min(100).max(50000).default(5000),
+  radius: z.number().min(100).max(10000).default(5000),
   limit: z.number().min(1).max(50).default(20),
 });
 
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
       ? `${query} ${intent.keywords.join(" ")}`
       : query;
 
-    const [typesenseSettled, semanticSettled, geocodingSettled] =
+    const [typesenseSettled, semanticSettled] =
       await Promise.allSettled([
         (async () => {
           const tsStart = Date.now();
@@ -190,11 +190,6 @@ export async function POST(request: NextRequest) {
             intent.keywords
           );
           return { results: hits, ms: Date.now() - semStart };
-        })(),
-        (async () => {
-          const geoStart = Date.now();
-          const results = await geocodeQuery(query, location.latitude, location.longitude);
-          return { results, ms: Date.now() - geoStart };
         })(),
       ]);
 
@@ -245,15 +240,6 @@ export async function POST(request: NextRequest) {
         ? semanticSettled.value.ms
         : 0;
 
-    const geocodingResults =
-      geocodingSettled.status === "fulfilled"
-        ? geocodingSettled.value.results
-        : [];
-    const geocodingMs =
-      geocodingSettled.status === "fulfilled"
-        ? geocodingSettled.value.ms
-        : 0;
-
     if (typesenseSettled.status === "rejected") {
       log.error("Typesense failed:", typesenseSettled.reason);
     } else {
@@ -270,13 +256,8 @@ export async function POST(request: NextRequest) {
         `Semantic: ${semanticResults.length} hits in ${semanticMs}ms${top ? ` — top: "${top.name}" (sim: ${top.similarity.toFixed(3)})` : ""}`
       );
     }
-    if (geocodingSettled.status === "rejected") {
-      log.error("Geocoding failed:", geocodingSettled.reason);
-    } else if (geocodingResults.length > 0) {
-      log.info(`Geocoding: ${geocodingResults.length} hits in ${geocodingMs}ms`);
-    }
 
-    const typesenseWeight = intent.keywords.length > 0 ? 1.0 : 0.1;
+    const typesenseWeight = 1.0;
 
     const ranked = rankResults({
       typesenseResults,
@@ -286,6 +267,29 @@ export async function POST(request: NextRequest) {
       typesenseWeight,
     });
 
+    const skipGeocoding =
+      intent.source === "fast-path" ||
+      !!intent.category ||
+      !!intent.isDiscovery ||
+      ranked.length >= 1;
+
+    let geocodingResults: SearchResult[] = [];
+    let geocodingMs = 0;
+
+    if (!skipGeocoding) {
+      const geoStart = Date.now();
+      try {
+        geocodingResults = await geocodeQuery(query, location.latitude, location.longitude);
+        geocodingMs = Date.now() - geoStart;
+        if (geocodingResults.length > 0) {
+          log.info(`Geocoding: ${geocodingResults.length} hits in ${geocodingMs}ms`);
+        }
+      } catch (error) {
+        log.error("Geocoding failed:", error);
+        geocodingMs = Date.now() - geoStart;
+      }
+    }
+
     const dedupedGeo = geocodingResults.filter((geo) =>
       !ranked.some(
         (poi) =>
@@ -293,10 +297,7 @@ export async function POST(request: NextRequest) {
       )
     );
 
-    const isPOIQuery = intent.source === "fast-path";
-    const mergedResults = isPOIQuery
-      ? [...ranked, ...dedupedGeo]
-      : [...dedupedGeo, ...ranked];
+    const mergedResults = [...ranked, ...dedupedGeo];
 
     const finalResults = mergedResults.slice(0, limit);
 

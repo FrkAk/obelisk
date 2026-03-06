@@ -6,7 +6,6 @@ import { RemarkNotification } from "@/components/remark/RemarkNotification";
 import { SearchBar } from "@/components/search/SearchBar";
 import { SearchResults } from "@/components/search/SearchResults";
 import { POICard } from "@/components/poi/POICard";
-import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorToast } from "@/components/ui/ErrorToast";
 import { useGeofence } from "@/hooks/useGeofence";
 import { useNearbyRemarks } from "@/hooks/useNearbyRemarks";
@@ -31,7 +30,7 @@ type SheetMode = "remark" | "search" | "poi" | null;
 function remarkPoiToExternalPOI(poi: PoiWithCategory): ExternalPOI {
   const tags = (poi.osmTags ?? {}) as Record<string, string>;
   return {
-    id: poi.id,
+    id: `db-${poi.id}`,
     osmId: poi.osmId ?? 0,
     osmType: "node",
     name: poi.name,
@@ -45,7 +44,10 @@ function remarkPoiToExternalPOI(poi: PoiWithCategory): ExternalPOI {
     cuisine: tags.cuisine ?? undefined,
     hasWifi: tags.internet_access === "wlan" || tags.internet_access === "yes",
     hasOutdoorSeating: tags.outdoor_seating === "yes",
-    imageUrl: poi.imageUrl ?? undefined,
+    images: [],
+    mapillaryId: poi.mapillaryId ?? undefined,
+    mapillaryBearing: poi.mapillaryBearing ?? undefined,
+    mapillaryIsPano: poi.mapillaryIsPano ?? undefined,
     source: "overpass",
   };
 }
@@ -221,6 +223,17 @@ export default function Home() {
   const handlePoiClick = useCallback(
     async (poi: { name: string; latitude: number; longitude: number; category?: string }) => {
       const seq = ++poiClickSeqRef.current;
+      setSelectedRemark(null);
+      setSelectedPoi({
+        id: `pending-${seq}`,
+        osmId: 0,
+        osmType: "node",
+        name: poi.name,
+        category: poi.category ?? "other",
+        latitude: poi.latitude,
+        longitude: poi.longitude,
+        source: "synthetic",
+      });
       setIsLookingUpPoi(true);
       setSheetMode("poi");
       setSheetOpen(true);
@@ -248,12 +261,11 @@ export default function Home() {
 
         const data = await response.json();
 
+        setSelectedPoi(data.poi);
         if (data.remark) {
           setSelectedRemark(data.remark);
-          setSelectedPoi(null);
           setSheetMode("remark");
         } else {
-          setSelectedPoi(data.poi);
           setSelectedRemark(null);
         }
       } catch {
@@ -362,7 +374,7 @@ export default function Home() {
 
       if (!response.ok) {
         if (response.status === 422) {
-          setAppError("Not enough info about this place to write a remark yet.");
+          setAppError("I couldn't find enough about this place to share a story.");
         } else if (response.status === 503) {
           setAppError("Remarks are taking a breather. Try again in a moment.");
         } else if (response.status === 429) {
@@ -517,18 +529,7 @@ export default function Home() {
       <ErrorToast message={appError} onClose={() => setAppError(null)} />
 
       <BottomSheet isOpen={sheetOpen} onClose={handleSheetClose}>
-        {(sheetMode === "remark" || sheetMode === "poi") && (
-          isLookingUpPoi ? (
-            <div className="py-12 flex flex-col items-center justify-center">
-              <LoadingState
-                phrases={[
-                  "Looking up this place...",
-                  "Finding what we know...",
-                  "Almost there...",
-                ]}
-              />
-            </div>
-          ) : (selectedPoi || selectedRemark) ? (
+        {(sheetMode === "remark" || sheetMode === "poi") && (selectedPoi || selectedRemark) && (
             <POICard
               poi={selectedPoi ?? remarkPoiToExternalPOI(selectedRemark!.poi)}
               remark={selectedRemark}
@@ -538,10 +539,9 @@ export default function Home() {
               isGenerating={selectedPoi ? generatingPoiId === selectedPoi.id : false}
               isRegenerating={isRegenerating}
               cooldownRemaining={cooldownRemaining}
-              autoGenerate={!selectedRemark}
+              autoGenerate={!selectedRemark && !isLookingUpPoi}
               onBack={previousSheetMode === "search" ? handleBackToResults : undefined}
             />
-          ) : null
         )}
         {sheetMode === "search" && (
           <SearchResults

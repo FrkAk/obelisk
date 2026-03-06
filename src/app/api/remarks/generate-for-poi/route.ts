@@ -11,6 +11,7 @@ import { createLogger } from "@/lib/logger";
 import { getCategorySlug } from "@/lib/geo/categories";
 import { buildProfile } from "@/lib/poi/profile";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { enrichPoiOnDemand } from "@/lib/poi/on-demand-enrich";
 import type { CategorySlug, PoiProfile } from "@/types";
 import { getCurrentRemarkForPoi, insertRemark } from "@/lib/db/queries/remarks";
 
@@ -31,7 +32,10 @@ const externalPoiSchema = z.object({
   cuisine: z.string().optional(),
   hasWifi: z.boolean().optional(),
   hasOutdoorSeating: z.boolean().optional(),
-  imageUrl: z.string().optional(),
+  images: z.array(z.object({ id: z.string(), url: z.string(), source: z.string() })).optional(),
+  mapillaryId: z.string().optional(),
+  mapillaryBearing: z.number().optional(),
+  mapillaryIsPano: z.boolean().optional(),
   wikipediaUrl: z.string().optional(),
   extraTags: z.record(z.string(), z.string()).optional(),
   source: z.enum(["nominatim", "overpass", "synthetic"]),
@@ -117,6 +121,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * Finds an existing POI in the database by OSM ID.
+ *
+ * @param osmId - The OpenStreetMap ID to search for.
+ * @returns POI row with category data, or null if not found.
+ */
 async function findPoiByOsmId(osmId: number) {
   const results = await db
     .select({
@@ -130,7 +140,9 @@ async function findPoiByOsmId(osmId: number) {
       locale: pois.locale,
       profile: pois.profile,
       wikipediaUrl: pois.wikipediaUrl,
-      imageUrl: pois.imageUrl,
+      mapillaryId: pois.mapillaryId,
+      mapillaryBearing: pois.mapillaryBearing,
+      mapillaryIsPano: pois.mapillaryIsPano,
       osmTags: pois.osmTags,
       createdAt: pois.createdAt,
       categoryName: categories.name,
@@ -146,6 +158,14 @@ async function findPoiByOsmId(osmId: number) {
   return results[0] || null;
 }
 
+/**
+ * Creates a new POI in the database from external data.
+ * Handles race conditions via onConflictDoNothing.
+ *
+ * @param externalPoi - Validated external POI data.
+ * @returns Inserted POI row with category data.
+ * @throws When insert fails and no existing POI is found.
+ */
 async function createPoiFromExternal(
   externalPoi: z.infer<typeof externalPoiSchema>
 ) {
@@ -178,7 +198,9 @@ async function createPoiFromExternal(
       longitude: externalPoi.longitude,
       address: externalPoi.address ?? null,
       wikipediaUrl: externalPoi.wikipediaUrl ?? null,
-      imageUrl: externalPoi.imageUrl ?? null,
+      mapillaryId: externalPoi.mapillaryId ?? null,
+      mapillaryBearing: externalPoi.mapillaryBearing ?? null,
+      mapillaryIsPano: externalPoi.mapillaryIsPano ?? null,
       osmTags: Object.keys(osmTags).length > 0 ? osmTags : null,
       profile,
     })
@@ -208,6 +230,12 @@ async function createPoiFromExternal(
   };
 }
 
+/**
+ * Generates a remark via Ollama and saves it to the database.
+ *
+ * @param poi - POI data with category info for remark generation.
+ * @returns NextResponse with the generated remark or an error status.
+ */
 async function generateAndSaveRemark(
   poi: {
     id: string;
@@ -221,7 +249,9 @@ async function generateAndSaveRemark(
     longitude: number;
     osmId: number | null;
     categoryId: string | null;
-    imageUrl: string | null;
+    mapillaryId: string | null;
+    mapillaryBearing: number | null;
+    mapillaryIsPano: boolean | null;
     createdAt: Date | null;
     categoryName: string | null;
     categorySlug: string | null;
@@ -239,7 +269,13 @@ async function generateAndSaveRemark(
 
   const categoryName = poi.categoryName || "Hidden Gems";
   const categorySlug = poi.categorySlug ?? "hidden";
-  const profile = (poi.profile as PoiProfile | null) ?? null;
+  let profile = (poi.profile as PoiProfile | null) ?? null;
+
+  if (!profile?.enrichedAt) {
+    log.info(`POI "${poi.name}" not enriched, running on-demand enrichment...`);
+    const enrichedProfile = await enrichPoiOnDemand(poi.id);
+    if (enrichedProfile) profile = enrichedProfile;
+  }
 
   log.info(`Generating remark for: "${poi.name}" with category: "${categoryName}"`);
 
@@ -263,8 +299,9 @@ async function generateAndSaveRemark(
       osmTags: poi.osmTags,
       profile,
       wikipediaUrl: poi.wikipediaUrl,
-      imageUrl: poi.imageUrl,
-      embedding: null,
+      mapillaryId: poi.mapillaryId,
+      mapillaryBearing: poi.mapillaryBearing,
+      mapillaryIsPano: poi.mapillaryIsPano,
       createdAt: poi.createdAt,
       updatedAt: null,
     },
@@ -316,7 +353,9 @@ async function generateAndSaveRemark(
       address: poi.address,
       locale: poi.locale,
       wikipediaUrl: poi.wikipediaUrl,
-      imageUrl: poi.imageUrl,
+      mapillaryId: poi.mapillaryId,
+      mapillaryBearing: poi.mapillaryBearing,
+      mapillaryIsPano: poi.mapillaryIsPano,
       osmTags: poi.osmTags,
       createdAt: poi.createdAt ?? new Date(),
       category: poi.categorySlug

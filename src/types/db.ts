@@ -10,6 +10,7 @@ import type {
   cuisines,
   poiCuisines,
   remarks,
+  poiImages,
 } from "@/lib/db/schema";
 
 // ---------------------------------------------------------------------------
@@ -26,3 +27,4 @@ export type NewPoiTag = InferInsertModel<typeof poiTags>;
 export type NewCuisine = InferInsertModel<typeof cuisines>;
 export type NewPoiCuisine = InferInsertModel<typeof poiCuisines>;
 export type NewRemark = InferInsertModel<typeof remarks>;
+export type NewPoiImage = InferInsertModel<typeof poiImages>;

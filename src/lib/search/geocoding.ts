@@ -47,14 +47,15 @@ export async function geocodeQuery(
     q: query,
     access_token: token,
     proximity: `${userLon},${userLat}`,
-    limit: "3",
+    limit: "2",
     language: "en",
+    types: "address,street,place,neighborhood,locality,region,country",
   });
 
   const url = `https://api.mapbox.com/search/geocode/v6/forward?${params}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
     if (!response.ok) {
       log.warn(`Mapbox geocoding failed: ${response.status}`);
       return [];
@@ -68,7 +69,7 @@ export async function geocodeQuery(
       category: "geocoding",
       latitude: feature.geometry.coordinates[1],
       longitude: feature.geometry.coordinates[0],
-      score: 1,
+      score: 0,
       address:
         feature.properties.full_address ??
         feature.properties.place_formatted ??

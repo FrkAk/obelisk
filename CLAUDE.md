@@ -2,12 +2,32 @@
 
 Contextual discovery platform -- AI-generated remarks surface as users walk through Munich. Single-city MVP. Product spec in `Obelisk.md`, roadmap in `Plan.md`.
 
+## Platform Strategy
+
+Native per platform -- no cross-platform frameworks. Each client consumes the same Next.js API.
+
+| Platform | Stack | Status | Plan |
+|----------|-------|--------|------|
+| **Web** | Next.js (App Router) + React 19 | MVP complete | `Plan.md` |
+| **Android** | Kotlin + Jetpack Compose + Mapbox SDK | In progress (V0.1) | `kotlin.md` |
+| **iOS** | Swift + SwiftUI (future) | Not started | -- |
+
 ## Tech Stack
 
-Next.js 16 (App Router) + React 19, Tailwind CSS v4, Framer Motion v12, Drizzle ORM on PostgreSQL 15 (pgvector + pg_trgm), Typesense v30.1, Mapbox GL JS v3.18 + react-map-gl, Supercluster v8, Zod v4, TanStack Query v5. LLM: Ollama (qwen3.5:9b) on host GPU. Embeddings: embeddinggemma:300m (768-dim).
+**Backend + Web:** Next.js 16 (App Router) + React 19, Tailwind CSS v4, Framer Motion v12, Drizzle ORM on PostgreSQL 15 (pgvector + pg_trgm), Typesense v30.1, Mapbox GL JS v3.18 + react-map-gl, Supercluster v8, Zod v4, TanStack Query v5. LLM: Ollama (qwen3.5:9b) on host GPU. Embeddings: embeddinggemma:300m (768-dim).
+
+**Android:** Kotlin, Jetpack Compose, Material 3, Mapbox Maps SDK 11, Retrofit + OkHttp + Moshi, Hilt, Coroutines/Flow, Coil. Min SDK 31 (Android 12). Design: Apple Maps iOS 26 style (liquid glass, three-detent sheet, spring physics).
 
 ## Commands
 
+### Android (`android/`)
+- `./gradlew assembleDebug` -- build debug APK
+- `./gradlew lint` -- run Android lint
+- `./gradlew installDebug` -- build + install on connected device/emulator
+- Mapbox token goes in `android/local.properties` as `MAPBOX_DOWNLOADS_TOKEN`
+- API base URL: `http://10.0.2.2:3000` (emulator -> host localhost)
+
+### Web + Backend
 - `make setup` -- full bootstrap (14 steps: docker, migrations, models, datasets, seed, enrich, remarks, search)
 - `make run` / `make run-local` -- start dev at localhost:3000 (or LAN-exposed)
 - `make run-public` -- production build + Cloudflare Tunnel (obelisk.obeliskark.com)
@@ -26,6 +46,27 @@ Copy `.env.example` to `.env`. Required: `NEXT_PUBLIC_MAPBOX_TOKEN`. Defaults ex
 
 ## Project Structure
 
+### Android (`android/`)
+```
+android/app/src/main/java/com/obelisk/app/
+├── ObeliskApp.kt                    # Hilt application
+├── MainActivity.kt                  # Single activity, Compose host
+├── data/
+│   ├── api/                         # ObeliskApi (Retrofit), ApiModule (Hilt), models/
+│   ├── location/                    # LocationRepository (fused provider)
+│   └── repository/                  # PoiRepository, SearchRepository
+├── ui/
+│   ├── theme/                       # Theme, Color, Type, Shape, Spring, Glass
+│   ├── map/                         # MapScreen, ObeliskMap, MapControls, PoiPin, UserLocationMarker
+│   ├── sheet/                       # ObeliskSheet (3-detent), SheetMode, SheetContent
+│   ├── search/                      # SearchPill, AutocompleteOverlay, SearchResults, CategoryChips
+│   ├── poi/                         # PoiCard, ActionPills, PhotoCarousel, PoiTabs
+│   ├── remark/                      # RemarkTab, RemarkNotification, RegenerateButton
+│   └── common/                      # GlassSurface, ShimmerBox, CategoryDot
+└── viewmodel/                       # MapViewModel, SearchViewModel, PoiViewModel, LocationViewModel
+```
+
+### Web + Backend (`src/`)
 ```
 src/
 ├── app/                    # Next.js App Router
@@ -73,8 +114,21 @@ db/dump.sql                 # Database dump for quick restore
 
 ## Conventions
 
-- File naming: kebab-case for files/folders, PascalCase for components/types, camelCase for functions/variables.
-- Strict TypeScript -- no `any` types.
+### Shared
 - Pre-production: breaking changes encouraged. No backward-compat shims, re-exports, or deprecation layers.
 - Keep `Plan.md` updated -- mark completed tasks with `[x]`.
 - Do NOT create: README.md, test files for trivial code, unnecessary config files.
+- No barrel exports -- import from source file directly.
+
+### Web (TypeScript)
+- File naming: kebab-case for files/folders, PascalCase for components/types, camelCase for functions/variables.
+- Strict TypeScript -- no `any` types.
+
+### Android (Kotlin)
+- PascalCase for composables/classes, camelCase for functions/properties.
+- Strict null safety -- no `!!`.
+- Single-activity, Compose-only. No Fragments, no XML layouts.
+- `StateFlow` in ViewModels, `collectAsStateWithLifecycle()` in composables.
+- All visual values from `ObeliskTheme` -- never hardcode colors/fonts/radii.
+- All motion uses `spring()` -- no duration-based `tween()`.
+- Full plan with versioned tasks in `kotlin.md`.

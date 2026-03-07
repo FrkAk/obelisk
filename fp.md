@@ -6,7 +6,7 @@ Read these files first (in this order):
 3. `flutter.md` — Flutter project plan, conventions, task breakdown
 4. `ui-ux.md` — detailed UI/UX specs for every component
 
-Then implement **V0.4** from flutter.md
+Then implement **V0.5** from flutter.md
 
 after implementation verify: `flutter analyze` passes with zero issues, `dart format .` clean
 

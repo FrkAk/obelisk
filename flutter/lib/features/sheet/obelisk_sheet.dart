@@ -5,6 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/glass.dart';
 import '../../core/theme/obelisk_theme.dart';
+import '../search/autocomplete_list.dart';
+import '../search/search_bar.dart';
+import '../search/search_providers.dart';
+import '../search/search_results.dart';
 import 'sheet_providers.dart';
 
 /// Always-visible bottom sheet with snap points, progressive visuals, and mode transitions.
@@ -136,15 +140,7 @@ class _ObeliskSheetState extends ConsumerState<ObeliskSheet> {
               borderRadius: br,
               child: CustomScrollView(
                 controller: scrollController,
-                slivers: [
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 150),
-                      child: _placeholderForMode(mode),
-                    ),
-                  ),
-                ],
+                slivers: _sliversForMode(mode),
               ),
             ),
           ),
@@ -197,18 +193,59 @@ class _ObeliskSheetState extends ConsumerState<ObeliskSheet> {
     return theme.shadowSm;
   }
 
-  Widget _placeholderForMode(SheetMode mode) {
-    return Padding(
-      key: ValueKey(mode),
-      padding: const EdgeInsets.symmetric(
-        horizontal: ObeliskTheme.space2xl,
-        vertical: ObeliskTheme.spaceLg,
-      ),
-      child: Text(switch (mode) {
-        SheetMode.search => 'Search placeholder',
-        SheetMode.results => 'Results placeholder',
-        SheetMode.poi => 'POI detail placeholder',
-      }, style: Theme.of(context).extension<ObeliskTheme>()!.uiBody),
+  void _expandToHalf() {
+    if (!_sheetController.isAttached) return;
+    _sheetController.animateTo(
+      ObeliskSheet.snapHalf,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
     );
+  }
+
+  void _onSuggestionSelected(String name) {
+    ref.read(searchResultsProvider.notifier).search(name);
+    ref.read(sheetModeNotifierProvider.notifier).set(SheetMode.results);
+  }
+
+  List<Widget> _sliversForMode(SheetMode mode) {
+    final searchBar = SliverToBoxAdapter(
+      child: ObeliskSearchBar(onExpandSheet: _expandToHalf),
+    );
+
+    return switch (mode) {
+      SheetMode.search => [
+        searchBar,
+        SliverToBoxAdapter(
+          child: AutocompleteList(onSelect: _onSuggestionSelected),
+        ),
+        const SliverFillRemaining(
+          hasScrollBody: false,
+          child: SizedBox.shrink(),
+        ),
+      ],
+      SheetMode.results => [
+        searchBar,
+        const SliverToBoxAdapter(child: SearchResultsList()),
+        const SliverFillRemaining(
+          hasScrollBody: false,
+          child: SizedBox.shrink(),
+        ),
+      ],
+      SheetMode.poi => [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: ObeliskTheme.space2xl,
+              vertical: ObeliskTheme.spaceLg,
+            ),
+            child: Text(
+              'POI detail placeholder',
+              style: Theme.of(context).extension<ObeliskTheme>()!.uiBody,
+            ),
+          ),
+        ),
+      ],
+    };
   }
 }

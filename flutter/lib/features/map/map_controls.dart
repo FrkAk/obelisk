@@ -59,18 +59,20 @@ class _MapControlsState extends ConsumerState<MapControls> {
   }
 
   Future<void> _onLocateTap(LocateMode current) async {
+    final bearing = ref.read(mapBearingProvider);
+    if (bearing.abs() > 1.0) {
+      final controller = ref.read(mapControllerProvider);
+      await controller?.setBearing(0, durationMs: 500);
+      return;
+    }
+
     switch (current) {
       case LocateMode.idle:
         await _locateUser();
       case LocateMode.tracking:
         ref.read(locateModeNotifierProvider.notifier).set(LocateMode.compass);
       case LocateMode.compass:
-        // Set idle first so viewport releases camera control,
-        // then reset bearing to north.
         ref.read(locateModeNotifierProvider.notifier).set(LocateMode.idle);
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-        final controller = ref.read(mapControllerProvider);
-        await controller?.setBearing(0, durationMs: 500);
     }
   }
 
@@ -123,9 +125,18 @@ class _LocateButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context).extension<ObeliskTheme>()!;
 
+    final bearing = ref.watch(mapBearingProvider);
+    final isRotated = bearing.abs() > 1.0;
+
     final Widget child;
     if (isLocating) {
       child = _PulseIcon(key: const ValueKey('pulse'), color: theme.foreground);
+    } else if (isRotated) {
+      child = Transform.rotate(
+        key: const ValueKey('compass'),
+        angle: -bearing * math.pi / 180,
+        child: Icon(Icons.explore, size: 20, color: theme.ctaBlue),
+      );
     } else {
       switch (locateMode) {
         case LocateMode.idle:
@@ -136,18 +147,12 @@ class _LocateButton extends ConsumerWidget {
             color: theme.foreground,
           );
         case LocateMode.tracking:
+        case LocateMode.compass:
           child = Icon(
             Icons.my_location,
             key: const ValueKey('tracking'),
             size: 20,
             color: theme.ctaBlue,
-          );
-        case LocateMode.compass:
-          final bearing = ref.watch(mapBearingProvider);
-          child = Transform.rotate(
-            key: const ValueKey('compass'),
-            angle: -bearing * math.pi / 180,
-            child: Icon(Icons.explore, size: 20, color: theme.ctaBlue),
           );
       }
     }

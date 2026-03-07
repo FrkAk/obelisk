@@ -1,4 +1,4 @@
-.PHONY: help setup setup-quick finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-taxonomy-only enrich-pois enrich-distributed enrich-worker fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup setup-quick finish-setup run run-local run-public stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all enrich-taxonomy-only enrich-pois enrich-distributed enrich-worker fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore android-build android-install android-lint android-clean
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -69,6 +69,12 @@ help:
 	@printf "$(GREEN)Database:$(RESET)\n"
 	@printf "  $(CYAN)db-dump$(RESET)     Export database to db/dump.sql\n"
 	@printf "  $(CYAN)db-restore$(RESET)  Restore database from db/dump.sql\n"
+	@printf "\n"
+	@printf "$(GREEN)Android:$(RESET)\n"
+	@printf "  $(CYAN)android-build$(RESET)    Build debug APK\n"
+	@printf "  $(CYAN)android-install$(RESET)  Build + install on connected device/emulator\n"
+	@printf "  $(CYAN)android-lint$(RESET)     Run Android lint\n"
+	@printf "  $(CYAN)android-clean$(RESET)    Clean build outputs\n"
 	@printf "\n"
 
 setup:
@@ -408,3 +414,17 @@ finish-setup:
 	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
 
 search-setup: seed-pois enrich-taxonomy-only sync-search generate-embeddings
+
+# ─── Android ───────────────────────────────────────────
+
+android-build:
+	cd android && ./gradlew assembleDebug
+
+android-install:
+	cd android && ./gradlew installDebug
+
+android-lint:
+	cd android && ./gradlew lint
+
+android-clean:
+	cd android && ./gradlew clean

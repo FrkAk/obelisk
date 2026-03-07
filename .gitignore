@@ -60,14 +60,8 @@ drizzle/*.sql
 # Env
 !.env.example
 
-# Flutter
-flutter/.dart_tool/
-flutter/build/
-flutter/.flutter-plugins
-flutter/.flutter-plugins-dependencies
-flutter/.packages
-flutter/android/.gradle/
-flutter/android/local.properties
-flutter/ios/Pods/
-flutter/ios/.symlinks/
-flutter/.metadata
+# Android
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/

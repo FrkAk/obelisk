@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Select types — plain interfaces, NO Drizzle imports.
-// These are the API contract for any client (React, React Native, Flutter).
+// These are the API contract for any client (React, Android, iOS).
 // ---------------------------------------------------------------------------
 
 export interface Category {

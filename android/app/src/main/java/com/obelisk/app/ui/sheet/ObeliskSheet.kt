@@ -173,7 +173,7 @@ fun ObeliskSheet(
                     orientation = Orientation.Vertical,
                 )
                 .clip(shape)
-                .background(colors.elevated),
+                .background(colors.glassBg),
         ) {
             Column {
                 DragHandle()

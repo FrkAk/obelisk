@@ -149,7 +149,7 @@ fun MapScreen() {
         val controlsBottomDp by remember {
             derivedStateOf {
                 val belowSheet = screenHeightPx - sheetOffset
-                with(density) { (belowSheet + sideMarginPx).toDp() }
+                with(density) { (belowSheet + sideMarginPx).toDp() }.coerceAtLeast(16.dp)
             }
         }
         val controlsSideMarginDp = with(density) { sideMarginPx.toDp() }

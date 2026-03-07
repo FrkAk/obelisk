@@ -59,11 +59,11 @@ fun MapControls(
 
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        GlassSurface(modifier = Modifier.size(44.dp)) {
-            IconButton(onClick = on3DClick, modifier = Modifier.size(44.dp)) {
+        GlassSurface(modifier = Modifier.size(48.dp)) {
+            IconButton(onClick = on3DClick, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.Default.ViewInAr,
                     contentDescription = "3D",
@@ -73,8 +73,8 @@ fun MapControls(
             }
         }
 
-        GlassSurface(modifier = Modifier.size(44.dp)) {
-            IconButton(onClick = onLayersClick, modifier = Modifier.size(44.dp)) {
+        GlassSurface(modifier = Modifier.size(48.dp)) {
+            IconButton(onClick = onLayersClick, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.Default.Layers,
                     contentDescription = "Layers",
@@ -84,9 +84,9 @@ fun MapControls(
             }
         }
 
-        GlassSurface(modifier = Modifier.size(44.dp)) {
+        GlassSurface(modifier = Modifier.size(48.dp)) {
             if (isRotated) {
-                IconButton(onClick = onCompassClick, modifier = Modifier.size(44.dp)) {
+                IconButton(onClick = onCompassClick, modifier = Modifier.size(48.dp)) {
                     Icon(
                         imageVector = Icons.Default.Explore,
                         contentDescription = "Reset north",
@@ -105,7 +105,7 @@ fun MapControls(
                         }
                         onLocateClick()
                     },
-                    modifier = Modifier.size(44.dp).scale(locateScale.value),
+                    modifier = Modifier.size(48.dp).scale(locateScale.value),
                 ) {
                     Icon(
                         imageVector = Icons.Default.MyLocation,

@@ -44,7 +44,7 @@ enum class SheetDetent { Mini, Medium, Large }
  */
 object SheetGeometry {
     /** Height each detent occupies as a fraction of screen height. */
-    const val MINI_HEIGHT = 0.07f
+    const val MINI_HEIGHT = 0.09f
     const val MEDIUM_HEIGHT = 0.42f
     const val LARGE_HEIGHT = 0.68f
 
@@ -53,16 +53,7 @@ object SheetGeometry {
 
     /** Side margin as a fraction of screen width (constant across detents). */
     const val SIDE_MARGIN = 0.04f
-
-    /** Corner radius as a fraction of screen width (constant across detents). */
-    const val CORNER_RADIUS = 0.045f
 }
-
-
-/** Drag handle pill dimensions as screen-width fractions. */
-private const val HANDLE_WIDTH_FRACTION = 0.10f
-private const val HANDLE_HEIGHT_FRACTION = 0.012f
-private const val HANDLE_PADDING_FRACTION = 0.01f
 
 /**
  * Returns the target detent for a given sheet mode.
@@ -154,9 +145,8 @@ fun ObeliskSheet(
         }
 
         val sideMarginDp = with(density) { (screenW * SheetGeometry.SIDE_MARGIN).toDp() }
-        val cornerRadiusDp = with(density) { (screenW * SheetGeometry.CORNER_RADIUS).toDp() }
 
-        val shape = RoundedCornerShape(cornerRadiusDp)
+        val shape = ObeliskTheme.shapes.sheet
 
 
         // Animate to target detent when mode changes
@@ -183,10 +173,10 @@ fun ObeliskSheet(
                     orientation = Orientation.Vertical,
                 )
                 .clip(shape)
-                .background(colors.glassBg),
+                .background(colors.elevated),
         ) {
             Column {
-                DragHandle(screenWidthPx = screenW)
+                DragHandle()
                 SheetContent(mode = mode)
             }
         }
@@ -194,27 +184,21 @@ fun ObeliskSheet(
 }
 
 /**
- * Centered drag handle pill.
- *
- * @param screenWidthPx Screen width in pixels for proportional sizing.
+ * Centered drag handle pill with 48dp touch target.
  */
 @Composable
-private fun DragHandle(screenWidthPx: Float) {
-    val density = LocalDensity.current
-    val handleWidth = with(density) { (screenWidthPx * HANDLE_WIDTH_FRACTION).toDp() }
-    val handleHeight = with(density) { (screenWidthPx * HANDLE_HEIGHT_FRACTION).toDp() }
-    val verticalPadding = with(density) { (screenWidthPx * HANDLE_PADDING_FRACTION).toDp() }
-
+private fun DragHandle() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = verticalPadding),
-        contentAlignment = Alignment.Center,
+            .height(48.dp)
+            .padding(top = 12.dp, bottom = 8.dp),
+        contentAlignment = Alignment.TopCenter,
     ) {
         Box(
             modifier = Modifier
-                .width(handleWidth)
-                .height(handleHeight)
+                .width(36.dp)
+                .height(5.dp)
                 .clip(RoundedCornerShape(50))
                 .background(ObeliskTheme.colors.secondary.copy(alpha = 0.3f)),
         )

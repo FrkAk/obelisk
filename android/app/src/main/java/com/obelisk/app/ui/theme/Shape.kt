@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
  * @param xl 20dp — sheets at medium detent.
  * @param xl2 24dp — search pill.
  * @param xl3 32dp — sheets at mini detent.
+ * @param sheet 28dp — bottom sheet.
  * @param full 9999dp — fully round (circles, capsules).
  */
 @Immutable
@@ -23,5 +24,6 @@ data class ObeliskShapes(
     val xl: RoundedCornerShape = RoundedCornerShape(20.dp),
     val xl2: RoundedCornerShape = RoundedCornerShape(24.dp),
     val xl3: RoundedCornerShape = RoundedCornerShape(32.dp),
+    val sheet: RoundedCornerShape = RoundedCornerShape(28.dp),
     val full: RoundedCornerShape = RoundedCornerShape(9999.dp),
 )

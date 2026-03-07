@@ -20,7 +20,7 @@ import com.obelisk.app.ui.theme.ObeliskTheme
 @Composable
 fun LookAroundButton(modifier: Modifier = Modifier) {
     GlassSurface(modifier = modifier.size(44.dp)) {
-        IconButton(onClick = { }, modifier = Modifier.size(44.dp)) {
+        IconButton(onClick = { }, modifier = Modifier.size(48.dp)) {
             Icon(
                 imageVector = Icons.Default.Visibility,
                 contentDescription = "Look Around",

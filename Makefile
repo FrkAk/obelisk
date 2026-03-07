@@ -229,7 +229,7 @@ run-flutter:
 	@printf "Waiting for backend...\n"
 	@until curl -sf http://localhost:3000 >/dev/null 2>&1; do sleep 1; done
 	@printf "$(GREEN)Backend ready$(RESET)\n\n"
-	cd flutter && flutter run
+	cd flutter && flutter run --dart-define=MAPBOX_TOKEN=$(NEXT_PUBLIC_MAPBOX_TOKEN)
 
 stop:
 	@printf "Stopping services...\n"

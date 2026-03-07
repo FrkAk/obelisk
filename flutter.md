@@ -77,7 +77,6 @@ lib/
 │   │   ├── map_screen.dart      # Main screen: Stack(map, controls, sheet)
 │   │   ├── map_view.dart        # MapboxMap widget wrapper
 │   │   ├── map_controls.dart    # Right-side FAB stack
-│   │   ├── look_around_button.dart
 │   │   ├── map_providers.dart   # Viewport, pitch providers
 │   │   └── markers/
 │   │       ├── poi_pin.dart
@@ -318,19 +317,19 @@ flutter test --coverage  # with coverage report
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 1 | Create Freezed model: `ExternalPOI` | `core/api/models/poi.dart` | `[TODO]` |
-| 2 | Create Freezed model: `PoiImage` | `core/api/models/poi.dart` | `[TODO]` |
-| 3 | Create Freezed model: `RemarkWithPoi`, `Remark`, `Poi` | `core/api/models/remark.dart` | `[TODO]` |
-| 4 | Create Freezed model: `SearchResult`, `Suggestion` | `core/api/models/search.dart` | `[TODO]` |
-| 5 | Create Freezed model: `Category`, `CategorySlug` enum | `core/api/models/category.dart` | `[TODO]` |
-| 6 | Create Freezed models: All API response wrappers (`NearbyPoisResponse`, `PoiLookupResponse`, `EnrichMediaResponse`, `SearchResponse`, `AutocompleteResponse`, `GenerateRemarkResponse`, `RegenerateRemarkResponse`) | `core/api/models/*.dart` | `[TODO]` |
-| 7 | Create sealed `ApiError` class (validation, rateLimit, notFound, serverError, network) | `core/api/api_errors.dart` | `[TODO]` |
-| 8 | Create Dio instance with base config (timeouts, JSON, error interceptor) | `core/api/api_client.dart` | `[TODO]` |
-| 9 | Implement all endpoint methods in `ObeliskApi` class | `core/api/endpoints.dart` | `[TODO]` |
-| 10 | Run `build_runner` to generate Freezed/JSON code | — | `[TODO]` |
-| 11 | Create utility: `formatDistance()` (haversine + display) | `core/utils/distance.dart` | `[TODO]` |
-| 12 | Create utility: `isValidHttpUrl()` | `core/utils/url_validator.dart` | `[TODO]` |
-| 13 | Verify: Write a simple test that fetches `/api/pois` and deserializes | `test/api_test.dart` | `[TODO]` |
+| 1 | Create Freezed model: `ExternalPOI` | `core/api/models/poi.dart` | `[DONE]` |
+| 2 | Create Freezed model: `PoiImage` | `core/api/models/poi.dart` | `[DONE]` |
+| 3 | Create Freezed model: `RemarkWithPoi`, `Remark`, `Poi` | `core/api/models/remark.dart` | `[DONE]` |
+| 4 | Create Freezed model: `SearchResult`, `Suggestion` | `core/api/models/search.dart` | `[DONE]` |
+| 5 | Create Freezed model: `Category`, `CategorySlug` enum | `core/api/models/category.dart` | `[DONE]` |
+| 6 | Create Freezed models: All API response wrappers (`NearbyPoisResponse`, `PoiLookupResponse`, `EnrichMediaResponse`, `SearchResponse`, `AutocompleteResponse`, `GenerateRemarkResponse`, `RegenerateRemarkResponse`) | `core/api/models/*.dart` | `[DONE]` |
+| 7 | Create sealed `ApiError` class (validation, rateLimit, notFound, serverError, network) | `core/api/api_errors.dart` | `[DONE]` |
+| 8 | Create Dio instance with base config (timeouts, JSON, error interceptor) | `core/api/api_client.dart` | `[DONE]` |
+| 9 | Implement all endpoint methods in `ObeliskApi` class | `core/api/endpoints.dart` | `[DONE]` |
+| 10 | Run `build_runner` to generate Freezed/JSON code | — | `[DONE]` |
+| 11 | Create utility: `formatDistance()` (haversine + display) | `core/utils/distance.dart` | `[DONE]` |
+| 12 | Create utility: `isValidHttpUrl()` | `core/utils/url_validator.dart` | `[DONE]` |
+| 13 | Verify: Write a simple test that fetches `/api/pois` and deserializes | `test/api_test.dart` | `[DONE]` |
 
 **Verification**: `flutter test` passes, models serialize/deserialize correctly.
 
@@ -342,19 +341,19 @@ flutter test --coverage  # with coverage report
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 1 | Configure Mapbox: Add token to platform configs (iOS Info.plist, Android gradle, Web index.html) | Platform files | `[TODO]` |
-| 2 | Create `MapView` widget wrapping `MapboxMap` | `features/map/map_view.dart` | `[TODO]` |
-| 3 | Implement dark/light map style switching | `features/map/map_view.dart` | `[TODO]` |
-| 4 | Create `mapViewportProvider` (tracks center, zoom, bounds on camera change) | `features/map/map_providers.dart` | `[TODO]` |
-| 5 | Create `geolocationProvider` (geolocator package, permission handling, fallback to Munich) | `core/location/location_provider.dart` | `[TODO]` |
-| 6 | Create `UserLocationMarker` widget (3-layer: pulse + ring + dot) | `features/map/markers/user_location_marker.dart` | `[TODO]` |
-| 7 | Add user location marker to map as annotation | `features/map/map_view.dart` | `[TODO]` |
-| 8 | Create `MapControls` FAB stack (3D toggle, layers, locate) | `features/map/map_controls.dart` | `[TODO]` |
-| 9 | Implement 3D toggle (pitch 0↔45°) | `features/map/map_controls.dart` | `[TODO]` |
-| 10 | Implement locate button (fly to user location) | `features/map/map_controls.dart` | `[TODO]` |
-| 11 | Create `LookAroundButton` (bottom-left, placeholder) | `features/map/look_around_button.dart` | `[TODO]` |
-| 12 | Wire `MapScreen` to render map + controls + user location | `features/map/map_screen.dart` | `[TODO]` |
-| 13 | Verify: Map renders, location works, controls respond | — | `[TODO]` |
+| 1 | Configure Mapbox: Add token to platform configs (iOS Info.plist, Android gradle, Web index.html) | Platform files | `[DONE]` |
+| 2 | Create `MapView` widget wrapping `MapboxMap` | `features/map/map_view.dart` | `[DONE]` |
+| 3 | Implement dark/light map style switching | `features/map/map_view.dart` | `[DONE]` |
+| 4 | Create `mapViewportProvider` (tracks center, zoom, bounds on camera change) | `features/map/map_providers.dart` | `[DONE]` |
+| 5 | Create `geolocationProvider` (geolocator package, permission handling, fallback to Munich) | `core/location/location_provider.dart` | `[DONE]` |
+| 6 | Create `UserLocationMarker` widget (3-layer: pulse + ring + dot) | `features/map/markers/user_location_marker.dart` | `[DONE]` |
+| 7 | Add user location marker to map as annotation | `features/map/map_view.dart` | `[DONE]` |
+| 8 | Create `MapControls` FAB stack (3D toggle, layers, locate) | `features/map/map_controls.dart` | `[DONE]` |
+| 9 | Implement 3D toggle (pitch 0↔45°) | `features/map/map_controls.dart` | `[DONE]` |
+| 10 | Implement locate button (fly to user location) | `features/map/map_controls.dart` | `[DONE]` |
+| 11 | ~~Create `LookAroundButton`~~ — removed, look-around is automatic via geofence | — | `[REMOVED]` |
+| 12 | Wire `MapScreen` to render map + controls + user location | `features/map/map_screen.dart` | `[DONE]` |
+| 13 | Verify: Map renders, location works, controls respond | — | `[DONE]` |
 
 **Verification**: Map shows Munich, user dot appears, 3D toggle works, locate animates to user.
 
@@ -366,17 +365,17 @@ flutter test --coverage  # with coverage report
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 1 | Create `SheetMode` enum and `sheetModeProvider` | `features/sheet/sheet_providers.dart` | `[TODO]` |
-| 2 | Create `DragHandle` widget with chevron hint animation | `features/sheet/drag_handle.dart` | `[TODO]` |
-| 3 | Create `ObeliskSheet` using `DraggableScrollableSheet` with glass material | `features/sheet/obelisk_sheet.dart` | `[TODO]` |
-| 4 | Implement snap points per mode (Mini/Peek/Half/Full) | `features/sheet/obelisk_sheet.dart` | `[TODO]` |
-| 5 | Implement progressive corner radius morphing based on extent | `features/sheet/obelisk_sheet.dart` | `[TODO]` |
-| 6 | Implement progressive bottom gap based on extent | `features/sheet/obelisk_sheet.dart` | `[TODO]` |
-| 7 | Implement overlay opacity based on extent | `features/map/map_screen.dart` | `[TODO]` |
-| 8 | Implement mode transition cross-fade (content swap) | `features/sheet/obelisk_sheet.dart` | `[TODO]` |
-| 9 | Implement scroll↔drag handoff (content at top = drag, scrolled = scroll) | `features/sheet/obelisk_sheet.dart` | `[TODO]` |
-| 10 | Wire sheet into MapScreen Stack | `features/map/map_screen.dart` | `[TODO]` |
-| 11 | Verify: Sheet renders at mini, drag up/down works, snaps correctly | — | `[TODO]` |
+| 1 | Create `SheetMode` enum and `sheetModeProvider` | `features/sheet/sheet_providers.dart` | `[DONE]` |
+| 2 | Create `DragHandle` widget with chevron hint animation | `features/sheet/drag_handle.dart` | `[DONE]` |
+| 3 | Create `ObeliskSheet` using `DraggableScrollableSheet` with glass material | `features/sheet/obelisk_sheet.dart` | `[DONE]` |
+| 4 | Implement snap points per mode (Mini/Peek/Half/Full) | `features/sheet/obelisk_sheet.dart` | `[DONE]` |
+| 5 | Implement progressive corner radius morphing based on extent | `features/sheet/obelisk_sheet.dart` | `[DONE]` |
+| 6 | Implement progressive bottom gap based on extent | `features/sheet/obelisk_sheet.dart` | `[DONE]` |
+| 7 | Implement overlay opacity based on extent | `features/map/map_screen.dart` | `[DONE]` |
+| 8 | Implement mode transition cross-fade (content swap) | `features/sheet/obelisk_sheet.dart` | `[DONE]` |
+| 9 | Implement scroll↔drag handoff (content at top = drag, scrolled = scroll) | `features/sheet/obelisk_sheet.dart` | `[DONE]` |
+| 10 | Wire sheet into MapScreen Stack | `features/map/map_screen.dart` | `[DONE]` |
+| 11 | Verify: Sheet renders at mini, drag up/down works, snaps correctly | — | `[DONE]` |
 
 **Verification**: Glass sheet visible at bottom, drag handle works, snap points feel native.
 
@@ -540,6 +539,16 @@ flutter test --coverage  # with coverage report
 ---
 
 ## Agent Instructions
+
+### Map Abstraction Layer
+
+**IMPORTANT**: Mapbox is used for map tile rendering ONLY. It will be replaced with a custom map solution. All app logic (controls, providers, location) MUST use the abstract `MapCameraController` interface from `lib/core/map/map_camera_controller.dart`.
+
+- `mapbox_maps_flutter` imports are ONLY allowed in `map_view.dart` and `main.dart`
+- `map_controls.dart`, `map_providers.dart`, and all other files must use `MapCameraController`
+- Camera operations (`flyTo`, `setBearing`, `setPitch`) go through the abstract interface
+- The Mapbox implementation (`_MapboxCameraController`) lives in `map_view.dart` — the only file that touches the SDK
+- When adding new camera/map features, add the method to `MapCameraController` first, then implement in `map_view.dart`
 
 ### Starting a New Session
 

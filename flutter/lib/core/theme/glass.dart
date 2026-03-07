@@ -50,22 +50,25 @@ class GlassMaterial extends StatelessWidget {
     final radius = borderRadius ?? BorderRadius.circular(ObeliskTheme.radiusMd);
     final (bg, blur) = _resolve(theme);
 
-    return ClipRRect(
-      borderRadius: radius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: radius,
-            border: Border.all(color: theme.glassBorder),
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: radius,
+              border: Border.all(color: theme.glassBorder),
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );
   }
 
+  /// Resolves background color and blur sigma for the current [variant].
   (Color bg, double blur) _resolve(ObeliskTheme theme) {
     return switch (variant) {
       GlassVariant.glass => (theme.glassBg, 16),

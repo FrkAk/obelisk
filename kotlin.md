@@ -79,14 +79,15 @@ android/
 │   │   │   ├── ObeliskApi.kt            # Retrofit interface
 │   │   │   ├── ApiModule.kt             # Hilt DI
 │   │   │   └── models/                  # Data classes
-│   │   │       ├── Poi.kt
-│   │   │       ├── Remark.kt
+│   │   │       ├── PoiResponse.kt       # Lookup request/response + PoiDto + RemarkDto
 │   │   │       └── Search.kt
 │   │   ├── location/
 │   │   │   └── LocationRepository.kt    # Fused location provider
 │   │   └── repository/
 │   │       ├── PoiRepository.kt
-│   │       └── SearchRepository.kt
+│   │       ├── SearchRepository.kt
+│   │       ├── RemarkRepository.kt
+│   │       └── GeofenceManager.kt
 │   ├── ui/
 │   │   ├── theme/
 │   │   │   ├── Theme.kt                 # ObeliskTheme composable
@@ -97,12 +98,11 @@ android/
 │   │   │   └── Glass.kt                # Frosted glass modifier
 │   │   ├── map/
 │   │   │   ├── MapScreen.kt             # Root: map + sheet + controls + overlays
-│   │   │   ├── ObeliskMap.kt           # Mapbox compose wrapper
+│   │   │   ├── ObeliskMap.kt           # Mapbox compose wrapper + native POI click
 │   │   │   ├── MapControls.kt          # 3D, layers, locate (bottom-right stack)
 │   │   │   ├── WeatherPill.kt          # Top-left weather indicator
 │   │   │   ├── LookAroundButton.kt     # Bottom-left binoculars
-│   │   │   ├── PoiPin.kt              # Small circle pin (icon + color)
-│   │   │   ├── SelectedPoiPin.kt      # Large circle photo pin with ring
+│   │   │   ├── SearchPin.kt           # Accent teardrop for search results
 │   │   │   └── UserLocationMarker.kt   # Blue dot + ring + pulse
 │   │   ├── sheet/
 │   │   │   ├── ObeliskSheet.kt          # 3-detent floating glass sheet
@@ -147,14 +147,14 @@ android/
 
 | Endpoint | Method | Use |
 |----------|--------|-----|
-| `/api/pois?lat=&lon=&radius=` | GET | Load POIs for map pins |
-| `/api/poi/lookup` | POST | Resolve POI by name + location |
-| `/api/poi/enrich-media` | POST | Lazy-load photos for carousel |
-| `/api/remarks?lat=&lon=&radius=` | GET | Preload nearby remarks for geofence |
-| `/api/remarks/generate-for-poi` | POST | On-demand remark for selected POI |
+| `/api/poi/lookup` | POST | Enrich clicked POI (name + lat/lon + category) |
+| `/api/remarks?lat=&lon=&radius=5000` | GET | Preload nearby remarks for geofence |
+| `/api/remarks/generate-for-poi` | POST | On-demand remark for POI with none |
 | `/api/remarks/regenerate` | POST | Re-roll remark (20s cooldown) |
-| `/api/search` | POST | Full hybrid search |
-| `/api/search/autocomplete?q=` | GET | Prefix autocomplete |
+| `/api/search` | POST | Full hybrid search (query + location + viewport) |
+| `/api/search/autocomplete?q=&lat=&lon=` | GET | Prefix autocomplete (150ms debounce) |
+
+**Key:** Mapbox renders POIs natively from tile data. No `/api/pois` call. POI interaction: click native feature -> `queryRenderedFeatures` -> `/api/poi/lookup`.
 
 ---
 
@@ -338,22 +338,22 @@ Typing: [search-icon]  user text that can       [X]    (avatar-photo 36dp)
 
 ---
 
-### V0.2 — POI Pins
+### V0.2 — API Layer + Map Click -> POI Lookup
 
-**Goal:** Load POIs from API, render as category-colored circle pins.
+**Goal:** Set up networking layer (Retrofit + Moshi + Hilt). Detect tapped native Mapbox POI features. Call `/api/poi/lookup` to get enriched POI data. Store selection in ViewModel.
 
 | # | Task | Files |
 |---|------|-------|
-| 1 | Retrofit interface + Hilt module + OkHttp logging | `ObeliskApi.kt`, `ApiModule.kt` |
-| 2 | POI data classes matching API JSON | `models/Poi.kt` |
-| 3 | PoiRepository: fetch nearby POIs | `PoiRepository.kt` |
-| 4 | MapViewModel: load POIs on viewport change (300ms debounce) | `MapViewModel.kt` |
-| 5 | PoiPin: 28dp filled circle, white category icon, colored by group, 2dp shadow | `PoiPin.kt` |
-| 6 | Category color mapping (slug -> group -> color) | `Color.kt` extend |
-| 7 | POI name labels beside pins (Sora 11sp, white, text shadow) | `PoiPin.kt` |
-| 8 | Pin tap: select POI in ViewModel, pin gets highlight ring | `MapViewModel.kt`, `PoiPin.kt` |
+| 1 | Retrofit interface + Hilt module + OkHttp logging (debug-only) | `ObeliskApi.kt`, `ApiModule.kt` |
+| 2 | Data classes: `PoiLookupRequest`, `PoiLookupResponse`, `PoiDto`, `RemarkDto`, `CategoryDto`, `ContactDto` | `models/PoiResponse.kt` |
+| 3 | PoiRepository: `lookupPoi(name, lat, lon, category?)` -> calls `POST /api/poi/lookup` | `PoiRepository.kt` |
+| 4 | MapViewModel: `selectedPoi`, `selectedRemark`, `isLoading` state; `onPoiClicked()` sets synthetic pending POI then replaces with lookup result; `clearSelection()` | `MapViewModel.kt` |
+| 5 | ObeliskMap: `addOnMapClickListener` -> `queryRenderedFeatures` -> extract name/lat/lon/category from feature -> call `onPoiClick` callback (mirrors `MapView.tsx:handleMapClick`) | `ObeliskMap.kt` |
+| 6 | MapScreen: wire MapViewModel, pass `onPoiClick` to ObeliskMap, collect selected state | `MapScreen.kt` |
 
-**Verify:** ~400 colored pins visible on map, labels readable, tap selects.
+**Verify:** Tap native POI on map -> API call fires -> `selectedPoi` state updates with enriched data. Tap empty area -> no call. Network errors -> null result, no crash.
+
+**Removed:** PoiPin.kt, category color mapping, custom pin rendering, name labels. Mapbox handles all rendering.
 
 ---
 
@@ -363,7 +363,7 @@ Typing: [search-icon]  user text that can       [X]    (avatar-photo 36dp)
 
 | # | Task | Files |
 |---|------|-------|
-| 1 | SheetMode sealed class: Idle, Search, Results, Poi | `SheetMode.kt` |
+| 1 | SheetMode sealed class: Idle, Search, Poi, Remark | `SheetMode.kt` |
 | 2 | AnchoredDraggable with 3 anchors (12%, 50%, 85%) | `ObeliskSheet.kt` |
 | 3 | GlassSurface shell: dark glass bg, blur 24dp, strong border | `ObeliskSheet.kt` |
 | 4 | Progressive corner radius (32 -> 20 -> 12dp based on offset) | `ObeliskSheet.kt` |
@@ -401,11 +401,15 @@ Typing: [search-icon]  user text that can       [X]    (avatar-photo 36dp)
 
 **Goal:** Full search flow with floating autocomplete and result list.
 
+**API contracts:**
+- Autocomplete: `GET /api/search/autocomplete?q=<prefix>&lat=<lat>&lon=<lon>` (150ms debounce, min 2 chars)
+- Full search: `POST /api/search` with `{query, location: {latitude, longitude}, radius: 2000, limit: 20, viewport?}`
+
 | # | Task | Files |
 |---|------|-------|
 | 1 | Search data classes | `models/Search.kt` |
-| 2 | SearchRepository: autocomplete (300ms debounce) + search | `SearchRepository.kt` |
-| 3 | SearchViewModel: query flow, suggestions, results | `SearchViewModel.kt` |
+| 2 | SearchRepository: autocomplete (150ms debounce) + full search | `SearchRepository.kt` |
+| 3 | SearchViewModel: query flow, suggestions, results, `previousSheetMode` for back navigation | `SearchViewModel.kt` |
 | 4 | AutocompleteOverlay: floats ABOVE sheet, max 5 rows, glass surface, shadow-float | `AutocompleteOverlay.kt` |
 | 5 | Suggestion row: category dot + name + category label, staggered entry (40ms gentle spring) | `AutocompleteOverlay.kt` |
 | 6 | Tap suggestion: fill search, trigger full search | `SearchViewModel.kt` |
@@ -413,26 +417,26 @@ Typing: [search-icon]  user text that can       [X]    (avatar-photo 36dp)
 | 8 | Result row: dot + name (subhead) + "category . distance" (footnote) | `SearchResults.kt` |
 | 9 | Loading: 5 shimmer skeleton rows | `ShimmerBox.kt`, `SearchResults.kt` |
 | 10 | Empty state: icon + "No results" | `SearchResults.kt` |
-| 11 | Tap result: fly-to POI, switch to POI mode | `MapScreen.kt` |
+| 11 | Tap result with remark -> `sheetMode = Remark`, tap without -> `sheetMode = Poi`. Set `searchPinLocation`, fly-to zoom 15. Store `previousSheetMode` for "back to results" | `MapScreen.kt`, `SearchViewModel.kt` |
 
-**Verify:** Type 2+ chars -> suggestions float above sheet. Submit -> results in medium. Tap result -> fly-to + POI card.
+**Verify:** Type 2+ chars -> suggestions float above sheet. Submit -> results in medium. Tap result -> fly-to + search pin + POI/remark card. Back button returns to results.
 
 ---
 
-### V0.6 — Selected Pin (Photo Circle)
+### V0.6 — Search Pin + POI Selection Marker
 
-**Goal:** Tapped POI pin enlarges to circular photo with white ring.
+**Goal:** Show accent-colored teardrop marker when selecting a search result. Fly-to selected POI. Mirrors `SearchPin.tsx` from web.
+
+**Note:** The web does NOT enlarge native Mapbox POI features on click — it only shows a SearchPin for search results and handles POI data in the sheet.
 
 | # | Task | Files |
 |---|------|-------|
-| 1 | SelectedPoiPin: 64dp circle, POI photo (Coil), 3dp white border ring | `SelectedPoiPin.kt` |
-| 2 | Fallback: if no photo, enlarged icon version (48dp circle, same color) | `SelectedPoiPin.kt` |
-| 3 | Name label below in caps (Sora 12sp semibold, white, text shadow) | `SelectedPoiPin.kt` |
-| 4 | Selection animation: scale 0 -> 1 with pinDrop spring (bouncy) | `SelectedPoiPin.kt` |
-| 5 | Deselection: scale 1 -> 0, normal pin fades back in | `SelectedPoiPin.kt` |
-| 6 | Map fly-to selected POI with easing | `MapViewModel.kt` |
+| 1 | SearchPin: accent-colored teardrop marker (ViewAnnotation), pinDrop spring animation | `SearchPin.kt` |
+| 2 | Render SearchPin at `searchPinLocation` when a search result is selected | `ObeliskMap.kt`, `MapScreen.kt` |
+| 3 | Fly-to selected POI/result with easing | `MapViewModel.kt` |
+| 4 | Clear pin on sheet close or new search | `MapViewModel.kt` |
 
-**Verify:** Tap pin -> bounces to photo circle. Deselect -> shrinks back. Photos load from enrich-media API.
+**Verify:** Tap search result -> pin drops at location with spring bounce. Sheet close -> pin disappears. New search -> old pin clears.
 
 ---
 
@@ -440,41 +444,53 @@ Typing: [search-icon]  user text that can       [X]    (avatar-photo 36dp)
 
 **Goal:** POI detail card in medium sheet with compact tab previews.
 
+**Data flow (mirrors web `page.tsx:handlePoiClick`):**
+- POI click (V0.2) -> sheet opens at medium with POI card
+- Search result tap (V0.5) -> sheet opens with POI card or remark
+- If `response.remark` exists -> auto-show remark tab, `sheetMode = Remark`
+- If no remark -> show POI card, `sheetMode = Poi`, auto-generate button available
+- Images come from lookup response (no separate `enrich-media` call)
+- `POST /api/remarks/generate-for-poi` for POIs with no remark
+- Handle 422 (insufficient data), 503 (LLM down), 429 (rate limited)
+
 | # | Task | Files |
 |---|------|-------|
-| 1 | Remark data classes | `models/Remark.kt` |
-| 2 | PoiRepository: lookup, enrich-media, generate-for-poi, regenerate | `PoiRepository.kt` |
-| 3 | PoiViewModel: selected POI, remark loading, media, tab state | `PoiViewModel.kt` |
-| 4 | PoiHeader: share icon (left), name (title2 display), category subtitle, X close (right) | `PoiHeader.kt` |
-| 5 | ActionPills: transit time (blue CTA), Call (tel intent), Website (browser intent) | `ActionPills.kt` |
-| 6 | InfoRow: rating + stars, payment icons, distance from user | `InfoRow.kt` |
-| 7 | PoiTabs with underline indicator (accent): Remark / Capsules / Details | `PoiTabs.kt` |
-| 8 | RemarkTab compact: title only | `RemarkTab.kt` |
-| 9 | Capsules compact: one comment if exists | `PoiTabs.kt` |
-| 10 | Details compact: hours + open/closed badge | `PoiTabs.kt` |
-| 11 | PhotoCarousel: horizontal lazy row, rounded-lg, Coil | `PhotoCarousel.kt` |
-| 12 | BottomActions: + (add), star (favorite), ... (more) | `BottomActions.kt` |
-| 13 | Wire: pin tap or search result tap -> sheet medium with POI card | `SheetContent.kt`, `MapScreen.kt` |
-| 14 | Close: X -> deselect pin, sheet to mini | `PoiViewModel.kt` |
+| 1 | PoiViewModel: selected POI, remark loading, tab state, generate-for-poi | `PoiViewModel.kt` |
+| 2 | PoiHeader: share icon (left), name (title2 display), category subtitle, X close (right) | `PoiHeader.kt` |
+| 3 | ActionPills: transit time (blue CTA), Call (tel intent), Website (browser intent) | `ActionPills.kt` |
+| 4 | InfoRow: rating + stars, payment icons, distance from user | `InfoRow.kt` |
+| 5 | PoiTabs with underline indicator (accent): Remark / Capsules / Details | `PoiTabs.kt` |
+| 6 | RemarkTab compact: title only | `RemarkTab.kt` |
+| 7 | Capsules compact: one comment if exists | `PoiTabs.kt` |
+| 8 | Details compact: hours + open/closed badge | `PoiTabs.kt` |
+| 9 | PhotoCarousel: horizontal lazy row, rounded-lg, Coil | `PhotoCarousel.kt` |
+| 10 | BottomActions: + (add), star (favorite), ... (more) | `BottomActions.kt` |
+| 11 | Wire: POI click or search result tap -> sheet medium with POI card | `SheetContent.kt`, `MapScreen.kt` |
+| 12 | Close: X -> deselect, sheet to mini | `PoiViewModel.kt` |
 
-**Verify:** Tap pin -> sheet goes medium with full compact card. Action buttons launch intents. Tabs switch. Close works.
+**Verify:** Tap native POI -> sheet goes medium with compact card. If remark exists, remark tab auto-shown. Action buttons launch intents. Tabs switch. Close works.
 
 ---
 
-### V0.8 — POI Card (Large — Full Tabs)
+### V0.8 — POI Card (Large — Full Tabs + Remark Regeneration)
 
-**Goal:** Swipe sheet to large for full scrollable tab content.
+**Goal:** Swipe sheet to large for full scrollable tab content. Remark regeneration with cooldown.
+
+**Remark regeneration (mirrors web `page.tsx:handleRegenerateRemark`):**
+- `POST /api/remarks/regenerate` with `{remarkId}`
+- 20s client-side cooldown per POI (matches web's `regenerateCooldownsRef`)
+- Error handling: 503 (LLM down), 429 (rate limited)
 
 | # | Task | Files |
 |---|------|-------|
 | 1 | RemarkTab full: story body (Source Serif 4, markdown), local tip (accent border), regenerate button | `RemarkTab.kt` |
-| 2 | RegenerateButton: 20s cooldown countdown, re-rolls via API | `RegenerateButton.kt` |
+| 2 | RegenerateButton: 20s cooldown countdown, `POST /api/remarks/regenerate`, per-POI cooldown tracking | `RegenerateButton.kt` |
 | 3 | Capsules full: all comments list, create form placeholder | `PoiTabs.kt` |
 | 4 | Details full: address, phone (tel), website (link), full hours, amenity pills | `PoiTabs.kt` |
 | 5 | Tab content scrollable within large sheet | `PoiCard.kt` |
 | 6 | Swipe between tabs (horizontal pager with spring) | `PoiTabs.kt` |
 
-**Verify:** Swipe sheet to large -> full remark body visible, scrollable. Regenerate works with cooldown. All 3 tabs have full content.
+**Verify:** Swipe sheet to large -> full remark body visible, scrollable. Regenerate works with 20s cooldown. 503/429 show error toast. All 3 tabs have full content.
 
 ---
 
@@ -482,17 +498,26 @@ Typing: [search-icon]  user text that can       [X]    (avatar-photo 36dp)
 
 **Goal:** Ambient remark toasts when walking near POIs.
 
+**Web geofence parameters (from `useGeofence.ts` + `DEFAULT_GEOFENCE_CONFIG`):**
+- Preload: `GET /api/remarks?lat=&lon=&radius=5000` (viewport center, 30s stale via TanStack Query)
+- Trigger radius: **50m** (direct distance check against loaded remarks)
+- Queue radius: **100m** (candidates for next trigger)
+- Preload radius: **500m** (from loaded remarks)
+- Notification cooldown: **2min** between any notification
+- Max per session: **5 notifications**
+- Session duration: **30min** (then reset)
+- Dismissed remarks: remembered for session
+- No separate preload/queue API calls — just distance checks against remarks loaded by `/api/remarks`
+
 | # | Task | Files |
 |---|------|-------|
-| 1 | Continuous location updates (foreground, lifecycle-aware) | `LocationRepository.kt` |
-| 2 | Preload nearby remarks (500m) | `PoiRepository.kt` |
-| 3 | Geofence logic: 50m trigger, 100m queue, 500m preload | `MapViewModel.kt` |
-| 4 | Cooldown: 2min between, max 5 per 30min | `MapViewModel.kt` |
-| 5 | RemarkNotification: glass toast, amber accent border, POI name + teaser | `RemarkNotification.kt` |
-| 6 | Slide-up entry (gentle spring), slide-down dismiss, auto-dismiss 8s | `RemarkNotification.kt` |
-| 7 | Tap toast -> open POI card, dismiss -> 5min local cooldown | `RemarkNotification.kt` |
+| 1 | Preload nearby remarks: `GET /api/remarks?lat=&lon=&radius=5000` (viewport center, 30s stale) | `RemarkRepository.kt` |
+| 2 | Geofence logic: 50m trigger, 100m queue, 500m preload radius, 2min cooldown, max 5 per session, 30min session | `GeofenceManager.kt` |
+| 3 | RemarkNotification: glass toast, amber accent border, POI name + teaser | `RemarkNotification.kt` |
+| 4 | Slide-up entry (gentle spring), slide-down dismiss, auto-dismiss 8s | `RemarkNotification.kt` |
+| 5 | Tap toast -> open remark in sheet (`sheetMode = Remark`), dismiss -> add to dismissedSet | `MapScreen.kt` |
 
-**Verify:** Walk near POI -> toast appears. Respects cooldowns. Tap opens card.
+**Verify:** Walk near POI -> toast appears. Respects 2min cooldown + 5 max. Tap opens remark card. Dismissed remarks don't re-trigger within session.
 
 ---
 

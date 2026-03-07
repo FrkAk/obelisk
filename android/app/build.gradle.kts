@@ -40,7 +40,7 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000\"")
+            buildConfigField("String", "API_BASE_URL", "\"http://192.168.178.53:3000\"")
         }
         release {
             isMinifyEnabled = true
@@ -101,7 +101,6 @@ dependencies {
     // Networking
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.moshi)
-    implementation(libs.moshi.kotlin)
     ksp(libs.moshi.kotlin.codegen)
     implementation(libs.okhttp.logging)
 

@@ -29,6 +29,7 @@ import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.obelisk.app.viewmodel.LocationViewModel
+import com.obelisk.app.viewmodel.MapViewModel
 
 /** Munich center coordinates. */
 private val MUNICH_CENTER = Point.fromLngLat(11.576124, 48.137154)
@@ -48,11 +49,13 @@ private val LOCATION_PERMISSIONS = arrayOf(
 /**
  * Root composable: full-screen map with overlaid controls.
  * Layers: map -> weather pill (top-left) -> controls (bottom-right) -> binoculars (bottom-left).
+ * Wires MapViewModel for POI selection via native feature taps.
  */
 @Composable
 fun MapScreen() {
     val context = LocalContext.current
     val locationViewModel: LocationViewModel = hiltViewModel()
+    val mapViewModel: MapViewModel = hiltViewModel()
     val location by locationViewModel.location.collectAsStateWithLifecycle()
     var permissionGranted by remember { mutableStateOf(false) }
     var is3D by remember { mutableStateOf(false) }
@@ -107,6 +110,14 @@ fun MapScreen() {
         ObeliskMap(
             mapViewportState = mapViewportState,
             showLocationPuck = permissionGranted,
+            onPoiClick = { data ->
+                mapViewModel.onPoiClicked(
+                    name = data.name,
+                    latitude = data.latitude,
+                    longitude = data.longitude,
+                    category = data.category,
+                )
+            },
         )
 
         // Weather pill — top-left

@@ -85,7 +85,7 @@ lib/
 │   ├── sheet/
 │   │   ├── obelisk_sheet.dart   # Always-visible DraggableScrollableSheet
 │   │   ├── sheet_providers.dart # SheetMode, snap state providers
-│   │   └── drag_handle.dart     # Animated drag handle with chevron hint
+│   │   └── drag_handle.dart     # (removed — took unnecessary space)
 │   ├── search/
 │   │   ├── search_bar.dart      # Search input with rotating placeholder
 │   │   ├── search_results.dart  # Results list widget
@@ -366,7 +366,7 @@ flutter test --coverage  # with coverage report
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
 | 1 | Create `SheetMode` enum and `sheetModeProvider` | `features/sheet/sheet_providers.dart` | `[DONE]` |
-| 2 | Create `DragHandle` widget with chevron hint animation | `features/sheet/drag_handle.dart` | `[DONE]` |
+| 2 | ~~Create `DragHandle` widget~~ — removed, drag handle took unnecessary space | `features/sheet/drag_handle.dart` (deleted) | `[DONE]` |
 | 3 | Create `ObeliskSheet` using `DraggableScrollableSheet` with glass material | `features/sheet/obelisk_sheet.dart` | `[DONE]` |
 | 4 | Implement snap points per mode (Mini/Peek/Half/Full) | `features/sheet/obelisk_sheet.dart` | `[DONE]` |
 | 5 | Implement progressive corner radius morphing based on extent | `features/sheet/obelisk_sheet.dart` | `[DONE]` |
@@ -377,7 +377,7 @@ flutter test --coverage  # with coverage report
 | 10 | Wire sheet into MapScreen Stack | `features/map/map_screen.dart` | `[DONE]` |
 | 11 | Verify: Sheet renders at mini, drag up/down works, snaps correctly | — | `[DONE]` |
 
-**Verification**: Glass sheet visible at bottom, drag handle works, snap points feel native.
+**Verification**: Glass sheet visible at bottom, snap points feel native. Drag handle removed — took unnecessary space needed for search bar.
 
 ---
 

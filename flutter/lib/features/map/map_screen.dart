@@ -19,13 +19,15 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
-  double _sheetExtent = 0.12;
+  double _sheetExtent = ObeliskSheet.snapMini;
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final sheetMiniHeight = screenHeight * 0.12;
+    final mq = MediaQuery.of(context);
+    final screenH = mq.size.height;
+    final safe = mq.padding;
+    final sheetMiniHeight =
+        screenH * ObeliskSheet.snapMini + safe.bottom + screenH * 0.035;
     final overlayOpacity = _overlayOpacityForExtent(_sheetExtent);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -50,15 +52,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   ),
                 ),
               ),
+            Positioned(
+              right: ObeliskTheme.spaceLg + safe.right,
+              bottom: sheetMiniHeight + ObeliskTheme.spaceLg,
+              child: const MapControls(),
+            ),
             ObeliskSheet(
               onExtentChanged: (extent) {
-                setState(() => _sheetExtent = extent);
+                final oldOpacity = _overlayOpacityForExtent(_sheetExtent);
+                final newOpacity = _overlayOpacityForExtent(extent);
+                _sheetExtent = extent;
+                if ((oldOpacity - newOpacity).abs() > 0.005) {
+                  setState(() {});
+                }
               },
-            ),
-            Positioned(
-              right: ObeliskTheme.spaceLg,
-              bottom: bottomPadding + sheetMiniHeight + ObeliskTheme.spaceLg,
-              child: const MapControls(),
             ),
           ],
         ),
@@ -66,10 +73,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  /// Overlay opacity: 0 below 35%, then lerp to 0.08 at 85%.
+  /// Returns overlay opacity based on sheet extent.
   double _overlayOpacityForExtent(double extent) {
-    if (extent <= 0.35) return 0;
-    final t = ((extent - 0.35) / (0.85 - 0.35)).clamp(0.0, 1.0);
-    return t * 0.08;
+    if (extent <= ObeliskSheet.snapHalf) return 0;
+    final t =
+        ((extent - ObeliskSheet.snapHalf) /
+                (ObeliskSheet.snapFull - ObeliskSheet.snapHalf))
+            .clamp(0.0, 1.0);
+    return 0.04 + t * 0.04;
   }
 }

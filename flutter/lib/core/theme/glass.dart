@@ -49,6 +49,9 @@ class GlassMaterial extends StatelessWidget {
     final theme = Theme.of(context).extension<ObeliskTheme>()!;
     final radius = borderRadius ?? BorderRadius.circular(ObeliskTheme.radiusMd);
     final (bg, blur) = _resolve(theme);
+    final borderColor = variant == GlassVariant.liquid
+        ? theme.glassBorderStrong
+        : theme.glassBorder;
 
     return RepaintBoundary(
       child: ClipRRect(
@@ -59,7 +62,7 @@ class GlassMaterial extends StatelessWidget {
             decoration: BoxDecoration(
               color: bg,
               borderRadius: radius,
-              border: Border.all(color: theme.glassBorder),
+              border: Border.all(color: borderColor),
             ),
             child: child,
           ),

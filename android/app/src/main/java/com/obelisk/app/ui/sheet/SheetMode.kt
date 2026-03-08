@@ -13,8 +13,11 @@ sealed interface SheetMode {
     data object Search : SheetMode
 
     /** POI detail card — targets medium detent. */
-    data object Poi : SheetMode
+    data class Poi(val name: String, val category: String?) : SheetMode
 
     /** Remark content — targets medium detent. */
     data object Remark : SheetMode
+
+    /** User profile — targets medium detent. */
+    data object Profile : SheetMode
 }

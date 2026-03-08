@@ -14,8 +14,10 @@ import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -63,20 +65,23 @@ object SheetGeometry {
  */
 private fun targetDetent(mode: SheetMode): SheetDetent = when (mode) {
     is SheetMode.Idle -> SheetDetent.Mini
-    is SheetMode.Search -> SheetDetent.Medium
-    is SheetMode.Poi -> SheetDetent.Medium
+    is SheetMode.Search -> SheetDetent.Mini
+    is SheetMode.Poi -> SheetDetent.Mini
     is SheetMode.Remark -> SheetDetent.Medium
+    is SheetMode.Profile -> SheetDetent.Medium
 }
 
 /**
  * Computes the Y offset (from screen top) for each detent.
  * The sheet's top edge = screenHeight - bottomInset - detentHeight.
+ * When the keyboard (IME) is visible, the bottom inset expands to sit above it.
  *
  * @param screenHeight Total screen height in px.
+ * @param imeHeightPx Keyboard height in px (0 when hidden).
  * @return Triple of (mini, medium, large) offsets in px.
  */
-fun sheetOffsets(screenHeight: Float): Triple<Float, Float, Float> {
-    val bottomInset = screenHeight * SheetGeometry.BOTTOM_INSET
+fun sheetOffsets(screenHeight: Float, imeHeightPx: Float = 0f): Triple<Float, Float, Float> {
+    val bottomInset = maxOf(screenHeight * SheetGeometry.BOTTOM_INSET, imeHeightPx)
     val mini = screenHeight - bottomInset - screenHeight * SheetGeometry.MINI_HEIGHT
     val medium = screenHeight - bottomInset - screenHeight * SheetGeometry.MEDIUM_HEIGHT
     val large = screenHeight - bottomInset - screenHeight * SheetGeometry.LARGE_HEIGHT
@@ -117,6 +122,14 @@ fun rememberSheetState(
 fun ObeliskSheet(
     state: AnchoredDraggableState<SheetDetent>,
     mode: SheetMode,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSearchFocused: () -> Unit,
+    onSearchCleared: () -> Unit,
+    onPoiShareClick: () -> Unit,
+    onPoiCloseClick: () -> Unit,
+    onAvatarClick: () -> Unit,
+    onProfileCloseClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = ObeliskTheme.colors
@@ -126,9 +139,10 @@ fun ObeliskSheet(
         val screenW = constraints.maxWidth.toFloat()
         val density = LocalDensity.current
 
-        val (miniOffset, mediumOffset, largeOffset) = sheetOffsets(screenH)
+        val imeBottomPx = WindowInsets.ime.getBottom(density).toFloat()
+        val (miniOffset, mediumOffset, largeOffset) = sheetOffsets(screenH, imeBottomPx)
 
-        val anchors = remember(screenH) {
+        val anchors = remember(screenH, imeBottomPx) {
             DraggableAnchors {
                 SheetDetent.Mini at miniOffset
                 SheetDetent.Medium at mediumOffset
@@ -177,23 +191,32 @@ fun ObeliskSheet(
         ) {
             Column {
                 DragHandle()
-                SheetContent(mode = mode)
+                SheetContent(
+                    mode = mode,
+                    query = query,
+                    onQueryChange = onQueryChange,
+                    onSearchFocused = onSearchFocused,
+                    onSearchCleared = onSearchCleared,
+                    onPoiShareClick = onPoiShareClick,
+                    onPoiCloseClick = onPoiCloseClick,
+                    onAvatarClick = onAvatarClick,
+                    onProfileCloseClick = onProfileCloseClick,
+                )
             }
         }
     }
 }
 
 /**
- * Centered drag handle pill with 48dp touch target.
+ * Centered drag handle pill — compact for mini sheet.
  */
 @Composable
 private fun DragHandle() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .padding(top = 12.dp, bottom = 8.dp),
-        contentAlignment = Alignment.TopCenter,
+            .height(24.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier

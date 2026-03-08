@@ -117,8 +117,23 @@ fun MapScreen() {
         derivedStateOf { mapViewportState.cameraState?.bearing ?: 0.0 }
     }
 
+    val selectedPoi by mapViewModel.selectedPoi.collectAsStateWithLifecycle()
+
     val sheetState = rememberSheetState()
-    val sheetMode by remember { mutableStateOf<SheetMode>(SheetMode.Idle) }
+    var sheetMode by remember { mutableStateOf<SheetMode>(SheetMode.Idle) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    // Sync POI selection → sheet mode
+    LaunchedEffect(selectedPoi) {
+        val poi = selectedPoi
+        sheetMode = if (poi != null) {
+            SheetMode.Poi(name = poi.name, category = poi.category)
+        } else if (sheetMode is SheetMode.Poi) {
+            SheetMode.Idle
+        } else {
+            sheetMode
+        }
+    }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenHeightPx = constraints.maxHeight.toFloat()
@@ -242,6 +257,20 @@ fun MapScreen() {
         ObeliskSheet(
             state = sheetState,
             mode = sheetMode,
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            onSearchFocused = { sheetMode = SheetMode.Search },
+            onSearchCleared = {
+                searchQuery = ""
+                sheetMode = SheetMode.Idle
+            },
+            onPoiShareClick = { },
+            onPoiCloseClick = {
+                mapViewModel.clearSelection()
+                sheetMode = SheetMode.Idle
+            },
+            onAvatarClick = { sheetMode = SheetMode.Profile },
+            onProfileCloseClick = { sheetMode = SheetMode.Idle },
             modifier = Modifier.fillMaxSize(),
         )
     }

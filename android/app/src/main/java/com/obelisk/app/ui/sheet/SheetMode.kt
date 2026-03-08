@@ -9,11 +9,18 @@ sealed interface SheetMode {
     /** Default state — sheet at mini detent. */
     data object Idle : SheetMode
 
-    /** Search results — targets medium detent. */
-    data object Search : SheetMode
+    /** Active search with keyboard open — targets mini detent. */
+    data object Searching : SheetMode
 
-    /** POI detail card — targets medium detent. */
-    data class Poi(val name: String, val category: String?) : SheetMode
+    /** Search results displayed — targets medium detent (locked). */
+    data object Results : SheetMode
+
+    /** POI detail card — targets mini detent initially. */
+    data class Poi(
+        val name: String,
+        val category: String?,
+        val fromSearch: Boolean = false,
+    ) : SheetMode
 
     /** Remark content — targets medium detent. */
     data object Remark : SheetMode

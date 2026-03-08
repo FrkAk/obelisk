@@ -38,7 +38,7 @@ import com.obelisk.app.ui.sheet.ObeliskSheet
 import com.obelisk.app.ui.sheet.SheetGeometry
 import com.obelisk.app.ui.sheet.SheetMode
 import com.obelisk.app.ui.sheet.rememberSheetState
-import com.obelisk.app.ui.sheet.sheetOffsets
+import com.obelisk.app.ui.sheet.sheetHeights
 import com.obelisk.app.viewmodel.LocationViewModel
 import com.obelisk.app.viewmodel.MapViewModel
 
@@ -123,7 +123,7 @@ fun MapScreen() {
     var sheetMode by remember { mutableStateOf<SheetMode>(SheetMode.Idle) }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Sync POI selection → sheet mode
+    // Sync POI selection -> sheet mode
     LaunchedEffect(selectedPoi) {
         val poi = selectedPoi
         sheetMode = if (poi != null) {
@@ -140,15 +140,19 @@ fun MapScreen() {
         val screenWidthPx = constraints.maxWidth.toFloat()
         val density = LocalDensity.current
 
-        val (miniOffset, _, largeOffset) = sheetOffsets(screenHeightPx)
+        val (miniH, _, _) = sheetHeights(screenHeightPx)
         val sideMarginPx = screenWidthPx * SheetGeometry.SIDE_MARGIN
 
-        val sheetOffset by remember {
-            derivedStateOf { sheetState.offset.takeIf { !it.isNaN() } ?: miniOffset }
+        val defaultBottomInsetPx = screenHeightPx * SheetGeometry.BOTTOM_INSET
+
+        val sheetHeight by remember {
+            derivedStateOf { sheetState.offset.takeIf { !it.isNaN() } ?: miniH }
         }
+
         val sheetProgress by remember {
             derivedStateOf {
-                ((miniOffset - sheetOffset) / (miniOffset - largeOffset)).coerceIn(0f, 1f)
+                val largeH = screenHeightPx * SheetGeometry.LARGE_HEIGHT
+                ((sheetHeight - miniH) / (largeH - miniH)).coerceIn(0f, 1f)
             }
         }
 
@@ -161,10 +165,11 @@ fun MapScreen() {
                 1f - 0.1f * t
             }
         }
+        // Use default bottom inset (not IME) so controls stay in place during keyboard.
         val controlsBottomDp by remember {
             derivedStateOf {
-                val belowSheet = screenHeightPx - sheetOffset
-                with(density) { (belowSheet + sideMarginPx).toDp() }.coerceAtLeast(16.dp)
+                val totalFromBottom = sheetHeight + defaultBottomInsetPx + sideMarginPx
+                with(density) { totalFromBottom.toDp() }.coerceAtLeast(16.dp)
             }
         }
         val controlsSideMarginDp = with(density) { sideMarginPx.toDp() }
@@ -182,7 +187,7 @@ fun MapScreen() {
             },
         )
 
-        // Weather pill — top-left
+        // Weather pill -- top-left
         WeatherPill(
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -190,7 +195,7 @@ fun MapScreen() {
                 .padding(start = 16.dp, top = 16.dp),
         )
 
-        // Map controls — bottom-right
+        // Map controls -- bottom-right
         MapControls(
             is3D = is3D,
             bearing = currentBearing,
@@ -241,7 +246,7 @@ fun MapScreen() {
                 },
         )
 
-        // Look Around — bottom-left
+        // Look Around -- bottom-left
         LookAroundButton(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -259,8 +264,13 @@ fun MapScreen() {
             mode = sheetMode,
             query = searchQuery,
             onQueryChange = { searchQuery = it },
-            onSearchFocused = { sheetMode = SheetMode.Search },
+            onSearchFocused = { sheetMode = SheetMode.Searching },
             onSearchCleared = {
+                searchQuery = ""
+                sheetMode = SheetMode.Idle
+            },
+            onSearchDismissed = { sheetMode = SheetMode.Idle },
+            onResultsCloseClick = {
                 searchQuery = ""
                 sheetMode = SheetMode.Idle
             },
@@ -268,6 +278,10 @@ fun MapScreen() {
             onPoiCloseClick = {
                 mapViewModel.clearSelection()
                 sheetMode = SheetMode.Idle
+            },
+            onPoiBackToResultsClick = {
+                mapViewModel.clearSelection()
+                sheetMode = SheetMode.Results
             },
             onAvatarClick = { sheetMode = SheetMode.Profile },
             onProfileCloseClick = { sheetMode = SheetMode.Idle },

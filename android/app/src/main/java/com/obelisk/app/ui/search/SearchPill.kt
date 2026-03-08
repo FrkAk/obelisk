@@ -40,7 +40,7 @@ import com.obelisk.app.ui.theme.ObeliskTheme
  * @param onQueryChange Called when text changes.
  * @param onFocused Called when the text field gains focus.
  * @param onCleared Called when the clear button is tapped.
- * @param autoFocus When true, requests focus on first composition (opens keyboard).
+ * @param focusRequester External focus requester — caller controls when focus is requested.
  * @param modifier Modifier applied to the pill container.
  */
 @Composable
@@ -49,18 +49,11 @@ fun SearchPill(
     onQueryChange: (String) -> Unit,
     onFocused: () -> Unit,
     onCleared: () -> Unit,
-    autoFocus: Boolean = false,
+    focusRequester: FocusRequester = remember { FocusRequester() },
     modifier: Modifier = Modifier,
 ) {
     val colors = ObeliskTheme.colors
-    val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
-
-    if (autoFocus) {
-        LaunchedEffect(Unit) {
-            focusRequester.requestFocus()
-        }
-    }
 
     Row(
         modifier = modifier

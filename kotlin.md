@@ -262,57 +262,100 @@ Typing: [search-icon]  user text that can       [X]    (avatar-photo 36dp)
 
 ---
 
+## User Flows
+
+### Flow 1: Idle
+- App launches → sheet at **mini** with search pill + user avatar
+- User can drag up to **medium** → shows same content + placeholder suggestions area
+- Large is **blocked** from idle — anchors only include mini and medium
+
+### Flow 2: Search
+1. User taps search pill (from any idle detent)
+2. Sheet squeezes to **mini** (bottom stays, top slides down), keyboard opens, drag handle hidden
+3. Content: back arrow + focused search pill (autoFocus)
+4. User types → autocomplete overlay floats above sheet (V0.5)
+5. User submits search → keyboard dismisses → sheet animates to **medium** (locked, no drag)
+6. Content: close button + search pill (unfocused, shows query) + scrollable results
+
+### Flow 3: Search → POI
+1. User taps a search result
+2. Sheet animates to **mini** with POI bar: back-to-results arrow + POI name/category + close
+3. Map flies to POI location
+4. User can drag up to **medium** → POI card placeholder
+5. User can drag up to **large** → full POI detail placeholder
+6. User taps back arrow → returns to results at medium
+7. User taps close → clears POI, returns to idle mini
+
+### Flow 4: Map POI Click
+1. User taps native POI on map
+2. Sheet animates to **mini** with POI bar: POI name/category + share + close
+3. User can drag to **medium** → POI card placeholder
+4. User can drag to **large** → full POI detail placeholder
+5. User taps close → idle mini
+
+### Flow 5: Profile
+1. User taps avatar in idle mode
+2. Sheet animates to **medium** with profile placeholder + close button
+3. User taps close → idle mini
+
+### Flow 6: Remark (future, geofence trigger)
+1. Geofence notification triggers
+2. Sheet animates to **medium** with remark content
+3. User can drag to **large** for full remark
+
+## Sheet State Table
+
+| Mode | Initial Detent | Allowed Detents | Drag Handle | Content |
+|------|---------------|-----------------|-------------|---------|
+| Idle | Mini | Mini, Medium | Yes | Search pill + avatar (+ placeholder at medium) |
+| Searching | Mini | Mini only | No | Back arrow + focused search pill |
+| Results | Medium | Medium only (locked) | Yes | Close + search pill + results list |
+| Poi (from map) | Mini | Mini, Medium, Large | Yes | Mini: share + name + close. Medium/Large: POI card |
+| Poi (from search) | Mini | Mini, Medium, Large | Yes | Mini: back-to-results + name + close. Medium/Large: POI card |
+| Profile | Medium | Medium only | Yes | Close + placeholder |
+| Remark | Medium | Medium, Large | Yes | Remark content |
+
+## Sheet Architecture (Bottom-Anchored)
+
+The sheet uses **bottom-anchored, height-driven** positioning:
+- Bottom edge stays fixed above keyboard/screen bottom
+- Detent transitions animate sheet **height** (not Y offset)
+- Dragging up increases height, dragging down decreases height
+- `AnchoredDraggableState` with `reverseDirection = true`
+- "Squeeze from top" effect: top edge slides down while bottom stays put
+
 ## Sheet Modes + Transitions
 
 ```
                     tap search pill
-[Idle/Mini] ─────────────────────────> [Search/Medium]
+[Idle/Mini] ─────────────────────────> [Searching/Mini + IME]
      │                                       │
-     │ tap pin                               │ type -> autocomplete overlay
-     v                                       │ submit -> results in medium
-[POI/Medium]                                 │ tap result
-     │                                       v
-     │ swipe up                        [POI/Medium] (fly-to + pin select)
-     v                                       │
-[POI/Large]                                  │ swipe up
-  (full tabs,                                v
-   scrollable)                         [POI/Large]
+     │ tap pin                               │ submit search
+     v                                       v
+[Poi/Mini]                             [Results/Medium] (locked)
+     │                                       │
+     │ drag up                               │ tap result
+     v                                       v
+[Poi/Medium]                           [Poi/Mini] (fromSearch=true)
+     │                                       │
+     │ drag up                               │ back arrow
+     v                                       v
+[Poi/Large]                            [Results/Medium]
 ```
 
-### Idle (Mini)
-- Search pill with rotating placeholder
-- Category chips row below (horizontal scroll): Food, Culture, Nature, Shopping, etc.
+### POI Card Content (Medium — Compact, future V0.7)
+- **Header:** share icon (left), POI name (display title2), category subtitle, close X (right)
+- **Action pills row:** Transit time (blue CTA), Call, Website — rounded rect pills
+- **Info row:** Rating + stars, payment icons, distance
+- **Tabs:** Remark | Capsules | Details (underline indicator, accent color)
+- **Photo carousel:** Horizontal scroll, rounded-lg images
+- **Bottom actions:** + (add), star (favorite), ... (more)
 
-### Search Active
-- Tap search pill -> sheet animates to **medium**, keyboard opens
-- As user types: **autocomplete overlay** floats ABOVE the sheet (max 5 rows, glass surface, shadow)
-- User submits (keyboard search or tap suggestion): autocomplete dismisses, **search results** appear in sheet body (medium), scrollable
-- Results: category dot (6dp) + name (subhead) + "category dot distance" (footnote)
-- Tap result: fly-to POI on map, sheet transitions to POI mode
-
-### POI Selected (Medium — Compact)
-- Pin on map enlarges to 64dp photo circle with white ring
-- Sheet at medium shows:
-  1. **Header:** share icon (left), POI name (display title2), category subtitle, close X (right)
-  2. **Action pills row:** Transit time (blue CTA), Call, Website — rounded rect pills
-  3. **Info row:** Rating + stars, payment icons, distance
-  4. **Tabs:** Remark | Capsules | Details (underline indicator, accent color)
-     - **Remark (default):** Title only in compact mode
-     - **Capsules:** One comment preview if exists, otherwise "No capsules yet"
-     - **Details:** Business hours + open/closed badge
-  5. **Photo carousel:** Horizontal scroll, rounded-lg images
-  6. **Bottom actions:** + (add), star (favorite), ... (more)
-
-### POI Selected (Large — Full)
-- Swipe sheet up to large
-- Same layout but tabs now show **full content**, scrollable:
-  - **Remark:** Full story body (reading font, markdown), local tip section with accent border, regenerate button
+### POI Card Content (Large — Full, future V0.8)
+- Same layout but tabs show **full content**, scrollable:
+  - **Remark:** Full story body (reading font, markdown), local tip, regenerate button
   - **Capsules:** All comments, create form
   - **Details:** Full address, phone, website, hours, amenity pills
-
-### Close / Back
-- Tap X on POI card -> deselect pin (shrink back), sheet returns to mini
-- Swipe sheet down past medium -> same behavior
 
 ---
 

@@ -39,7 +39,7 @@ export async function geocodeQuery(
 ): Promise<SearchResult[]> {
   const token = process.env.MAPBOX_SERVER_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   if (!token) {
-    log.warn("Missing NEXT_PUBLIC_MAPBOX_TOKEN, skipping geocoding");
+    log.warn("Missing MAPBOX_SERVER_TOKEN, skipping geocoding");
     return [];
   }
 

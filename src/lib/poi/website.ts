@@ -1,11 +1,13 @@
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import { POI_USER_AGENT } from "@/lib/poi/enrichment";
+import { assertPublicUrl } from "@/lib/net/ssrf";
 
 const TIMEOUT_MS = 10_000;
 const MAX_TEXT_PER_PAGE = 3000;
 const MAX_COMBINED_TEXT = 8000;
 const MAX_SUBPAGES = 3;
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 const SKIP_EXTENSIONS = new Set([
   ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".ico",
@@ -43,6 +45,7 @@ function shouldSkipUrl(pathname: string): boolean {
  */
 async function fetchHtml(url: string): Promise<string | null> {
   try {
+    await assertPublicUrl(url);
     const res = await fetch(url, {
       headers: { "User-Agent": POI_USER_AGENT },
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -51,7 +54,22 @@ async function fetchHtml(url: string): Promise<string | null> {
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("text/html")) return null;
-    return await res.text();
+
+    const reader = res.body?.getReader();
+    if (!reader) return null;
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_RESPONSE_BYTES) {
+        reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+    return new TextDecoder().decode(Buffer.concat(chunks));
   } catch {
     return null;
   }

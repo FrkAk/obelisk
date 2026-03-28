@@ -5,7 +5,12 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL || "postgresql://obelisk:obelisk_dev@localhost:5432/obelisk",
+    url: (() => {
+      if (!process.env.DATABASE_URL) {
+        throw new Error("DATABASE_URL is required. Copy .env.example to .env and configure it.");
+      }
+      return process.env.DATABASE_URL;
+    })(),
   },
   tablesFilter: [
     "regions",

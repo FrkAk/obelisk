@@ -19,6 +19,10 @@ mock.module("@/lib/db/queries/remarks", () => ({
   remarkPoiSelect: mock(() => ({})),
   mapRowToRemarkWithPoi: mock(() => ({})),
 }));
+mock.module("@/lib/rateLimit", () => ({
+  checkRateLimit: () => true,
+  getClientIp: () => "127.0.0.1",
+}));
 mock.module("@/lib/logger", () => ({
   createLogger: () => ({
     info: () => {},

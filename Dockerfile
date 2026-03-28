@@ -9,3 +9,4 @@ COPY . .
 RUN mkdir -p .next data
 
 EXPOSE 3000
+CMD ["bun", "run", "dev"]

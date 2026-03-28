@@ -222,7 +222,8 @@ export async function getRemarksByPoiIds(
       .from(remarks)
       .innerJoin(pois, eq(remarks.poiId, pois.id))
       .leftJoin(categories, eq(pois.categoryId, categories.id))
-      .where(and(baseCondition, eq(remarks.locale, locale)));
+      .where(and(baseCondition, eq(remarks.locale, locale)))
+      .limit(500);
 
     if (localeResults.length > 0) return localeResults.map(mapRowToRemarkWithPoi);
   }
@@ -232,7 +233,8 @@ export async function getRemarksByPoiIds(
     .from(remarks)
     .innerJoin(pois, eq(remarks.poiId, pois.id))
     .leftJoin(categories, eq(pois.categoryId, categories.id))
-    .where(baseCondition);
+    .where(baseCondition)
+    .limit(500);
 
   return results.map(mapRowToRemarkWithPoi);
 }

@@ -10,16 +10,19 @@ mock.module("@/lib/logger", () => ({
   }),
 }));
 
-const originalEnv = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+const originalServerToken = process.env.MAPBOX_SERVER_TOKEN;
+const originalPublicToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
 import { geocodeQuery } from "./geocoding";
 
 beforeEach(() => {
-  process.env.NEXT_PUBLIC_MAPBOX_TOKEN = originalEnv || "test-token";
+  process.env.MAPBOX_SERVER_TOKEN = originalServerToken || "test-token";
+  process.env.NEXT_PUBLIC_MAPBOX_TOKEN = originalPublicToken || "test-token";
 });
 
 describe("geocodeQuery", () => {
   test("returns empty array when token is missing", async () => {
+    process.env.MAPBOX_SERVER_TOKEN = "";
     process.env.NEXT_PUBLIC_MAPBOX_TOKEN = "";
     const results = await geocodeQuery("Marienplatz", 48.137, 11.576);
     expect(results).toEqual([]);

@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+!.env.example
+node_modules
+.next
+data
+data-archive
+db
+research
+obelisk_backup
+.claude
+.github
+.mypy_cache

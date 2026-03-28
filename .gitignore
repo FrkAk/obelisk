@@ -29,8 +29,8 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files
-.env
-.env.local
+.env*
+!.env.example
 
 # vercel
 .vercel
@@ -56,9 +56,6 @@ drizzle/*.sql
 
 # Removed services (Docker-owned leftovers)
 /searxng/
-
-# Env
-!.env.example
 
 # Backup (internal docs, not for public repo)
 /obelisk_backup/

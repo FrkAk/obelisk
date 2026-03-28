@@ -23,6 +23,7 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
       model: EMBED_MODEL,
       input: texts,
     }),
+    signal: AbortSignal.timeout(60_000),
   });
 
   if (!response.ok) {

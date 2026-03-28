@@ -22,6 +22,19 @@ const CONCURRENCY = parseInt(process.env.ENRICH_CONCURRENCY || "4", 10);
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3.5:9b";
 const FORCE = process.argv.includes("--force");
 const COORDINATOR_URL = process.env.ENRICH_COORDINATOR_URL || "";
+const COORDINATOR_SECRET = process.env.COORDINATOR_SECRET || "";
+
+/**
+ * Returns headers for authenticated coordinator requests.
+ *
+ * @returns Headers object with content-type and authorization.
+ */
+function coordinatorHeaders(): Record<string, string> {
+  return {
+    "content-type": "application/json",
+    ...(COORDINATOR_SECRET ? { authorization: `Bearer ${COORDINATOR_SECRET}` } : {}),
+  };
+}
 
 /**
  * Writes enrichment results to the database.
@@ -98,7 +111,7 @@ async function runPullMode(
   const host = hostname();
   const regRes = await fetch(`${COORDINATOR_URL}/register`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: coordinatorHeaders(),
     body: JSON.stringify({ name: host }),
   });
   const { workerId } = await regRes.json() as { workerId: string; config: { model: string; batchSize: number } };
@@ -117,7 +130,7 @@ async function runPullMode(
     try {
       await fetch(`${COORDINATOR_URL}/disconnect`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: coordinatorHeaders(),
         body: JSON.stringify({ workerId, batchId: currentBatchId }),
       });
       log.info("Disconnected from coordinator, inflight batch requeued");
@@ -130,7 +143,7 @@ async function runPullMode(
     try {
       const res = await fetch(`${COORDINATOR_URL}/heartbeat`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: coordinatorHeaders(),
         body: JSON.stringify({ workerId }),
       });
       const data = await res.json() as { ok: boolean; shutdown?: boolean };
@@ -156,7 +169,9 @@ async function runPullMode(
 
   try {
     while (!stopping) {
-      const batchRes = await fetch(`${COORDINATOR_URL}/batch?workerId=${workerId}`);
+      const batchRes = await fetch(`${COORDINATOR_URL}/batch?workerId=${workerId}`, {
+        headers: coordinatorHeaders(),
+      });
       const batch = await batchRes.json() as { batchId: string | null; poiIds: string[]; done: boolean };
 
       if (batch.done) {
@@ -184,7 +199,7 @@ async function runPullMode(
 
       await fetch(`${COORDINATOR_URL}/complete`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: coordinatorHeaders(),
         body: JSON.stringify({
           workerId,
           batchId: batch.batchId,

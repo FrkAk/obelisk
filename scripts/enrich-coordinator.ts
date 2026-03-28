@@ -6,10 +6,23 @@ import { createLogger } from "../src/lib/logger";
 const log = createLogger("enrich-coordinator");
 
 const PORT = parseInt(process.env.COORDINATOR_PORT || "3939", 10);
+const HOST = process.env.COORDINATOR_HOST || "127.0.0.1";
+const COORDINATOR_SECRET = process.env.COORDINATOR_SECRET || crypto.randomUUID();
 const BATCH_SIZE = parseInt(process.env.ENRICH_BATCH_SIZE || "10", 10);
 const BATCH_TIMEOUT_MS = 5 * 60 * 1000;
 const RECOVERY_INTERVAL_MS = 60 * 1000;
 const FORCE = process.argv.includes("--force");
+
+/**
+ * Validates the Authorization header against the coordinator secret.
+ *
+ * @param req - Incoming request.
+ * @returns True if the request is authorized.
+ */
+function checkAuth(req: Request): boolean {
+  const auth = req.headers.get("authorization");
+  return auth === `Bearer ${COORDINATOR_SECRET}`;
+}
 
 interface BatchInfo {
   poiIds: string[];
@@ -178,11 +191,16 @@ async function main(): Promise<void> {
   }
 
   Bun.serve({
+    hostname: HOST,
     port: PORT,
     async fetch(req: Request): Promise<Response> {
       const url = new URL(req.url);
       const path = url.pathname;
       const method = req.method;
+
+      if (path !== "/status" && !checkAuth(req)) {
+        return Response.json({ error: "unauthorized" }, { status: 401 });
+      }
 
       if (method === "POST" && path === "/register") {
         const body = await req.json() as { name?: string };
@@ -245,7 +263,12 @@ async function main(): Promise<void> {
     },
   });
 
-  log.info(`Coordinator listening on http://0.0.0.0:${PORT}`);
+  log.info(`Coordinator listening on http://${HOST}:${PORT}`);
+  if (!process.env.COORDINATOR_SECRET) {
+    log.info(`Auto-generated coordinator secret: ${COORDINATOR_SECRET}`);
+  } else {
+    log.info("Using COORDINATOR_SECRET from environment");
+  }
 
   setInterval(recoverTimedOutBatches, RECOVERY_INTERVAL_MS);
 

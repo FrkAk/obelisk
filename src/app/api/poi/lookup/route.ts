@@ -17,7 +17,7 @@ import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 const log = createLogger("poi-lookup");
 
 const bodySchema = z.object({
-  name: z.string(),
+  name: z.string().min(1).max(500),
   latitude: z.number(),
   longitude: z.number(),
   category: z.string().optional(),

@@ -40,7 +40,7 @@ describe("detectLocale", () => {
   });
 
   test("unknown country in address falls through to Mapbox", async () => {
-    process.env.NEXT_PUBLIC_MAPBOX_TOKEN = "test-token";
+    process.env.MAPBOX_SERVER_TOKEN = "test-token";
     globalThis.fetch = (async () =>
       new Response(
         JSON.stringify({ features: [{ text: "France" }] }),
@@ -53,7 +53,7 @@ describe("detectLocale", () => {
   });
 
   test("all fail returns English fallback", async () => {
-    delete (process.env as Record<string, string | undefined>).NEXT_PUBLIC_MAPBOX_TOKEN;
+    delete (process.env as Record<string, string | undefined>).MAPBOX_SERVER_TOKEN;
     globalThis.fetch = (() => Promise.reject(new Error("network"))) as unknown as typeof fetch;
 
     const result = await detectLocale(undefined, undefined, undefined);

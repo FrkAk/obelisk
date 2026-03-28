@@ -148,7 +148,7 @@ async function reverseGeocodeCountry(
   latitude: number,
   longitude: number
 ): Promise<LocaleInfo | null> {
-  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  const token = process.env.MAPBOX_SERVER_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   if (!token) return null;
 
   try {

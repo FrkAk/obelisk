@@ -1,4 +1,4 @@
-.PHONY: help setup setup-quick finish-setup run run-local stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all seed-city enrich-taxonomy-only enrich-pois enrich-distributed enrich-worker fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore
+.PHONY: help setup setup-quick finish-setup run stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all seed-city enrich-taxonomy-only enrich-pois enrich-distributed enrich-worker fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
@@ -33,8 +33,7 @@ help:
 	@printf "  $(CYAN)setup$(RESET)          First-time setup (seed + taxonomy + search). Resume: make setup FROM=6\n"
 	@printf "  $(CYAN)setup-quick$(RESET)    Quick setup from db/dump.sql (skip seed + enrich)\n"
 	@printf "  $(CYAN)finish-setup$(RESET)   Sync search index + generate embeddings\n"
-	@printf "  $(CYAN)run$(RESET)            Start on localhost:3000\n"
-	@printf "  $(CYAN)run-local$(RESET)      Start exposed to local network (same WiFi)\n"
+	@printf "  $(CYAN)run$(RESET)            Start on localhost:3000 (also accessible on local network)\n"
 
 	@printf "  $(CYAN)stop$(RESET)       Stop services (keeps data)\n"
 	@printf "  $(CYAN)logs$(RESET)       View database logs\n"
@@ -185,18 +184,9 @@ setup-quick:
 	@printf "$(GREEN)Quick setup complete!$(RESET) Run 'make run' to start\n"
 
 run:
-	@printf "$(GREEN)Starting Obelisk...$(RESET)\n"
-	@printf "\n"
-	@printf "$(GREEN)App starting at http://localhost:3000$(RESET)\n"
-	@printf "Press Ctrl+C to stop\n"
-	@printf "\n"
-	$(COMPOSE) up
-
-run-local:
-	@printf "$(GREEN)Starting Obelisk for local network...$(RESET)\n"
 	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
+	printf "$(GREEN)Starting Obelisk...$(RESET)\n"; \
 	printf "\n"; \
-	printf "$(GREEN)App starting:$(RESET)\n"; \
 	printf "  Local:   http://localhost:3000\n"; \
 	printf "  Network: http://$$LOCAL_IP:3000\n"; \
 	printf "\n"; \
@@ -280,7 +270,7 @@ enrich-distributed:
 	@printf "$(GREEN)Ollama healthy$(RESET)\n"
 	@printf "\n"
 	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
-	PG_PASS=$$(grep -oP 'POSTGRES_PASSWORD=\K.*' .env 2>/dev/null || echo 'obelisk_dev'); \
+	COORD_SECRET=$$(grep -oP 'COORDINATOR_SECRET=\K.*' .env 2>/dev/null || echo ''); \
 	printf "$(CYAN)[2/4]$(RESET) Printing worker instructions...\n"; \
 	printf "\n"; \
 	printf "═══════════════════════════════════════════════════\n"; \
@@ -297,15 +287,17 @@ enrich-distributed:
 	printf "  3. Pull the Ollama model:\n"; \
 	printf "     ollama pull $(OLLAMA_MODEL)\n"; \
 	printf "\n"; \
-	printf "  4. Start enrichment:\n"; \
-	printf "     DATABASE_URL=\"postgresql://obelisk:$$PG_PASS@$$LOCAL_IP:5432/obelisk\" \\\\\n"; \
+	printf "  4. Copy DATABASE_URL and COORDINATOR_SECRET from coordinator .env\n"; \
+	printf "     Then start enrichment:\n"; \
+	printf "     DATABASE_URL=\"<from coordinator .env>\" \\\\\n"; \
 	printf "     ENRICH_COORDINATOR_URL=\"http://$$LOCAL_IP:3939\" \\\\\n"; \
+	printf "     COORDINATOR_SECRET=\"<from coordinator .env>\" \\\\\n"; \
 	printf "     make enrich-worker\n"; \
 	printf "\n"; \
 	printf "  Monitor: curl http://$$LOCAL_IP:3939/status | jq\n"; \
 	printf "═══════════════════════════════════════════════════\n"; \
 	printf "\n"
-	@printf "$(CYAN)[3/5]$(RESET) Tuning Ollama for parallel inference...\n"
+	@printf "$(CYAN)[3/4]$(RESET) Tuning Ollama for parallel inference...\n"
 	@CURRENT=$$(curl -sf $(OLLAMA_URL)/api/ps 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('models',[{}])[0].get('context_length',0))" 2>/dev/null || echo 0); \
 	VRAM_FREE=$$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits 2>/dev/null | head -1 || echo 0); \
 	NUM_PAR=$${OLLAMA_NUM_PARALLEL:-4}; \
@@ -321,12 +313,11 @@ enrich-distributed:
 		printf "  OLLAMA_NUM_PARALLEL=$$NUM_PAR ollama serve\n"; \
 	fi; \
 	printf "\n"
-	@printf "$(CYAN)[4/5]$(RESET) Starting coordinator...\n"
+	@printf "$(CYAN)[4/4]$(RESET) Starting coordinator + local worker...\n"
 	@$(COMPOSE) exec -d -T app bun scripts/enrich-coordinator.ts
 	@sleep 2
 	@printf "$(GREEN)Coordinator running on :3939$(RESET)\n"
 	@printf "\n"
-	@printf "$(CYAN)[5/5]$(RESET) Starting local enrichment worker...\n"
 	$(COMPOSE) exec -e ENRICH_COORDINATOR_URL=http://localhost:3939 -e ENRICH_CONCURRENCY=6 app bun scripts/enrich-pois.ts
 
 enrich-worker:

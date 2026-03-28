@@ -4,6 +4,13 @@ Maps show you where things are but never tell you why they matter. You walk past
 
 Obelisk is a contextual discovery platform that generates AI remarks about real places and surfaces them as you explore a city. It pulls every point of interest from OpenStreetMap, enriches each one with taxonomy data, Wikipedia, brand info, and LLM generated summaries, then delivers that context through the map in real time. The result is a map that understands what makes each place worth knowing about.
 
+<p align="center">
+  <img src="resources/flatview.PNG" width="24%" alt="Map view with POI pins"/>
+  <img src="resources/threeDview.PNG" width="24%" alt="3D map view"/>
+  <img src="resources/remarkloading.PNG" width="24%" alt="Remark generation in progress"/>
+  <img src="resources/remarkview.PNG" width="24%" alt="AI-generated remark for a place"/>
+</p>
+
 Search goes beyond matching names. You can type things like "quiet place to read near the river" or "where do locals eat lunch" and the hybrid search engine combines keyword matching with semantic understanding to find relevant places. This is still early and evolving.
 
 Everything runs on your own hardware. No cloud AI APIs, no usage fees, no data leaving your machine. The entire stack is designed around what a home computer with a GPU can do.
@@ -50,7 +57,7 @@ Start the development server:
 make run
 ```
 
-Open http://localhost:3000 in your browser.
+Open http://localhost:3000 in your browser, or use the network URL printed in the terminal to access from other devices on the same network.
 
 For a faster start using a database snapshot (if you have one):
 
@@ -82,8 +89,7 @@ Run `make help` to see all available targets. The key ones:
 |---------|-------------|
 | `make setup` | Full bootstrap from scratch |
 | `make setup-quick` | Restore from database snapshot |
-| `make run` | Start on localhost:3000 |
-| `make run-local` | Expose to local network (same WiFi) |
+| `make run` | Start on localhost:3000 (also accessible on local network) |
 | `make stop` | Stop services, data preserved |
 | `make destroy` | Stop and delete all data |
 | `make seed-city` | Seed a new city (`SEED_LOCATION=berlin make seed-city`) |

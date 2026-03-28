@@ -12,6 +12,8 @@ updates:
     ignore:
       - dependency-name: "eslint"
         versions: [">=10"]
+      - dependency-name: "typescript"
+        versions: [">=6"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

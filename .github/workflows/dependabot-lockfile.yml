@@ -19,9 +19,23 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install
       - name: Commit updated lockfile
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add bun.lock
-          git diff --cached --quiet || git commit --no-verify -m "chore: update bun.lock"
-          git push
+          if git diff --quiet bun.lock; then
+            echo "bun.lock unchanged, skipping"
+            exit 0
+          fi
+          BRANCH="${{ github.head_ref }}"
+          LATEST_SHA=$(gh api repos/${{ github.repository }}/git/ref/heads/${BRANCH} --jq '.object.sha')
+          TREE_SHA=$(gh api repos/${{ github.repository }}/git/commits/${LATEST_SHA} --jq '.tree.sha')
+          BLOB_SHA=$(gh api repos/${{ github.repository }}/git/blobs -X POST -f "content=$(base64 -w0 bun.lock)" -f encoding=base64 --jq '.sha')
+          NEW_TREE=$(gh api repos/${{ github.repository }}/git/trees -X POST \
+            --input <(jq -n --arg base "$TREE_SHA" --arg blob "$BLOB_SHA" \
+              '{base_tree: $base, tree: [{path: "bun.lock", mode: "100644", type: "blob", sha: $blob}]}') \
+            --jq '.sha')
+          NEW_COMMIT=$(gh api repos/${{ github.repository }}/git/commits -X POST \
+            --input <(jq -n --arg msg "chore: update bun.lock" --arg tree "$NEW_TREE" --arg parent "$LATEST_SHA" \
+              '{message: $msg, tree: $tree, parents: [$parent]}') \
+            --jq '.sha')
+          gh api repos/${{ github.repository }}/git/refs/heads/${BRANCH} -X PATCH -f sha="$NEW_COMMIT"

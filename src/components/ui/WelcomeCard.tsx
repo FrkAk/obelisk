@@ -1,12 +1,26 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocale } from "@/hooks/useLocale";
 import { springTransitions } from "@/lib/ui/animations";
 import { OBELISK_ICON_PATH } from "@/lib/ui/constants";
 
 const STORAGE_KEY = "obelisk-welcome-dismissed";
+
+/**
+ * Reads welcome-dismissed state from localStorage.
+ *
+ * Uses useSyncExternalStore to avoid setState-in-effect lint violations
+ * while staying SSR-safe via the server snapshot.
+ */
+function useWelcomeDismissed(): boolean {
+  return useSyncExternalStore(
+    () => () => {},
+    () => localStorage.getItem(STORAGE_KEY) !== null,
+    () => true,
+  );
+}
 
 /**
  * Full-screen welcome overlay shown on first visit.
@@ -16,20 +30,16 @@ const STORAGE_KEY = "obelisk-welcome-dismissed";
  */
 export function WelcomeCard() {
   const { t } = useLocale();
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const dismissed = localStorage.getItem(STORAGE_KEY);
-    if (!dismissed) setVisible(true);
-  }, []);
+  const dismissed = useWelcomeDismissed();
+  const [manuallyDismissed, setManuallyDismissed] = useState(false);
+  const visible = !dismissed && !manuallyDismissed;
 
   /**
    * Dismisses the welcome card and persists to localStorage.
    */
   const handleDismiss = () => {
     localStorage.setItem(STORAGE_KEY, "1");
-    setVisible(false);
+    setManuallyDismissed(true);
   };
 
   return (

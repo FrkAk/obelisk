@@ -141,7 +141,7 @@ describe("geocodeQuery", () => {
     expect(capturedUrl).toContain("api.mapbox.com/search/geocode/v6/forward");
     expect(capturedUrl).toContain("q=test+query");
     expect(capturedUrl).toContain("proximity=11.576%2C48.137");
-    expect(capturedUrl).toContain("limit=3");
+    expect(capturedUrl).toContain("limit=2");
     expect(capturedUrl).toContain("language=en");
     expect(capturedUrl).not.toContain("bbox");
 

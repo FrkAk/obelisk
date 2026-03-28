@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="coral-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B4A"/>
+      <stop offset="100%" style="stop-color:#E5593B"/>
+    </linearGradient>
+    <linearGradient id="obelisk-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#f0f0f0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#coral-gradient)"/>
+
+  <!-- Obelisk shape -->
+  <path d="M256 80 L320 432 H192 L256 80Z" fill="url(#obelisk-gradient)" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+
+  <!-- Obelisk tip detail -->
+  <path d="M256 80 L280 160 H232 L256 80Z" fill="#ffffff"/>
+
+  <!-- Light reflection on obelisk -->
+  <path d="M256 80 L232 160 L220 432 H192 L256 80Z" fill="rgba(255,255,255,0.15)"/>
+</svg>

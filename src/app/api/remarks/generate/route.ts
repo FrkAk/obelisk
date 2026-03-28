@@ -1,0 +1,210 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db/client";
+import { pois, remarks, categories } from "@/lib/db/schema";
+import { eq, isNull, and, gte, lte } from "drizzle-orm";
+import { geoBounds } from "@/lib/geo/distance";
+import { generateRemark } from "@/lib/ai/remarkGenerator";
+import type { RemarkPoiContext } from "@/lib/ai/remarkGenerator";
+import { checkOllamaHealth } from "@/lib/ai/ollama";
+import { insertRemark } from "@/lib/db/queries/remarks";
+import { z } from "zod";
+import { createLogger } from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+
+const log = createLogger("generate");
+
+const bodySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lon: z.coerce.number().min(-180).max(180),
+  radius: z.coerce.number().min(500).max(5000).default(2000),
+  limit: z.coerce.number().min(1).max(10).default(5),
+});
+
+/**
+ * Generates remarks for POIs without remarks near a location.
+ *
+ * Args:
+ *     lat: Center latitude.
+ *     lon: Center longitude.
+ *     radius: Radius in meters to search.
+ *     limit: Maximum number of remarks to generate.
+ *
+ * Returns:
+ *     Array of generated remarks.
+ */
+export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  if (!checkRateLimit(ip, 3, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": "60" } }
+    );
+  }
+
+  try {
+    let body: unknown;
+    try { body = await request.json(); }
+    catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
+    const parseResult = bodySchema.safeParse(body);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Invalid parameters", details: parseResult.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const { lat, lon, radius, limit } = parseResult.data;
+
+    const isHealthy = await checkOllamaHealth();
+    if (!isHealthy) {
+      return NextResponse.json(
+        { error: "AI service unavailable. Please try again later." },
+        { status: 503 }
+      );
+    }
+
+    const { minLat, maxLat, minLon, maxLon } = geoBounds(lat, lon, radius);
+
+    const poisWithoutRemarks = await db
+      .select({
+        id: pois.id,
+        name: pois.name,
+        address: pois.address,
+        locale: pois.locale,
+        wikipediaUrl: pois.wikipediaUrl,
+        osmTags: pois.osmTags,
+        profile: pois.profile,
+        latitude: pois.latitude,
+        longitude: pois.longitude,
+        categoryName: categories.name,
+        categorySlug: categories.slug,
+        categoryColor: categories.color,
+      })
+      .from(pois)
+      .leftJoin(categories, eq(pois.categoryId, categories.id))
+      .leftJoin(remarks, eq(pois.id, remarks.poiId))
+      .where(
+        and(
+          isNull(remarks.id),
+          gte(pois.latitude, minLat),
+          lte(pois.latitude, maxLat),
+          gte(pois.longitude, minLon),
+          lte(pois.longitude, maxLon)
+        )
+      )
+      .limit(limit);
+
+    if (poisWithoutRemarks.length === 0) {
+      return NextResponse.json({
+        generated: 0,
+        remarks: [],
+        message: "All nearby POIs already have remarks.",
+      });
+    }
+
+    let skippedCount = 0;
+    let errorCount = 0;
+    const generatedRemarks: Array<{
+      id: string;
+      poiId: string;
+      title: string;
+      teaser: string | null;
+      content: string;
+      localTip: string | null;
+      durationSeconds: number | null;
+      poi: {
+        id: string;
+        name: string;
+        latitude: number;
+        longitude: number;
+        categoryName: string | null;
+        categorySlug: string | null;
+        categoryColor: string | null;
+      };
+    }> = [];
+
+    for (const poi of poisWithoutRemarks) {
+      try {
+        const profile = (poi.profile as import("@/types").PoiProfile | null) ?? null;
+        const remarkCtx: RemarkPoiContext = {
+          poi: {
+            id: poi.id,
+            osmId: null,
+            name: poi.name,
+            categoryId: null,
+            regionId: null,
+            latitude: poi.latitude,
+            longitude: poi.longitude,
+            address: poi.address,
+            locale: poi.locale,
+            osmType: null,
+            osmTags: poi.osmTags,
+            profile,
+            wikipediaUrl: poi.wikipediaUrl,
+            mapillaryId: null,
+            mapillaryBearing: null,
+            mapillaryIsPano: null,
+            createdAt: null,
+            updatedAt: null,
+          },
+          categorySlug: poi.categorySlug ?? "hidden",
+          categoryName: poi.categoryName || "Hidden Gems",
+          profile,
+          tags: [],
+        };
+
+        const generated = await generateRemark(remarkCtx);
+
+        if (!generated) {
+          log.info(`Skipped "${poi.name}" — insufficient data`);
+          skippedCount++;
+          continue;
+        }
+
+        const insertedRemark = await insertRemark({
+          poiId: poi.id,
+          locale: poi.locale,
+          remark: generated,
+        });
+
+        generatedRemarks.push({
+          id: insertedRemark.id,
+          poiId: poi.id,
+          title: insertedRemark.title,
+          teaser: insertedRemark.teaser,
+          content: insertedRemark.content,
+          localTip: insertedRemark.localTip,
+          durationSeconds: insertedRemark.durationSeconds,
+          poi: {
+            id: poi.id,
+            name: poi.name,
+            latitude: poi.latitude,
+            longitude: poi.longitude,
+            categoryName: poi.categoryName,
+            categorySlug: poi.categorySlug,
+            categoryColor: poi.categoryColor,
+          },
+        });
+
+        await new Promise((r) => setTimeout(r, 300));
+      } catch (error) {
+        log.error(`Failed to generate remark for ${poi.name}:`, error);
+        errorCount++;
+      }
+    }
+
+    return NextResponse.json({
+      generated: generatedRemarks.length,
+      skipped: skippedCount,
+      errors: errorCount,
+      remarks: generatedRemarks,
+    });
+  } catch (error) {
+    log.error("Error generating remarks:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

@@ -1,0 +1,400 @@
+.PHONY: help setup setup-quick finish-setup run run-local stop logs rebuild destroy download-pbf download-datasets build-taxonomy build-brands seed-regions seed-cuisines seed-tags seed-pois seed-all seed-city enrich-taxonomy-only enrich-pois enrich-distributed enrich-worker fetch-wikipedia fetch-websites fetch-mapillary sync-search generate-embeddings search-setup db-dump db-restore
+CYAN := \033[36m
+GREEN := \033[32m
+YELLOW := \033[33m
+RED := \033[31m
+RESET := \033[0m
+
+COMPOSE := docker compose
+
+# Load .env if it exists
+ifneq (,$(wildcard .env))
+  include .env
+  export
+endif
+
+# Dev defaults for Make targets (scripts run on host, not in Docker).
+# Docker services read credentials from .env file instead.
+export DATABASE_URL ?= postgresql://obelisk:obelisk_dev@localhost:5432/obelisk
+export OLLAMA_URL ?= http://127.0.0.1:11434
+export OLLAMA_MODEL ?= qwen3.5:9b
+export OLLAMA_SEARCH_MODEL ?= qwen3.5:4b
+export OLLAMA_EMBED_MODEL ?= embeddinggemma:300m
+export TYPESENSE_API_KEY ?= obelisk_typesense_dev
+export SEED_RADIUS ?= -1
+export SEED_LOCATION ?= munich
+FROM ?= 1
+
+help:
+	@printf "\n"
+	@printf "$(CYAN)Obelisk$(RESET) - Next Gen Map \n"
+	@printf "\n"
+	@printf "$(GREEN)Commands:$(RESET)\n"
+	@printf "  $(CYAN)setup$(RESET)          First-time setup (seed + taxonomy + search). Resume: make setup FROM=6\n"
+	@printf "  $(CYAN)setup-quick$(RESET)    Quick setup from db/dump.sql (skip seed + enrich)\n"
+	@printf "  $(CYAN)finish-setup$(RESET)   Sync search index + generate embeddings\n"
+	@printf "  $(CYAN)run$(RESET)            Start on localhost:3000\n"
+	@printf "  $(CYAN)run-local$(RESET)      Start exposed to local network (same WiFi)\n"
+
+	@printf "  $(CYAN)stop$(RESET)       Stop services (keeps data)\n"
+	@printf "  $(CYAN)logs$(RESET)       View database logs\n"
+	@printf "  $(CYAN)rebuild$(RESET)    Clean rebuild (deps + next cache)\n"
+	@printf "  $(CYAN)destroy$(RESET)    Stop and remove all data\n"
+	@printf "\n"
+	@printf "$(GREEN)Seeding (SEED_LOCATION=$(SEED_LOCATION)):$(RESET)\n"
+	@printf "  $(CYAN)seed-all$(RESET)            Run all seed steps in order\n"
+	@printf "  $(CYAN)seed-regions$(RESET)        Seed regions (country -> city)\n"
+	@printf "  $(CYAN)seed-cuisines$(RESET)       Seed cuisine taxonomy\n"
+	@printf "  $(CYAN)seed-tags$(RESET)           Seed tags across all groups\n"
+	@printf "  $(CYAN)download-pbf$(RESET)        Download OSM PBF extract for location\n"
+	@printf "  $(CYAN)seed-pois$(RESET)           Seed POIs from local OSM extract\n"
+	@printf "  $(CYAN)seed-city$(RESET)           Full city pipeline: download + seed + search (SEED_LOCATION=istanbul make seed-city)\n"
+	@printf "\n"
+	@printf "$(GREEN)Enrichment:$(RESET)\n"
+	@printf "  $(CYAN)download-datasets$(RESET)   Download external datasets (taxonomy, NSI, taginfo, wikidata)\n"
+	@printf "  $(CYAN)build-taxonomy$(RESET)      Build tag enrichment map from downloaded data\n"
+	@printf "  $(CYAN)build-brands$(RESET)        Build brand enrichment map from NSI + Wikidata\n"
+	@printf "  $(CYAN)enrich-taxonomy-only$(RESET) Fast taxonomy-only merge (no LLM, no network)\n"
+	@printf "  $(CYAN)enrich-pois$(RESET)         Full enrichment: taxonomy + LLM summaries (optional)\n"
+	@printf "  $(CYAN)enrich-distributed$(RESET)  Start coordinator + local worker (host machine)\n"
+	@printf "  $(CYAN)enrich-worker$(RESET)       Connect to coordinator as remote worker\n"
+	@printf "  $(CYAN)fetch-wikipedia$(RESET)     Fetch Wikipedia extracts (optional, pre-enrichment)\n"
+	@printf "  $(CYAN)fetch-websites$(RESET)      Crawl POI websites (optional, pre-enrichment)\n"
+	@printf "\n"
+	@printf "$(GREEN)Search Pipeline:$(RESET)\n"
+	@printf "  $(CYAN)sync-search$(RESET)         Sync POIs to Typesense\n"
+	@printf "  $(CYAN)generate-embeddings$(RESET)  Generate vector embeddings\n"
+	@printf "  $(CYAN)search-setup$(RESET)        Run full search pipeline\n"
+	@printf "\n"
+	@printf "$(GREEN)Database:$(RESET)\n"
+	@printf "  $(CYAN)db-dump$(RESET)     Export database to db/dump.sql\n"
+	@printf "  $(CYAN)db-restore$(RESET)  Restore database from db/dump.sql\n"
+	@printf "\n"
+
+setup:
+	@SETUP_START=$$(date +%s); \
+	printf "$(GREEN)Setting up Obelisk ($(SEED_LOCATION), from phase $(FROM))...$(RESET)\n"; \
+	printf "\n"; \
+	\
+	if [ $(FROM) -le 1 ]; then \
+	printf "$(CYAN)[Phase 1]$(RESET) Building and starting services...\n"; \
+	$(COMPOSE) up -d --build; \
+	printf "Waiting for PostgreSQL...\n"; \
+	until $(COMPOSE) exec -T postgres pg_isready -U obelisk -d obelisk >/dev/null 2>&1; do sleep 1; done; \
+	printf "Waiting for Typesense...\n"; \
+	until curl -sf http://localhost:8108/health >/dev/null 2>&1; do sleep 1; done; \
+	printf "$(GREEN)Services healthy$(RESET)\n"; \
+	printf "\n"; \
+	fi; \
+	\
+	if [ $(FROM) -le 2 ]; then \
+	printf "$(CYAN)[Phase 2]$(RESET) Migrations + Ollama models + PBF download (parallel)...\n"; \
+	( \
+		$(COMPOSE) exec -T postgres psql -U obelisk -d obelisk -f /dev/stdin < drizzle/0001_enable_extensions.sql && \
+		$(COMPOSE) exec -T app bun run drizzle-kit push \
+	) & PID_MIGRATE=$$!; \
+	( \
+		ollama pull $(OLLAMA_MODEL) && \
+		if [ "$(OLLAMA_SEARCH_MODEL)" != "$(OLLAMA_MODEL)" ]; then ollama pull $(OLLAMA_SEARCH_MODEL); fi && \
+		ollama pull $(OLLAMA_EMBED_MODEL) \
+	) & PID_OLLAMA=$$!; \
+	$(MAKE) download-pbf & PID_PBF=$$!; \
+	wait $$PID_MIGRATE || exit 1; \
+	wait $$PID_OLLAMA || exit 1; \
+	wait $$PID_PBF || exit 1; \
+	printf "$(GREEN)Phase 2 complete$(RESET)\n"; \
+	printf "\n"; \
+	fi; \
+	\
+	if [ $(FROM) -le 3 ]; then \
+	printf "$(CYAN)[Phase 3]$(RESET) Downloading external datasets...\n"; \
+	$(COMPOSE) exec app bun scripts/download-datasets.ts; \
+	printf "\n"; \
+	fi; \
+	\
+	if [ $(FROM) -le 4 ]; then \
+	printf "$(CYAN)[Phase 4]$(RESET) Building taxonomy + brands (parallel)...\n"; \
+	$(COMPOSE) exec -T app bun scripts/build-taxonomy.ts & PID_TAX=$$!; \
+	$(COMPOSE) exec -T app bun scripts/build-brands.ts & PID_BRAND=$$!; \
+	wait $$PID_TAX || exit 1; \
+	wait $$PID_BRAND || exit 1; \
+	printf "$(GREEN)Phase 4 complete$(RESET)\n"; \
+	printf "\n"; \
+	fi; \
+	\
+	if [ $(FROM) -le 5 ]; then \
+	printf "$(CYAN)[Phase 5]$(RESET) Seeding (regions, cuisines, tags, POIs)...\n"; \
+	STEP_START=$$(date +%s); \
+	$(COMPOSE) exec app bun scripts/seed.ts; \
+	STEP_END=$$(date +%s); \
+	ELAPSED=$$((STEP_END - STEP_START)); \
+	printf "$(GREEN)Seeding done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "\n"; \
+	fi; \
+	\
+	if [ $(FROM) -le 6 ]; then \
+	printf "$(CYAN)[Phase 6]$(RESET) Taxonomy-only enrichment (fast, no LLM)...\n"; \
+	STEP_START=$$(date +%s); \
+	$(COMPOSE) exec app bun scripts/enrich-taxonomy-only.ts; \
+	STEP_END=$$(date +%s); \
+	ELAPSED=$$((STEP_END - STEP_START)); \
+	printf "$(GREEN)Taxonomy enrichment done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "\n"; \
+	fi; \
+	\
+	if [ $(FROM) -le 7 ]; then \
+	printf "$(CYAN)[Phase 7]$(RESET) Syncing search index + generating embeddings (parallel)...\n"; \
+	STEP_START=$$(date +%s); \
+	$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \
+	$(COMPOSE) exec -T app bun scripts/generate-embeddings.ts & PID_EMBED=$$!; \
+	wait $$PID_SYNC || exit 1; \
+	wait $$PID_EMBED || exit 1; \
+	STEP_END=$$(date +%s); \
+	ELAPSED=$$((STEP_END - STEP_START)); \
+	printf "$(GREEN)Search + embeddings done in %dm%ds$(RESET)\n" $$((ELAPSED / 60)) $$((ELAPSED % 60)); \
+	printf "\n"; \
+	fi; \
+	\
+	SETUP_END=$$(date +%s); \
+	TOTAL=$$((SETUP_END - SETUP_START)); \
+	printf "$(GREEN)Setup complete in %dm%ds!$(RESET) Run 'make run' to start\n" $$((TOTAL / 60)) $$((TOTAL % 60))
+
+setup-quick:
+	@if [ ! -f db/dump.sql ]; then printf "$(RED)No db/dump.sql found. Run 'make setup' for full setup or 'make db-dump' first.$(RESET)\n"; exit 1; fi
+	@printf "$(GREEN)Quick setup from snapshot...$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)[1/4]$(RESET) Building and starting services...\n"
+	$(COMPOSE) up -d --build
+	@printf "Waiting for PostgreSQL...\n"
+	@until $(COMPOSE) exec -T postgres pg_isready -U obelisk -d obelisk >/dev/null 2>&1; do sleep 1; done
+	@printf "Waiting for Typesense...\n"
+	@until curl -sf http://localhost:8108/health >/dev/null 2>&1; do sleep 1; done
+	@printf "$(GREEN)Services healthy$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)[2/4]$(RESET) Restoring database from snapshot...\n"
+	$(COMPOSE) exec -T postgres psql -U obelisk obelisk < db/dump.sql
+	@printf "\n"
+	@printf "$(CYAN)[3/4]$(RESET) Ensuring Ollama models...\n"
+	ollama pull $(OLLAMA_MODEL)
+	@if [ "$(OLLAMA_SEARCH_MODEL)" != "$(OLLAMA_MODEL)" ]; then ollama pull $(OLLAMA_SEARCH_MODEL); fi
+	ollama pull $(OLLAMA_EMBED_MODEL)
+	@printf "\n"
+	@printf "$(CYAN)[4/4]$(RESET) Syncing search index...\n"
+	$(COMPOSE) exec app bun scripts/sync-typesense.ts
+	@printf "\n"
+	@printf "$(GREEN)Quick setup complete!$(RESET) Run 'make run' to start\n"
+
+run:
+	@printf "$(GREEN)Starting Obelisk...$(RESET)\n"
+	@printf "\n"
+	@printf "$(GREEN)App starting at http://localhost:3000$(RESET)\n"
+	@printf "Press Ctrl+C to stop\n"
+	@printf "\n"
+	$(COMPOSE) up
+
+run-local:
+	@printf "$(GREEN)Starting Obelisk for local network...$(RESET)\n"
+	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
+	printf "\n"; \
+	printf "$(GREEN)App starting:$(RESET)\n"; \
+	printf "  Local:   http://localhost:3000\n"; \
+	printf "  Network: http://$$LOCAL_IP:3000\n"; \
+	printf "\n"; \
+	printf "Press Ctrl+C to stop\n"
+	DEV_HOSTNAME=0.0.0.0 $(COMPOSE) up
+
+stop:
+	@printf "Stopping services...\n"
+	$(COMPOSE) down
+	@printf "$(GREEN)Stopped.$(RESET) Data preserved.\n"
+
+logs:
+	$(COMPOSE) logs -f
+
+rebuild:
+	@printf "$(YELLOW)Rebuilding...$(RESET)\n"
+	$(COMPOSE) down
+	$(COMPOSE) up -d --build
+	@sleep 3
+	$(COMPOSE) exec app bun run drizzle-kit push
+	@printf "$(GREEN)Rebuild complete!$(RESET) Run 'make run' to start\n"
+
+destroy:
+	@printf "$(YELLOW)Destroying all Obelisk data...$(RESET)\n"
+	$(COMPOSE) down -v --remove-orphans
+	rm -rf .next node_modules
+	@printf "Done. Run 'make setup' to start fresh.\n"
+
+download-pbf:
+	@PBF_URL=$$(bun -e "const{getLocation}=require('./src/lib/geo/locations');console.log(getLocation().pbfUrl)"); \
+	PBF_FILE=$$(bun -e "const{getLocation}=require('./src/lib/geo/locations');console.log(getLocation().pbfFilename)"); \
+	if [ -f "data/$$PBF_FILE" ]; then \
+		printf "$(GREEN)PBF extract already exists (data/$$PBF_FILE), skipping download$(RESET)\n"; \
+	else \
+		mkdir -p data; \
+		printf "$(CYAN)Downloading $$PBF_FILE...$(RESET)\n"; \
+		curl -L -o "data/$$PBF_FILE" "$$PBF_URL"; \
+		printf "$(GREEN)Download complete: data/$$PBF_FILE$(RESET)\n"; \
+	fi
+
+download-datasets:
+	$(COMPOSE) exec app bun scripts/download-datasets.ts
+
+build-taxonomy:
+	$(COMPOSE) exec app bun scripts/build-taxonomy.ts
+
+build-brands:
+	$(COMPOSE) exec app bun scripts/build-brands.ts
+
+seed-regions:
+	$(COMPOSE) exec app bun scripts/seed.ts --step regions
+
+seed-cuisines:
+	$(COMPOSE) exec app bun scripts/seed.ts --step cuisines
+
+seed-tags:
+	$(COMPOSE) exec app bun scripts/seed.ts --step tags
+
+seed-pois:
+	$(COMPOSE) exec app bun scripts/seed.ts --step pois
+
+seed-all:
+	$(COMPOSE) exec app bun scripts/seed.ts
+
+enrich-taxonomy-only:
+	$(COMPOSE) exec app bun scripts/enrich-taxonomy-only.ts
+
+enrich-pois:
+	$(COMPOSE) exec app bun scripts/enrich-pois.ts
+
+enrich-distributed:
+	@printf "$(GREEN)Starting distributed enrichment (host)...$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)[1/4]$(RESET) Starting services with Postgres exposed to LAN...\n"
+	@$(COMPOSE) up -d
+	@printf "Waiting for PostgreSQL...\n"
+	@until $(COMPOSE) exec -T postgres pg_isready -U obelisk -d obelisk >/dev/null 2>&1; do sleep 1; done
+	@printf "$(GREEN)PostgreSQL healthy$(RESET)\n"
+	@printf "Checking Ollama...\n"
+	@curl -sf $(OLLAMA_URL)/api/tags >/dev/null 2>&1 || { printf "$(RED)Ollama not running at $(OLLAMA_URL)$(RESET)\n"; exit 1; }
+	@printf "$(GREEN)Ollama healthy$(RESET)\n"
+	@printf "\n"
+	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
+	PG_PASS=$$(grep -oP 'POSTGRES_PASSWORD=\K.*' .env 2>/dev/null || echo 'obelisk_dev'); \
+	printf "$(CYAN)[2/4]$(RESET) Printing worker instructions...\n"; \
+	printf "\n"; \
+	printf "═══════════════════════════════════════════════════\n"; \
+	printf "DISTRIBUTED ENRICHMENT — Worker Setup Instructions\n"; \
+	printf "═══════════════════════════════════════════════════\n"; \
+	printf "On each worker machine, run:\n"; \
+	printf "\n"; \
+	printf "  1. Clone the repo:\n"; \
+	printf "     git clone <repo-url> && cd obelisk\n"; \
+	printf "\n"; \
+	printf "  2. Build the app container:\n"; \
+	printf "     docker compose build app\n"; \
+	printf "\n"; \
+	printf "  3. Pull the Ollama model:\n"; \
+	printf "     ollama pull $(OLLAMA_MODEL)\n"; \
+	printf "\n"; \
+	printf "  4. Start enrichment:\n"; \
+	printf "     DATABASE_URL=\"postgresql://obelisk:$$PG_PASS@$$LOCAL_IP:5432/obelisk\" \\\\\n"; \
+	printf "     ENRICH_COORDINATOR_URL=\"http://$$LOCAL_IP:3939\" \\\\\n"; \
+	printf "     make enrich-worker\n"; \
+	printf "\n"; \
+	printf "  Monitor: curl http://$$LOCAL_IP:3939/status | jq\n"; \
+	printf "═══════════════════════════════════════════════════\n"; \
+	printf "\n"
+	@printf "$(CYAN)[3/5]$(RESET) Tuning Ollama for parallel inference...\n"
+	@CURRENT=$$(curl -sf $(OLLAMA_URL)/api/ps 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('models',[{}])[0].get('context_length',0))" 2>/dev/null || echo 0); \
+	VRAM_FREE=$$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits 2>/dev/null | head -1 || echo 0); \
+	NUM_PAR=$${OLLAMA_NUM_PARALLEL:-4}; \
+	printf "  VRAM free: $${VRAM_FREE} MiB, setting OLLAMA_NUM_PARALLEL=$$NUM_PAR\n"; \
+	if systemctl is-active --quiet ollama 2>/dev/null; then \
+		sudo systemctl set-environment OLLAMA_NUM_PARALLEL=$$NUM_PAR; \
+		sudo systemctl restart ollama; \
+		printf "  $(GREEN)Ollama restarted with OLLAMA_NUM_PARALLEL=$$NUM_PAR$(RESET)\n"; \
+		sleep 3; \
+		until curl -sf $(OLLAMA_URL)/api/tags >/dev/null 2>&1; do sleep 1; done; \
+	else \
+		printf "  $(YELLOW)Ollama not managed by systemctl. Restart manually:$(RESET)\n"; \
+		printf "  OLLAMA_NUM_PARALLEL=$$NUM_PAR ollama serve\n"; \
+	fi; \
+	printf "\n"
+	@printf "$(CYAN)[4/5]$(RESET) Starting coordinator...\n"
+	@$(COMPOSE) exec -d -T app bun scripts/enrich-coordinator.ts
+	@sleep 2
+	@printf "$(GREEN)Coordinator running on :3939$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)[5/5]$(RESET) Starting local enrichment worker...\n"
+	$(COMPOSE) exec -e ENRICH_COORDINATOR_URL=http://localhost:3939 -e ENRICH_CONCURRENCY=6 app bun scripts/enrich-pois.ts
+
+enrich-worker:
+	@printf "$(CYAN)Checking requirements...$(RESET)\n"
+	@command -v ollama >/dev/null 2>&1 || { printf "$(RED)ollama not installed$(RESET)\n"; exit 1; }
+	@curl -sf $(OLLAMA_URL)/api/tags >/dev/null 2>&1 || { printf "$(RED)Ollama not running at $(OLLAMA_URL)$(RESET)\n"; exit 1; }
+	@ollama list 2>/dev/null | grep -q "$(OLLAMA_MODEL)" || { printf "$(RED)Model $(OLLAMA_MODEL) not found. Run: ollama pull $(OLLAMA_MODEL)$(RESET)\n"; exit 1; }
+	@test -n "$(ENRICH_COORDINATOR_URL)" || { printf "$(RED)ENRICH_COORDINATOR_URL not set$(RESET)\n"; exit 1; }
+	@curl -sf $(ENRICH_COORDINATOR_URL)/status >/dev/null 2>&1 || { printf "$(RED)Coordinator not reachable at $(ENRICH_COORDINATOR_URL)$(RESET)\n"; exit 1; }
+	@printf "$(GREEN)All checks passed$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)Tuning Ollama for parallel inference...$(RESET)\n"
+	@NUM_PAR=$${OLLAMA_NUM_PARALLEL:-4}; \
+	if systemctl is-active --quiet ollama 2>/dev/null; then \
+		sudo systemctl set-environment OLLAMA_NUM_PARALLEL=$$NUM_PAR; \
+		sudo systemctl restart ollama; \
+		printf "$(GREEN)Ollama restarted with OLLAMA_NUM_PARALLEL=$$NUM_PAR$(RESET)\n"; \
+		sleep 3; \
+		until curl -sf $(OLLAMA_URL)/api/tags >/dev/null 2>&1; do sleep 1; done; \
+	else \
+		printf "$(YELLOW)Ollama not managed by systemctl. Restart manually with OLLAMA_NUM_PARALLEL=$$NUM_PAR$(RESET)\n"; \
+	fi
+	@printf "\n"
+	$(COMPOSE) run --rm --no-deps -e ENRICH_COORDINATOR_URL=$(ENRICH_COORDINATOR_URL) -e DATABASE_URL=$(DATABASE_URL) -e OLLAMA_URL=$(OLLAMA_URL) -e ENRICH_CONCURRENCY=6 app bun scripts/enrich-pois.ts
+
+fetch-wikipedia:
+	$(COMPOSE) exec app bun scripts/fetch-wikipedia.ts
+
+fetch-websites:
+	$(COMPOSE) exec app bun scripts/fetch-websites.ts
+
+fetch-mapillary:
+	$(COMPOSE) exec app bun scripts/fetch-mapillary.ts
+
+sync-search:
+	$(COMPOSE) exec app bun scripts/sync-typesense.ts
+
+generate-embeddings:
+	$(COMPOSE) exec app bun scripts/generate-embeddings.ts
+
+db-dump:
+	@mkdir -p db
+	$(COMPOSE) exec -T postgres pg_dump -U obelisk obelisk > db/dump.sql
+	@printf "$(GREEN)Dumped to db/dump.sql$(RESET)\n"
+
+db-restore:
+	$(COMPOSE) exec -T postgres psql -U obelisk obelisk < db/dump.sql
+	@printf "$(GREEN)Restored from db/dump.sql$(RESET)\n"
+	@printf "$(CYAN)Syncing search index...$(RESET)\n"
+	$(COMPOSE) exec app bun scripts/sync-typesense.ts
+	@printf "$(GREEN)Search index synced$(RESET)\n"
+
+finish-setup:
+	@printf "$(GREEN)Finishing setup (search + embeddings)...$(RESET)\n"
+	@printf "\n"
+	@printf "$(CYAN)[1/1]$(RESET) Syncing search index + generating embeddings (parallel)...\n"
+	@$(COMPOSE) exec -T app bun scripts/sync-typesense.ts & PID_SYNC=$$!; \
+	$(COMPOSE) exec -T app bun scripts/generate-embeddings.ts & PID_EMBED=$$!; \
+	wait $$PID_SYNC || exit 1; \
+	wait $$PID_EMBED || exit 1
+	@printf "\n"
+	@printf "$(GREEN)Setup complete!$(RESET) Run 'make run' to start\n"
+
+seed-city:
+	@printf "$(GREEN)Seeding city: $(SEED_LOCATION)$(RESET)\n"
+	$(MAKE) download-pbf
+	$(COMPOSE) exec -e SEED_LOCATION=$(SEED_LOCATION) app bun scripts/seed.ts
+	$(COMPOSE) exec -e SEED_LOCATION=$(SEED_LOCATION) app bun scripts/sync-typesense.ts
+	$(COMPOSE) exec -e SEED_LOCATION=$(SEED_LOCATION) app bun scripts/generate-embeddings.ts
+
+search-setup: seed-pois enrich-taxonomy-only sync-search generate-embeddings
